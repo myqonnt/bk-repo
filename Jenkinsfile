@@ -7,5 +7,13 @@ pipeline {
       }
     }
 
+    stage('build') {
+      steps {
+        withGradle()
+        sh '''cd src/backend/
+./gradlew bootJar'''
+      }
+    }
+
   }
 }
