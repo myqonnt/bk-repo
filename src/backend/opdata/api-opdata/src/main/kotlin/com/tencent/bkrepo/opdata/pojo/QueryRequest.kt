@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -31,33 +31,34 @@
 
 package com.tencent.bkrepo.opdata.pojo
 
-import io.swagger.annotations.ApiModelProperty
+import io.swagger.v3.oas.annotations.media.Schema
+
 
 data class QueryRequest(
-//    @ApiModelProperty("requestId")
+//    @get:Schema(title = "requestId")
 //    val requestId: String,
-//    @ApiModelProperty("timezone")
+//    @get:Schema(title = "timezone")
 //    val timezone: String,
-//    @ApiModelProperty("panelId")
+//    @get:Schema(title = "panelId")
 //    val panelId: Int,
-//    @ApiModelProperty("dashboardId")
+//    @get:Schema(title = "dashboardId")
 //    val dashboardId: Int,
-//    @ApiModelProperty("range")
+//    @get:Schema(title = "range")
 //    val range: Range,
-//    @ApiModelProperty("interval")
+//    @get:Schema(title = "interval")
 //    val interval: String,
-//    @ApiModelProperty("intervalMs")
+//    @get:Schema(title = "intervalMs")
 //    val intervalMs: Long,
-//    @ApiModelProperty("maxDataPoints")
+//    @get:Schema(title = "maxDataPoints")
 //    val maxDataPoints: Long,
-    @ApiModelProperty("targets")
+    @get:Schema(title = "targets")
     val targets: List<Target>
-//    @ApiModelProperty("scopedVars")
+//    @get:Schema(title = "scopedVars")
 //    val scopedVars: List<Target>,
-//    @ApiModelProperty("startTime")
+//    @get:Schema(title = "startTime")
 //    val startTime: Long,
-//    @ApiModelProperty("rangeRaw")
+//    @get:Schema(title = "rangeRaw")
 //    val rangeRaw: Raw,
-//    @ApiModelProperty("adhocFilters")
+//    @get:Schema(title = "adhocFilters")
 //    val adhocFilters: List<Filter>
 )

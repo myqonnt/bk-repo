@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2021 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2021 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -31,11 +31,11 @@
 
 package com.tencent.bkrepo.repository.pojo.download
 
-import io.swagger.annotations.ApiModel
-import io.swagger.annotations.ApiModelProperty
+import io.swagger.v3.oas.annotations.media.Schema
 
-@ApiModel("包下载明细记录")
+
+@Schema(title = "包下载明细记录")
 data class PackageDownloadsDetails(
-    @ApiModelProperty("每天下载数量, key格式为yyyy-mm-dd")
+    @get:Schema(title = "每天下载数量, key格式为yyyy-mm-dd")
     val details: Map<String, Long>
 )

@@ -6,10 +6,7 @@ chmod 777 $BK_REPO_LOGS_DIR
 java -server \
      -Dsun.jnu.encoding=UTF-8 \
      -Dfile.encoding=UTF-8 \
-     -Xloggc:$BK_REPO_LOGS_DIR/gc.log \
-     -XX:+PrintTenuringDistribution \
-     -XX:+PrintGCDetails \
-     -XX:+PrintGCDateStamps \
+     -Xlog:gc*,gc+age=trace:file=$BK_REPO_LOGS_DIR/gc.log:time,uptime,level,tags \
      -XX:+HeapDumpOnOutOfMemoryError \
      -XX:HeapDumpPath=oom.hprof \
      -XX:ErrorFile=$BK_REPO_LOGS_DIR/error_sys.log \

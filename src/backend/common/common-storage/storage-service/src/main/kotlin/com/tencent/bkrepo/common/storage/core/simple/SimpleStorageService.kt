@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -37,7 +37,6 @@ import com.tencent.bkrepo.common.artifact.stream.Range
 import com.tencent.bkrepo.common.artifact.stream.artifactStream
 import com.tencent.bkrepo.common.storage.core.AbstractStorageService
 import com.tencent.bkrepo.common.storage.credentials.StorageCredentials
-import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * 存储服务简单实现
@@ -49,7 +48,6 @@ class SimpleStorageService : AbstractStorageService() {
         filename: String,
         artifactFile: ArtifactFile,
         credentials: StorageCredentials,
-        cancel: AtomicBoolean?,
         storageClass: String?,
     ) {
         when {
@@ -58,11 +56,11 @@ class SimpleStorageService : AbstractStorageService() {
             }
 
             artifactFile.isFallback() -> {
-                fileStorage.store(path, filename, artifactFile.flushToFile(), credentials, storageClass)
+                fileStorage.store(path, filename, artifactFile.traceableFlushToFile(), credentials, storageClass)
             }
 
             else -> {
-                fileStorage.store(path, filename, artifactFile.flushToFile(), credentials, storageClass)
+                fileStorage.store(path, filename, artifactFile.traceableFlushToFile(), credentials, storageClass)
             }
         }
     }

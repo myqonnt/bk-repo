@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -70,4 +70,21 @@ interface ScanExecutorResultManager {
         scanner: Scanner,
         arguments: LoadResultArguments?
     ): Any?
+
+    /**
+     * 清理结果
+     *
+     * @param credentialsKey 被扫描文件所在存储， 为null时表示在默认存储
+     * @param sha256 被扫描文件sha256
+     * @param scannerName 使用的扫描器
+     * @param batchSize 批量清理大小
+     *
+     * @return 清理的结果数量
+     */
+    fun clean(
+        credentialsKey: String?,
+        sha256: String,
+        scannerName: String,
+        batchSize: Int?,
+    ): Long
 }

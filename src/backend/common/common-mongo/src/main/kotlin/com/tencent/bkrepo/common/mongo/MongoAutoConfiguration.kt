@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -31,18 +31,31 @@
 
 package com.tencent.bkrepo.common.mongo
 
+import com.tencent.bkrepo.common.mongo.actuate.MongoHealthIndicator
+import com.tencent.bkrepo.common.mongo.api.properties.MongoConnectionPoolProperties
+import com.tencent.bkrepo.common.mongo.dao.util.MongoSslUtils
+import com.tencent.bkrepo.common.mongo.i18n.LocalDateTimeReadConverter
+import com.tencent.bkrepo.common.mongo.properties.MongoSslProperties
+import org.slf4j.LoggerFactory
+import org.springframework.boot.actuate.health.HealthIndicator
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
+import org.springframework.boot.autoconfigure.mongo.MongoClientSettingsBuilderCustomizer
 import org.springframework.boot.autoconfigure.mongo.MongoProperties
+import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
+import org.springframework.context.annotation.Primary
 import org.springframework.context.annotation.PropertySource
 import org.springframework.data.mongodb.MongoDatabaseFactory
 import org.springframework.data.mongodb.MongoTransactionManager
+import org.springframework.data.mongodb.core.MongoTemplate
 import org.springframework.data.mongodb.core.convert.DefaultDbRefResolver
 import org.springframework.data.mongodb.core.convert.DefaultMongoTypeMapper
 import org.springframework.data.mongodb.core.convert.MappingMongoConverter
+import org.springframework.data.mongodb.core.convert.MongoConverter
 import org.springframework.data.mongodb.core.convert.MongoCustomConversions
 import org.springframework.data.mongodb.core.mapping.MongoMappingContext
+import java.util.concurrent.TimeUnit
 
 /**
  * mongodb 4.0+开始支持事物，但springboot data mongo为了兼容老版本不出错，默认不开启事物
@@ -50,6 +63,7 @@ import org.springframework.data.mongodb.core.mapping.MongoMappingContext
  */
 @Configuration
 @PropertySource("classpath:common-mongo.properties")
+@EnableConfigurationProperties(MongoSslProperties::class, MongoConnectionPoolProperties::class)
 class MongoAutoConfiguration {
 
     @Bean
@@ -68,16 +82,87 @@ class MongoAutoConfiguration {
     ): MappingMongoConverter {
         val dbRefResolver = DefaultDbRefResolver(mongoDatabaseFactory)
 
-        val conversions = MongoCustomConversions(emptyList<Any>())
+        val localDateTimeReadConverter = LocalDateTimeReadConverter()
+
+        val conversions = MongoCustomConversions(
+            listOf(localDateTimeReadConverter)
+        )
         val mappingContext = MongoMappingContext()
         mappingContext.setSimpleTypeHolder(conversions.simpleTypeHolder)
         mappingContext.afterPropertiesSet()
         mappingContext.isAutoIndexCreation = mongoProperties.isAutoIndexCreation
 
         val converter = MappingMongoConverter(dbRefResolver, mappingContext)
-        converter.typeMapper = DefaultMongoTypeMapper(null)
+        converter.customConversions = conversions
+        converter.setTypeMapper(DefaultMongoTypeMapper(null))
         converter.afterPropertiesSet()
         converter.setMapKeyDotReplacement("#dot#")
         return converter
+    }
+
+    @Bean
+    @Primary
+    fun mongoProperties(): MongoProperties {
+        return MongoProperties()
+    }
+
+    @Bean
+    @Primary
+    fun mongoTemplate(factory: MongoDatabaseFactory, converter: MongoConverter?): MongoTemplate {
+        return MongoTemplate(factory, converter)
+    }
+
+    @Bean
+    fun mongoClientCustomizer(
+        mongoSslProperties: MongoSslProperties,
+        mongoConnectionPoolProperties: MongoConnectionPoolProperties
+    ): MongoClientSettingsBuilderCustomizer {
+        logger.info("Init MongoSSLConfiguration")
+        return MongoClientSettingsBuilderCustomizer { clientSettingsBuilder ->
+            // 根据配置文件判断是否开启ssl
+            if (mongoSslProperties.enabled) {
+                clientSettingsBuilder.applyToSslSettings { ssl ->
+                    ssl.enabled(true)
+                    ssl.invalidHostNameAllowed(!mongoSslProperties.verifyHostname)
+
+                    try {
+                        // 根据配置判断使用单向还是双向TLS
+                        if (mongoSslProperties.isMutualTlsConfigured()) {
+                            logger.info("Detected client certificate configuration - enabling mutual TLS")
+                            ssl.context(MongoSslUtils.createMutualTlsSslContext(mongoSslProperties))
+                        } else {
+                            logger.info("Using one-way TLS configuration")
+                            ssl.context(MongoSslUtils.createOnewayTlsSslContext(mongoSslProperties))
+                        }
+                    } catch (e: Exception) {
+                        logger.error("Failed to configure MongoDB TLS context", e)
+                        throw RuntimeException("Failed to configure MongoDB TLS context", e)
+                    }
+                }
+            }
+            clientSettingsBuilder.applyToConnectionPoolSettings {
+                if (mongoConnectionPoolProperties.maxConnectionIdleTimeMS != 0L) {
+                    it.maxConnectionIdleTime(
+                        mongoConnectionPoolProperties.maxConnectionIdleTimeMS,
+                        TimeUnit.MILLISECONDS
+                    )
+                }
+                if (mongoConnectionPoolProperties.maxConnectionLifeTimeMS != 0L) {
+                    it.maxConnectionLifeTime(
+                        mongoConnectionPoolProperties.maxConnectionLifeTimeMS,
+                        TimeUnit.MILLISECONDS
+                    )
+                }
+            }
+        }
+    }
+
+    @Bean
+    fun mongoHealthIndicator(mongoTemplate: MongoTemplate): HealthIndicator {
+        return MongoHealthIndicator(mongoTemplate)
+    }
+
+    companion object {
+        private val logger = LoggerFactory.getLogger(MongoAutoConfiguration::class.java)
     }
 }

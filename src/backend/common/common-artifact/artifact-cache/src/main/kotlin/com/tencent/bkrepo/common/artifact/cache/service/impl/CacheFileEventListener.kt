@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2024 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2024 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -30,16 +30,16 @@ package com.tencent.bkrepo.common.artifact.cache.service.impl
 import com.tencent.bkrepo.common.artifact.cache.config.ArtifactPreloadProperties
 import com.tencent.bkrepo.common.artifact.cache.service.ArtifactPreloadPlanService
 import com.tencent.bkrepo.common.storage.core.cache.event.CacheFileDeletedEvent
+import com.tencent.bkrepo.common.storage.core.cache.event.CacheFileEventData
+import com.tencent.bkrepo.common.storage.core.cache.event.CacheFileRetainedEvent
 import org.slf4j.LoggerFactory
 import org.springframework.context.event.EventListener
 import org.springframework.scheduling.annotation.Async
-import org.springframework.stereotype.Component
 
 /**
  * 缓存文件相关事件监听器
  */
-@Component
-class CacheFileEventListener(
+open class CacheFileEventListener(
     private val properties: ArtifactPreloadProperties,
     private val preloadPlanService: ArtifactPreloadPlanService,
 ) {
@@ -49,12 +49,28 @@ class CacheFileEventListener(
      */
     @Async
     @EventListener(CacheFileDeletedEvent::class)
-    fun onCacheFileDeleted(event: CacheFileDeletedEvent) {
+    open fun onCacheFileDeleted(event: CacheFileDeletedEvent) {
         if (properties.enabled && event.data.size >= properties.minSize.toBytes()) {
-            with(event.data) {
-                logger.info("try generate preload plan for sha256[${sha256}], fullPath[$fullPath], size[$size")
-                preloadPlanService.generatePlan(credentials.key, sha256)
-            }
+            generatePreloadPlan(event.data)
+        }
+    }
+
+    /**
+     * 缓存被保留时判断是否需要创建预加载执行计划
+     */
+    @Async
+    @EventListener(CacheFileRetainedEvent::class)
+    open fun onCacheFileDeleted(event: CacheFileRetainedEvent) {
+        if (properties.enabled && event.data.size >= properties.minSize.toBytes() && properties.generateOnRetained) {
+            generatePreloadPlan(event.data)
+        }
+    }
+
+
+    private fun generatePreloadPlan(data: CacheFileEventData) {
+        with(data) {
+            logger.info("try generate preload plan for sha256[${sha256}], fullPath[$fullPath], size[$size")
+            preloadPlanService.generatePlan(credentials.key, sha256)
         }
     }
 

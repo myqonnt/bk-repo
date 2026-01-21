@@ -1,0 +1,260 @@
+<template>
+    <bk-form class="clean-config-container" :label-width="120" :model="cleanupStrategy" :rules="rules" ref="cleanForm">
+        <bk-form-item :label="$t('autoCleanup')">
+            <bk-switcher v-model="cleanupStrategy.enable" size="small" theme="primary" @change="clearError"></bk-switcher>
+        </bk-form-item>
+        <bk-form-item :label="$t('cleanupStrategy')" required>
+            <bk-select
+                :placeholder="$t('pleaseSelect')"
+                style="width:150px;"
+                v-model="cleanupStrategy.cleanupType"
+                @change="changeType"
+                :clearable="false"
+                :disabled="!cleanupStrategy.enable">
+                <bk-option id="retentionDays" :name="$t('retentionDays')"></bk-option>
+                <bk-option id="retentionDate" :name="$t('retentionDate')"></bk-option>
+                <bk-option v-if="repoType !== 'generic'" id="retentionNums" :name="$t('retentionNums')"></bk-option>
+            </bk-select>
+        </bk-form-item>
+        <bk-form-item :label="$t('retentionDays')" property="cleanupValue" required error-display-type="normal" v-if="cleanupStrategy.cleanupType === 'retentionDays'">
+            <bk-input class="w250" v-model="cleanupStrategy.cleanupValue" :placeholder="$t('pleaseInput')" :disabled="!cleanupStrategy.enable"></bk-input>
+        </bk-form-item>
+        <bk-form-item :label="$t('retentionDate')" property="cleanupValue" required error-display-type="normal" v-if="cleanupStrategy.cleanupType === 'retentionDate'">
+            <bk-date-picker
+                v-model="cleanupStrategy.cleanupValue"
+                :value="value"
+                :clearable="false"
+                :type="'datetime'"
+                @change="changeRetentionDate"
+                :open="open"
+                @pick-success="handleOk"
+                :disabled="!cleanupStrategy.enable"
+                style="margin-top: 10px;"
+            >
+                <a slot="trigger" href="javascript:void(0)" @click="handleClick">
+                    <template v-if="value === ''">{{$t('chooseDateTip')}}</template>
+                    <template v-else>{{value}}</template>
+                </a>
+            </bk-date-picker>
+        </bk-form-item>
+        <bk-form-item :label="$t('retentionNums')" property="cleanupValue" required error-display-type="normal" v-if="cleanupStrategy.cleanupType === 'retentionNums'">
+            <bk-input class="w250" v-model="cleanupStrategy.cleanupValue" :placeholder="$t('pleaseInput')" :disabled="!cleanupStrategy.enable"></bk-input>
+        </bk-form-item>
+        <bk-form-item :label="$t('cleanTarget')">
+            <bk-button :disabled="!cleanupStrategy.enable || repoName === 'pipeline'" icon="plus" @click="addRule()">{{$t('addTarget')}}</bk-button>
+            <div class="rule-list">
+                <component
+                    :is="'generic-clean-rule'"
+                    class="mt10"
+                    v-for="(rule, ind) in cleanupStrategy.cleanTargets"
+                    :key="ind"
+                    :disabled="!cleanupStrategy.enable"
+                    v-bind="rule"
+                    :path.sync="rule"
+                    :type.sync="repoType"
+                    @change="changeTarget($event, ind)"
+                    @delete="deleteTarget(ind)">
+                </component>
+            </div>
+        </bk-form-item>
+        <bk-form-item>
+            <bk-button theme="primary" @click="save()">{{$t('save')}}</bk-button>
+        </bk-form-item>
+    </bk-form>
+</template>
+<script>
+    import genericCleanRule from './genericCleanRule.vue'
+    import { mapActions } from 'vuex'
+    import moment from 'moment'
+    import { formatDate } from '@repository/utils'
+    export default {
+        name: 'CleanConfig',
+        components: {
+            genericCleanRule
+        },
+        props: {
+            baseData: Object
+        },
+        data () {
+            return {
+                loading: false,
+                cleanupStrategy: {
+                    enable: false,
+                    cleanupValue: '',
+                    cleanTargets: [],
+                    cleanupType: 'retentionDays'
+                },
+                open: false,
+                value: '',
+                rules: {
+                    cleanupValue: [
+                        {
+                            validator: this.asynCheckCleanValue,
+                            message: this.$t('cleanConfigTip'),
+                            trigger: 'blur'
+                        },
+                        {
+                            required: true,
+                            message: this.$t('cleanConfigTip'),
+                            trigger: 'blur'
+                        },
+                        {
+                            validator: this.asynCheckDays,
+                            message: this.$t('daysOverLimit'),
+                            trigger: 'blur'
+                        }
+                    ]
+                }
+            }
+        },
+        computed: {
+            projectId () {
+                return this.$route.params.projectId
+            },
+            repoType () {
+                return this.$route.params.repoType
+            },
+            repoName () {
+                return this.$route.query.repoName
+            }
+        },
+        watch: {
+            baseData: {
+                handler (val) {
+                    if (!val.cleanupStrategy) return
+                    this.cleanupStrategy = val.cleanupStrategy
+                },
+                deep: true,
+                immediate: true
+            }
+        },
+        methods: {
+            ...mapActions(['updateRepoInfo']),
+            addRule () {
+                if (!this.cleanupStrategy.enable) return
+                if (!this.cleanupStrategy.cleanTargets) {
+                    const cleanStrategy = {
+                        enable: this.cleanupStrategy.enable,
+                        cleanupType: this.cleanupStrategy.cleanupType,
+                        cleanupValue: this.cleanupStrategy.cleanupValue,
+                        cleanTargets: []
+                    }
+                    this.cleanupStrategy = cleanStrategy
+                }
+                this.cleanupStrategy.cleanTargets.push('')
+            },
+            clearError () {
+                this.$refs.cleanForm.clearError()
+            },
+            async save () {
+                let cleanStrategy
+                if (!this.cleanupStrategy.enable) {
+                    cleanStrategy = {
+                        enable: this.cleanupStrategy.enable
+                    }
+                } else {
+                    await this.$refs.cleanForm.validate()
+                    let cleanValue = ''
+                    if (this.cleanupStrategy.cleanupType === 'retentionDate' && this.cleanupStrategy.cleanupValue instanceof Date) {
+                        cleanValue = moment(this.cleanupStrategy.cleanupValue).add(8, 'hours').toISOString()
+                    } else {
+                        cleanValue = this.cleanupStrategy.cleanupValue
+                    }
+                    if (this.cleanupStrategy.cleanTargets) {
+                        const target = this.cleanupStrategy.cleanTargets.filter(function (item, index, array) {
+                            if (item.trim().length !== 0 && item !== null) {
+                                return array.indexOf(item) === index
+                            } else {
+                                return false
+                            }
+                        })
+                        cleanStrategy = {
+                            enable: this.cleanupStrategy.enable,
+                            cleanupType: this.cleanupStrategy.cleanupType,
+                            cleanupValue: cleanValue,
+                            cleanTargets: target
+                        }
+                    } else {
+                        cleanStrategy = {
+                            enable: this.cleanupStrategy.enable,
+                            cleanupType: this.cleanupStrategy.cleanupType,
+                            cleanupValue: cleanValue
+                        }
+                    }
+                }
+                this.baseData.configuration.settings.cleanupStrategy = cleanStrategy
+                this.loading = true
+                this.updateRepoInfo({
+                    projectId: this.projectId,
+                    name: this.repoName,
+                    body: {
+                        configuration: {
+                            ...this.baseData.configuration
+                        }
+                    }
+                }).then(() => {
+                    this.$emit('refresh')
+                    this.$bkMessage({
+                        theme: 'success',
+                        message: this.$t('save') + this.$t('space') + this.$t('success')
+                    })
+                }).finally(() => {
+                    this.loading = false
+                })
+            },
+            asynCheckCleanValue () {
+                if (this.cleanupStrategy.cleanupType === 'retentionDate') {
+                    const validType = this.cleanupStrategy.cleanupValue instanceof Date || moment(this.cleanupStrategy.cleanupValue).isValid()
+                    if (this.repoName === 'pipeline') {
+                        return validType && moment(this.cleanupStrategy.cleanupValue).isBefore(moment().subtract(60, 'days'))
+                    } else if (this.repoName === 'custom') {
+                        return validType && moment(this.cleanupStrategy.cleanupValue).isBefore(moment().subtract(30, 'days'))
+                    } else {
+                        return validType
+                    }
+                } else {
+                    const validType = (/^[0-9]+$/).test(this.cleanupStrategy.cleanupValue)
+                    if (this.repoName === 'pipeline') {
+                        return validType && this.cleanupStrategy.cleanupValue >= 60
+                    } else if (this.repoName === 'custom') {
+                        return validType && this.cleanupStrategy.cleanupValue >= 30
+                    } else {
+                        return validType
+                    }
+                }
+            },
+            asynCheckDays () {
+                if (this.cleanupStrategy.cleanupType === 'retentionDays') {
+                    return this.cleanupStrategy.cleanupValue <= 10 * 365
+                }
+                return true
+            },
+            changeType () {
+                if (this.cleanupStrategy.cleanupType !== 'retentionDate') {
+                    this.cleanupStrategy.cleanupValue = ''
+                }
+                this.clearError()
+            },
+            deleteTarget (index) {
+                this.cleanupStrategy.cleanTargets.splice(index, 1)
+            },
+            changeTarget (r, ind) {
+                this.cleanupStrategy.cleanTargets.splice(ind, 1, r.path)
+            },
+            changeRetentionDate (time) {
+                this.value = formatDate(time)
+            },
+            handleClick () {
+                this.open = !this.open
+            },
+            handleOk () {
+                this.open = false
+            }
+        }
+    }
+</script>
+<style lang="scss" scoped>
+.clean-config-container {
+    max-width: 1080px;
+}
+</style>

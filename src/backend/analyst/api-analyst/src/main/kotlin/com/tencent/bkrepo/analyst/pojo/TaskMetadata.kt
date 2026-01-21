@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -71,5 +71,10 @@ data class TaskMetadata(
          * 标记任务是否为全局扫描任务
          */
         const val TASK_METADATA_GLOBAL = "GLOBAL"
+
+        /**
+         * 扫描的制品最后修改人
+         */
+        const val TASK_METADATA_ARTIFACT_LAST_MODIFIED_BY = "artifactLastModifiedBy"
     }
 }

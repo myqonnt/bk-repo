@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -27,17 +27,17 @@
 
 package com.tencent.bkrepo.analyst.component.manager.scancode
 
-import com.tencent.bkrepo.common.api.pojo.Page
-import com.tencent.bkrepo.common.analysis.pojo.scanner.ScanExecutorResult
-import com.tencent.bkrepo.common.analysis.pojo.scanner.Scanner
-import com.tencent.bkrepo.common.analysis.pojo.scanner.scanCodeCheck.result.ScanCodeToolkitScanExecutorResult
-import com.tencent.bkrepo.common.analysis.pojo.scanner.scanCodeCheck.scanner.ScancodeToolkitScanner
 import com.tencent.bkrepo.analyst.component.manager.ScanExecutorResultManager
 import com.tencent.bkrepo.analyst.component.manager.scancode.dao.ScancodeItemDao
 import com.tencent.bkrepo.analyst.component.manager.scancode.model.TScancodeItem
 import com.tencent.bkrepo.analyst.pojo.request.LoadResultArguments
 import com.tencent.bkrepo.analyst.pojo.request.SaveResultArguments
 import com.tencent.bkrepo.analyst.pojo.request.scancodetoolkit.ScancodeToolkitResultArguments
+import com.tencent.bkrepo.common.analysis.pojo.scanner.ScanExecutorResult
+import com.tencent.bkrepo.common.analysis.pojo.scanner.Scanner
+import com.tencent.bkrepo.common.analysis.pojo.scanner.scanCodeCheck.result.ScanCodeToolkitScanExecutorResult
+import com.tencent.bkrepo.common.analysis.pojo.scanner.scanCodeCheck.scanner.ScancodeToolkitScanner
+import com.tencent.bkrepo.common.api.pojo.Page
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.stereotype.Component
 import org.springframework.transaction.annotation.Transactional
@@ -72,5 +72,9 @@ class ScancodeResultManager @Autowired constructor(
         arguments as ScancodeToolkitResultArguments
         val page = scancodeItemDao.pageBy(credentialsKey, sha256, scanner.name, arguments.pageLimit, arguments)
         return Page(page.pageNumber, page.pageSize, page.totalRecords, page.records.map { it.data })
+    }
+
+    override fun clean(credentialsKey: String?, sha256: String, scannerName: String, batchSize: Int?): Long {
+        return scancodeItemDao.deleteBy(credentialsKey, sha256, scannerName, batchSize).deletedCount
     }
 }

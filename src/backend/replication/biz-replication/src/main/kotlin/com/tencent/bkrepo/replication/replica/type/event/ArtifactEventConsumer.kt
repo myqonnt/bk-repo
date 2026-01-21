@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -29,22 +29,25 @@ package com.tencent.bkrepo.replication.replica.type.event
 
 import com.tencent.bkrepo.common.artifact.event.base.ArtifactEvent
 import com.tencent.bkrepo.common.artifact.event.base.EventType
-import com.tencent.bkrepo.common.service.otel.util.AsyncUtils.trace
+import com.tencent.bkrepo.replication.dao.EventRecordDao
 import com.tencent.bkrepo.replication.replica.executor.EventConsumerThreadPoolExecutor
 import com.tencent.bkrepo.replication.service.ReplicaTaskService
+import org.springframework.messaging.Message
 import org.springframework.stereotype.Component
 
 /**
  * 构件事件消费者，用于实时同步
  * 对应binding name为artifactEvent-in-0
  */
-@Component("artifactEventReplication")
+@Component
 class ArtifactEventConsumer(
     private val replicaTaskService: ReplicaTaskService,
-    private val eventBasedReplicaJobExecutor: EventBasedReplicaJobExecutor
+    private val eventBasedReplicaJobExecutor: EventBasedReplicaJobExecutor,
+    private val eventRecordDao: EventRecordDao,
 ) : EventConsumer() {
 
     private val executors = EventConsumerThreadPoolExecutor.instance
+
     /**
      * 允许接收的事件类型
      */
@@ -56,12 +59,14 @@ class ArtifactEventConsumer(
         )
     }
 
-    override fun action(event: ArtifactEvent) {
-        executors.execute( Runnable {
-            replicaTaskService.listRealTimeTasks(event.projectId, event.repoName).forEach {
-                eventBasedReplicaJobExecutor.execute(it, event)
-            }
-        }.trace()
+    override fun action(message: Message<ArtifactEvent>) {
+        processAction(
+            message = message,
+            eventRecordDao = eventRecordDao,
+            getTasks = { projectId, repoName -> replicaTaskService.listRealTimeTasks(projectId, repoName) },
+            eventType = "NORMAL",
+            executor = executors,
+            executeTask = { task, event, recordId -> eventBasedReplicaJobExecutor.execute(task, event, recordId) }
         )
     }
 }

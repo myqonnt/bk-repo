@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2023 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2023 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -36,15 +36,16 @@ import com.tencent.bkrepo.common.api.exception.ErrorCodeException
 import com.tencent.bkrepo.common.api.util.toJsonString
 import com.tencent.bkrepo.common.artifact.repository.context.ArtifactContextHolder
 import com.tencent.bkrepo.common.artifact.repository.context.ArtifactDownloadContext
-import com.tencent.bkrepo.common.service.cluster.ClusterProperties
+import com.tencent.bkrepo.common.service.cluster.properties.ClusterProperties
+import com.tencent.bkrepo.common.service.util.HeaderUtils
 import com.tencent.bkrepo.replication.api.ClusterNodeClient
 import com.tencent.bkrepo.replication.exception.ReplicationMessageCode
 import com.tencent.bkrepo.replication.pojo.cluster.ClusterNodeInfo
+import jakarta.servlet.http.HttpServletRequest
 import org.slf4j.LoggerFactory
 import org.springframework.core.annotation.Order
 import org.springframework.stereotype.Service
 import java.time.Duration
-import javax.servlet.http.HttpServletRequest
 
 /**
  * 边缘节点重定向服务
@@ -74,9 +75,9 @@ class EdgeNodeRedirectService(
         }
 
         return !(node == null ||
-                node.clusterNames.isNullOrEmpty() ||
-                node.clusterNames!!.contains(selfClusterName) ||
-                getEdgeClusterName(context) == null)
+            node.clusterNames.isNullOrEmpty() ||
+            node.clusterNames!!.contains(selfClusterName) ||
+            getEdgeClusterName(context) == null)
     }
 
     /**
@@ -88,10 +89,15 @@ class EdgeNodeRedirectService(
             ?: throw ErrorCodeException(ReplicationMessageCode.CLUSTER_NODE_NOT_FOUND, clusterName)
         val edgeDomain = getEdgeDomain(clusterInfo)
         val request = downloadContext.request
-        val requestPath = buildPath(request)
         val queryString = buildQueryString(request)
-        val token = createTempToken(downloadContext)
-        val redirectUrl = "$edgeDomain$GENERIC_SERVICE_NAME$requestPath?token=$token&$queryString"
+        val apiType = HeaderUtils.getHeader(HEADER_BKREPO_API_TYPE)
+        val redirectUrl = if (apiType.equals("web", ignoreCase = true)) {
+            "${edgeDomain}web/$GENERIC_SERVICE_NAME${request.requestURI}?$queryString"
+        } else {
+            val requestPath = buildPath(request)
+            val token = createTempToken(downloadContext)
+            "$edgeDomain$GENERIC_SERVICE_NAME$requestPath?token=$token&$queryString"
+        }
         downloadContext.response.sendRedirect(redirectUrl)
     }
 
@@ -163,5 +169,6 @@ class EdgeNodeRedirectService(
         const val TEMPORARY_REQUEST_PREFIX = "/temporary/download" // 临时链接下载前缀
         const val SHARE_REQUEST_PREFIX = "/api/share" // 共享链接下载前缀
         const val REPO_LIST_REQUEST_PREFIX = "/api/list" // 仓库列表下载前缀
+        const val HEADER_BKREPO_API_TYPE = "X-BKREPO-API-TYPE"
     }
 }

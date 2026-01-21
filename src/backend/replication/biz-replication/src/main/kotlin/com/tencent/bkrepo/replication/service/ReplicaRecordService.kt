@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2021 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2021 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -85,6 +85,13 @@ interface ReplicaRecordService {
      * @param progress 同步进度
      */
     fun updateRecordDetailProgress(detailId: String, progress: ReplicaProgress)
+
+    /**
+     * 更新文件同步详情进度
+     * @param detailId 同步详情id
+     * @param progress 同步进度
+     */
+    fun updateRecordDetailProgress(detailId: String, fileSuccess: Boolean)
 
     /**
      * 完成同步详情

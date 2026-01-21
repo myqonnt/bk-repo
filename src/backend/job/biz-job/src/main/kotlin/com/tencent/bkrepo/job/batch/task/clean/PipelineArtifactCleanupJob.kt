@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2019 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2019 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -30,16 +30,14 @@ package com.tencent.bkrepo.job.batch.task.clean
 import com.tencent.bkrepo.common.artifact.constant.PIPELINE
 import com.tencent.bkrepo.common.artifact.constant.REPORT
 import com.tencent.bkrepo.common.artifact.path.PathUtils
+import com.tencent.bkrepo.common.metadata.service.node.NodeService
 import com.tencent.bkrepo.job.SHARDING_COUNT
 import com.tencent.bkrepo.job.batch.base.DefaultContextMongoDbJob
 import com.tencent.bkrepo.job.batch.base.JobContext
 import com.tencent.bkrepo.job.batch.utils.TimeUtils
 import com.tencent.bkrepo.job.config.properties.PipelineArtifactCleanupJobProperties
-import com.tencent.bkrepo.repository.api.NodeClient
 import com.tencent.bkrepo.repository.constant.SYSTEM_USER
-import com.tencent.bkrepo.repository.pojo.node.service.NodeCleanRequest
 import org.slf4j.LoggerFactory
-import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.data.domain.Sort
 import org.springframework.data.mongodb.core.findOne
 import org.springframework.data.mongodb.core.query.Criteria.where
@@ -54,10 +52,9 @@ import kotlin.reflect.KClass
  * 流水线构件清理任务
  */
 @Component
-@EnableConfigurationProperties(PipelineArtifactCleanupJobProperties::class)
 class PipelineArtifactCleanupJob(
     private val properties: PipelineArtifactCleanupJobProperties,
-    private val nodeClient: NodeClient,
+    private val nodeService: NodeService
 ) : DefaultContextMongoDbJob<PipelineArtifactCleanupJob.Node>(properties) {
     override fun collectionNames(): List<String> {
         return (0 until SHARDING_COUNT)
@@ -123,15 +120,15 @@ class PipelineArtifactCleanupJob(
      */
     private fun deleteBeforeBuild(buildNode: Node) {
         try {
-            val result = nodeClient.cleanNodes((NodeCleanRequest(
+            val result = nodeService.deleteBeforeDate(
                 projectId = buildNode.projectId,
                 repoName = buildNode.repoName,
                 path = buildNode.path,
                 date = buildNode.createdDate,
                 operator = SYSTEM_USER
-            ))).data
+            )
             logger.info(
-                "delete ${result?.deletedNumber} node " +
+                "delete ${result.deletedNumber} node " +
                     "in [${buildNode.projectId}/${buildNode.repoName}${buildNode.path}]"
             )
         } catch (e: NullPointerException) {

@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2021 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2021 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -34,6 +34,7 @@ import com.tencent.bkrepo.opdata.pojo.registry.ServiceInfo
  * 微服务注册中心api接口
  */
 interface RegistryClient {
+    fun configs(): String
     fun services(): List<ServiceInfo>
     fun instances(serviceName: String): List<InstanceInfo>
     fun deregister(serviceName: String, instanceId: String): InstanceInfo
@@ -45,4 +46,6 @@ interface RegistryClient {
      * @param enable true: 开启维护模式，实例不再对外提供服务， false: 关闭维护模式，实例恢复正常
      */
     fun maintenance(serviceName: String, instanceId: String, enable: Boolean): InstanceInfo
+
+    fun isConsulEnabled(): Boolean
 }

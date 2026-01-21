@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -29,15 +29,15 @@ package com.tencent.bkrepo.analyst.pojo.request
 
 import com.fasterxml.jackson.annotation.JsonSubTypes
 import com.fasterxml.jackson.annotation.JsonTypeInfo
+import com.tencent.bkrepo.analyst.pojo.request.dependencecheck.DependencySaveResultArguments
+import com.tencent.bkrepo.analyst.pojo.request.trivy.TrivySaveResultArguments
 import com.tencent.bkrepo.common.analysis.pojo.scanner.arrowhead.ArrowheadScanner
 import com.tencent.bkrepo.common.analysis.pojo.scanner.dependencycheck.scanner.DependencyScanner
 import com.tencent.bkrepo.common.analysis.pojo.scanner.trivy.TrivyScanner
-import com.tencent.bkrepo.analyst.pojo.request.dependencecheck.DependencySaveResultArguments
-import com.tencent.bkrepo.analyst.pojo.request.trivy.TrivySaveResultArguments
-import io.swagger.annotations.ApiModel
-import io.swagger.annotations.ApiModelProperty
+import io.swagger.v3.oas.annotations.media.Schema
 
-@ApiModel("存储制品扫描结果时的参数")
+
+@Schema(title = "存储制品扫描结果时的参数")
 @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.EXISTING_PROPERTY, property = "type")
 @JsonSubTypes(
     JsonSubTypes.Type(value = ArrowheadSaveResultArguments::class, name = ArrowheadScanner.TYPE),
@@ -45,6 +45,6 @@ import io.swagger.annotations.ApiModelProperty
     JsonSubTypes.Type(value = TrivySaveResultArguments::class, name = TrivyScanner.TYPE)
 )
 open class SaveResultArguments(
-    @ApiModelProperty("扫描器类型")
+    @get:Schema(title = "扫描器类型")
     val type: String
 )

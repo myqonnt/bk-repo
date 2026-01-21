@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -35,6 +35,7 @@ enum class OpDataMessageCode(private val key: String) : MessageCode {
     ServiceInstanceDeregisterConflict("op.service.instance.deregister.conflict"),
     ConfigValueTypeInvalid("config.value.type.invalid"),
     CONFIG_CLIENT_NOT_FOUND("config.client.not-found"),
+    NOT_SUPPORT("function.not-supported"),
     REGISTRY_CLIENT_NOT_FOUND("registry.client.not-found");
 
     override fun getBusinessCode() = ordinal + 1

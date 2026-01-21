@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -42,5 +42,9 @@ data class RemoteCredentialsConfiguration(
     /**
      * 密码
      */
-    var password: String? = null
+    var password: String? = null,
+    /**
+     * 鉴权凭据key
+     */
+    var credentialKey: String? = null,
 )

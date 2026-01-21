@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2019 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2019 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -27,24 +27,23 @@
 
 package com.tencent.bkrepo.auth.pojo.proxy
 
-import io.swagger.annotations.ApiModel
-import io.swagger.annotations.ApiModelProperty
+import io.swagger.v3.oas.annotations.media.Schema
 import org.springframework.util.unit.DataSize
 
-@ApiModel("proxy更新请求")
+@Schema(title = "proxy更新请求")
 data class ProxyUpdateRequest(
-    @ApiModelProperty("项目Id")
+    @get:Schema(title = "项目Id")
     val projectId: String,
-    @ApiModelProperty("名称")
+    @get:Schema(title = "名称")
     val name: String,
-    @ApiModelProperty("展示名")
+    @get:Schema(title = "展示名")
     val displayName: String? = null,
-    @ApiModelProperty("访问域名")
+    @get:Schema(title = "访问域名")
     val domain: String? = null,
-    @ApiModelProperty("同步限速")
+    @get:Schema(title = "同步限速")
     val syncRateLimit: DataSize? = null,
-    @ApiModelProperty("同步时间段")
+    @get:Schema(title = "同步时间段")
     val syncTimeRange: String? = null,
-    @ApiModelProperty("缓存过期时间")
+    @get:Schema(title = "缓存过期时间")
     val cacheExpiredDays: Int? = null,
 )

@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2019 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2019 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -27,28 +27,27 @@
 
 package com.tencent.bkrepo.opdata.pojo.plugin
 
-import io.swagger.annotations.ApiModel
-import io.swagger.annotations.ApiModelProperty
+import io.swagger.v3.oas.annotations.media.Schema
 import java.time.LocalDateTime
 
-@ApiModel("插件信息")
+@Schema(title = "插件信息")
 data class PluginDetail(
-    @ApiModelProperty("id")
+    @get:Schema(title = "id")
     val id: String,
-    @ApiModelProperty("版本")
+    @get:Schema(title = "版本")
     val version: String,
-    @ApiModelProperty("生效范围")
+    @get:Schema(title = "生效范围")
     val scope: List<String>,
-    @ApiModelProperty("描述")
+    @get:Schema(title = "描述")
     val description: String,
-    @ApiModelProperty("代码库地址")
+    @get:Schema(title = "代码库地址")
     val gitUrl: String,
-    @ApiModelProperty("创建人")
+    @get:Schema(title = "创建人")
     var createdBy: String,
-    @ApiModelProperty("创建时间")
+    @get:Schema(title = "创建时间")
     var createdDate: LocalDateTime,
-    @ApiModelProperty("最后修改人")
+    @get:Schema(title = "最后修改人")
     var lastModifiedBy: String,
-    @ApiModelProperty("最后修改时间")
+    @get:Schema(title = "最后修改时间")
     var lastModifiedDate: LocalDateTime,
 )

@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -34,31 +34,35 @@ package com.tencent.bkrepo.repository.controller.user
 import com.tencent.bkrepo.auth.pojo.enums.PermissionAction
 import com.tencent.bkrepo.auth.pojo.enums.ResourceType
 import com.tencent.bkrepo.common.api.pojo.Response
+import com.tencent.bkrepo.common.metadata.service.metadata.PackageMetadataService
+import com.tencent.bkrepo.common.metadata.util.MetadataUtils.FORBID_KEYS
 import com.tencent.bkrepo.common.security.permission.Permission
 import com.tencent.bkrepo.common.service.util.ResponseBuilder
+import com.tencent.bkrepo.repository.pojo.metadata.packages.PackageMetadataDeleteRequest
 import com.tencent.bkrepo.repository.pojo.metadata.packages.PackageMetadataSaveRequest
 import com.tencent.bkrepo.repository.pojo.metadata.packages.UserPackageMetadataSaveRequest
-import com.tencent.bkrepo.repository.service.metadata.PackageMetadataService
-import io.swagger.annotations.Api
-import io.swagger.annotations.ApiOperation
+import io.swagger.v3.oas.annotations.Operation
+import io.swagger.v3.oas.annotations.tags.Tag
+import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestAttribute
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 
 /**
  * 元数据接口实现类
  */
-@Api("包元数据用户接口")
+@Tag(name = "包元数据用户接口")
 @RestController
 @RequestMapping("/api/metadata/package")
 class UserPackageMetadataController(
     private val packageMetadataService: PackageMetadataService
 ) {
 
-    @ApiOperation("创建/更新禁用元数据列表")
+    @Operation(summary = "创建/更新禁用元数据列表")
     @Permission(type = ResourceType.REPO, action = PermissionAction.UPDATE)
     @PostMapping("/forbid/{projectId}/{repoName}")
     fun forbidMetadata(
@@ -80,7 +84,27 @@ class UserPackageMetadataController(
         return ResponseBuilder.success()
     }
 
-    @ApiOperation("保存元数据")
+    @Operation(summary = "删除包版本禁用相关元数据")
+    @Permission(type = ResourceType.REPO, action = PermissionAction.UPDATE)
+    @DeleteMapping("/forbid/{projectId}/{repoName}")
+    fun deleteForbidMetadata(
+        @PathVariable projectId: String,
+        @PathVariable repoName: String,
+        @RequestParam(required = true) packageKey: String,
+        @RequestParam(required = true) version: String,
+    ): Response<Void> {
+        val request = PackageMetadataDeleteRequest(
+            projectId = projectId,
+            repoName = repoName,
+            packageKey = packageKey,
+            version = version,
+            keysToDelete = FORBID_KEYS,
+        )
+        packageMetadataService.deleteMetadata(request)
+        return ResponseBuilder.success()
+    }
+
+    @Operation(summary = "保存元数据")
     @Permission(type = ResourceType.REPO, action = PermissionAction.UPDATE)
     @PostMapping("/{projectId}/{repoName}")
     fun saveMetadata(

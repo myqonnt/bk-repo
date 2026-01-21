@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2019 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2019 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -29,19 +29,21 @@ package com.tencent.bkrepo.webhook.service
 
 import com.tencent.bkrepo.auth.api.ServicePermissionClient
 import com.tencent.bkrepo.auth.api.ServiceUserClient
-import com.tencent.bkrepo.common.security.manager.PermissionManager
+import com.tencent.bkrepo.common.metadata.permission.PermissionManager
 import com.tencent.bkrepo.webhook.config.WebHookProperties
 import com.tencent.bkrepo.webhook.dao.WebHookDao
 import com.tencent.bkrepo.webhook.dao.WebHookLogDao
 import com.tencent.bkrepo.webhook.executor.WebHookExecutor
 import com.tencent.bkrepo.webhook.metrics.WebHookMetrics
 import com.tencent.bkrepo.webhook.payload.EventPayloadFactory
+import io.micrometer.observation.ObservationRegistry
 import org.mockito.kotlin.any
 import org.mockito.kotlin.whenever
-import org.springframework.boot.test.mock.mockito.MockBean
+import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.context.annotation.ComponentScan
 import org.springframework.context.annotation.Import
 import org.springframework.test.context.TestPropertySource
+import org.springframework.test.context.bean.override.mockito.MockitoBean
 
 @Import(
     WebHookDao::class,
@@ -57,12 +59,15 @@ import org.springframework.test.context.TestPropertySource
 @TestPropertySource(locations = ["classpath:bootstrap-ut.properties"])
 open class ServiceBaseTest {
 
-    @MockBean
+    @MockitoBean
     lateinit var permissionManager: PermissionManager
 
 
-    @MockBean
+    @MockitoBean
     lateinit var servicePermissionClient: ServicePermissionClient
+
+    @Autowired
+    lateinit var registry: ObservationRegistry
 
     fun initMock() {
         whenever(servicePermissionClient.checkPermission(any())).thenReturn(null)

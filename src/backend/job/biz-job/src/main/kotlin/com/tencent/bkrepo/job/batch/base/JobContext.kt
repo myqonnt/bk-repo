@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2019 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2019 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -38,7 +38,10 @@ open class JobContext(
     // 执行成功数
     var success: AtomicLong = AtomicLong(),
     // 执行失败数
-    var failed: AtomicLong = AtomicLong()
+    var failed: AtomicLong = AtomicLong(),
+
+    // v2 job params
+    var executeContext: JobExecuteContext? = null,
 ) {
     override fun toString(): String {
         return "Success[$success], failed[$failed], total[$total]"

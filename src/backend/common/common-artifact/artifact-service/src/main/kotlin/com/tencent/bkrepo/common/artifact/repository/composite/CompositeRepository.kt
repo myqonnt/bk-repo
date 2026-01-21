@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -34,7 +34,9 @@ package com.tencent.bkrepo.common.artifact.repository.composite
 import com.tencent.bkrepo.common.artifact.pojo.RepositoryCategory
 import com.tencent.bkrepo.common.artifact.pojo.configuration.RepositoryConfiguration
 import com.tencent.bkrepo.common.artifact.pojo.configuration.composite.ProxyChannelSetting
+import com.tencent.bkrepo.common.artifact.pojo.configuration.remote.RemoteCacheConfiguration
 import com.tencent.bkrepo.common.artifact.pojo.configuration.remote.RemoteConfiguration
+import com.tencent.bkrepo.common.artifact.pojo.configuration.remote.RemoteNetworkConfiguration
 import com.tencent.bkrepo.common.artifact.repository.context.ArtifactContext
 import com.tencent.bkrepo.common.artifact.repository.context.ArtifactDownloadContext
 import com.tencent.bkrepo.common.artifact.repository.context.ArtifactMigrateContext
@@ -47,8 +49,9 @@ import com.tencent.bkrepo.common.artifact.repository.local.LocalRepository
 import com.tencent.bkrepo.common.artifact.repository.migration.MigrateDetail
 import com.tencent.bkrepo.common.artifact.repository.remote.RemoteRepository
 import com.tencent.bkrepo.common.artifact.resolve.response.ArtifactResource
+import com.tencent.bkrepo.common.artifact.util.http.HttpHeaderUtils.useCache
+import com.tencent.bkrepo.common.metadata.service.repo.ProxyChannelService
 import com.tencent.bkrepo.common.storage.monitor.Throughput
-import com.tencent.bkrepo.repository.api.ProxyChannelClient
 import com.tencent.bkrepo.repository.pojo.proxy.ProxyChannelInfo
 import com.tencent.bkrepo.repository.pojo.repo.RepositoryDetail
 import org.slf4j.LoggerFactory
@@ -62,7 +65,7 @@ import java.time.format.DateTimeFormatter
 class CompositeRepository(
     private val localRepository: LocalRepository,
     private val remoteRepository: RemoteRepository,
-    private val proxyChannelClient: ProxyChannelClient
+    private val proxyChannelService: ProxyChannelService
 ) : AbstractArtifactRepository() {
 
     /**
@@ -110,11 +113,17 @@ class CompositeRepository(
     }
 
     override fun onDownload(context: ArtifactDownloadContext): ArtifactResource? {
-        return localRepository.onDownload(context) ?: run {
-            mapFirstProxyRepo(context) {
+        return if (useCache()) {
+            localRepository.onDownload(context) ?: mapFirstProxyRepo(context) {
                 require(it is ArtifactDownloadContext)
                 remoteRepository.onDownload(it)
             }
+        } else {
+            // 不使用缓存时优先从远程仓库加载
+            mapFirstProxyRepo(context) {
+                require(it is ArtifactDownloadContext)
+                remoteRepository.onDownload(it)
+            } ?: localRepository.onDownload(context)
         }
     }
 
@@ -210,14 +219,16 @@ class CompositeRepository(
         setting: ProxyChannelSetting
     ): ArtifactContext {
         // 查询公共源详情
-        val proxyChannel = proxyChannelClient.getByUniqueId(
+        val proxyChannel = proxyChannelService.queryProxyChannel(
             projectId = context.projectId,
             repoName = context.repoName,
-            repoType = context.repositoryDetail.type.name,
+            repoType = context.repositoryDetail.type,
             name = setting.name
-        ).data!!
+        )!!
         // 构造proxyConfiguration
-        val remoteConfiguration = convertConfig(proxyChannel)
+        val networkConfig = context.getCompositeConfiguration().proxy.network
+        val cacheConfig = context.getCompositeConfiguration().proxy.cache
+        val remoteConfiguration = convertConfig(proxyChannel, networkConfig, cacheConfig)
         val remoteRepoDetail = convert(remoteConfiguration, context.repositoryDetail)
         return context.copy(remoteRepoDetail)
     }
@@ -247,11 +258,18 @@ class CompositeRepository(
             )
         }
 
-        fun convertConfig(tProxyChannel: ProxyChannelInfo): RepositoryConfiguration {
+        fun convertConfig(
+            tProxyChannel: ProxyChannelInfo,
+            networkConfiguration: RemoteNetworkConfiguration,
+            cacheConfiguration: RemoteCacheConfiguration
+        ): RepositoryConfiguration {
             val remoteConfiguration = RemoteConfiguration()
             remoteConfiguration.url = tProxyChannel.url
             remoteConfiguration.credentials.username = tProxyChannel.username
             remoteConfiguration.credentials.password = tProxyChannel.password
+            remoteConfiguration.credentials.credentialKey = tProxyChannel.credentialKey
+            remoteConfiguration.network = networkConfiguration
+            remoteConfiguration.cache = cacheConfiguration
             return remoteConfiguration
         }
     }

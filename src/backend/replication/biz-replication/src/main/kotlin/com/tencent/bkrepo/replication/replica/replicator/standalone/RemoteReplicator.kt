@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -31,10 +31,15 @@ import com.tencent.bkrepo.common.artifact.constant.SOURCE_TYPE
 import com.tencent.bkrepo.common.artifact.resolve.response.ArtifactChannel
 import com.tencent.bkrepo.replication.exception.ArtifactSourceCheckException
 import com.tencent.bkrepo.replication.exception.RegexCheckException
-import com.tencent.bkrepo.replication.replica.repository.remote.ArtifactPushMappings
+import com.tencent.bkrepo.replication.pojo.request.PackageVersionDeleteSummary
 import com.tencent.bkrepo.replication.replica.context.ReplicaContext
 import com.tencent.bkrepo.replication.replica.replicator.Replicator
+import com.tencent.bkrepo.replication.replica.repository.remote.ArtifactPushMappings
+import com.tencent.bkrepo.repository.pojo.metadata.MetadataDeleteRequest
+import com.tencent.bkrepo.repository.pojo.metadata.MetadataSaveRequest
 import com.tencent.bkrepo.repository.pojo.node.NodeInfo
+import com.tencent.bkrepo.repository.pojo.node.service.NodeMoveCopyRequest
+import com.tencent.bkrepo.repository.pojo.node.service.NodeRenameRequest
 import com.tencent.bkrepo.repository.pojo.packages.PackageSummary
 import com.tencent.bkrepo.repository.pojo.packages.PackageVersion
 import org.slf4j.LoggerFactory
@@ -69,19 +74,26 @@ class RemoteReplicator : Replicator {
     ): Boolean {
         if (!checkSourceType(packageVersion))
             throw ArtifactSourceCheckException(
-                "Current version is coming from the proxy or replication source, so ignore it"
+                "Current version is coming from the proxy source, so ignore it"
             )
         if (!remotePackageConstraint(context, packageSummary, packageVersion))
             throw RegexCheckException("Error occurred while checking the rules for package and version")
         return ArtifactPushMappings.push(packageSummary, packageVersion, context)
     }
 
+    override fun replicaDeletedPackage(
+        context: ReplicaContext,
+        packageVersionDeleteSummary: PackageVersionDeleteSummary
+    ): Boolean {
+        return true
+    }
+
     /**
-     * 只针对version中元数据 sourceType为ArtifactChannel.LOCAL的package才推送
+     * 只针对version中元数据 sourceType不是ArtifactChannel.PROXY的package才推送
      */
     private fun checkSourceType(packageVersion: PackageVersion): Boolean {
         if (packageVersion.metadata.isEmpty() || packageVersion.metadata[SOURCE_TYPE] == null) return true
-        return packageVersion.metadata[SOURCE_TYPE] == ArtifactChannel.LOCAL
+        return packageVersion.metadata[SOURCE_TYPE] != ArtifactChannel.PROXY
     }
 
     /**
@@ -145,6 +157,50 @@ class RemoteReplicator : Replicator {
 
     override fun replicaDir(context: ReplicaContext, node: NodeInfo) {
         // 暂时不支持同步目录到外部集群
+    }
+
+    override fun replicaDeletedNode(context: ReplicaContext, node: NodeInfo): Boolean {
+        return true
+    }
+
+    override fun replicaNodeMove(context: ReplicaContext, moveOrCopyRequest: NodeMoveCopyRequest): Boolean {
+        return true
+    }
+
+    override fun replicaNodeCopy(context: ReplicaContext, moveOrCopyRequest: NodeMoveCopyRequest): Boolean {
+        return true
+    }
+
+    override fun replicaNodeRename(context: ReplicaContext, nodeRenameRequest: NodeRenameRequest): Boolean {
+        return true
+    }
+
+    override fun replicaMetadataSave(context: ReplicaContext, metadataSaveRequest: MetadataSaveRequest): Boolean {
+        return true
+    }
+
+    override fun replicaMetadataDelete(context: ReplicaContext, metadataDeleteRequest: MetadataDeleteRequest): Boolean {
+        return true
+    }
+
+    override fun checkNodeExist(
+        context: ReplicaContext,
+        projectId: String,
+        repoName: String,
+        fullPath: String,
+        deleted: String?
+    ): Boolean {
+        return false
+    }
+
+    override fun checkPackageVersionExist(
+        context: ReplicaContext,
+        projectId: String,
+        repoName: String,
+        packageKey: String,
+        versionName: String
+    ): Boolean {
+        return false
     }
 
     companion object {

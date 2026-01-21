@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2019 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2019 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -27,16 +27,17 @@
 
 package com.tencent.bkrepo.job.batch.task.clean
 
+import com.tencent.bkrepo.common.metadata.properties.BlockNodeProperties
+import com.tencent.bkrepo.common.metadata.service.file.FileReferenceService
 import com.tencent.bkrepo.common.mongo.constant.ID
+import com.tencent.bkrepo.job.COLLECTION_NAME_BLOCK_NODE
 import com.tencent.bkrepo.job.SHARDING_COUNT
 import com.tencent.bkrepo.job.batch.base.DefaultContextMongoDbJob
 import com.tencent.bkrepo.job.batch.base.JobContext
 import com.tencent.bkrepo.job.batch.utils.RepositoryCommonUtils
 import com.tencent.bkrepo.job.batch.utils.TimeUtils
 import com.tencent.bkrepo.job.config.properties.DeletedBlockNodeCleanupJobProperties
-import com.tencent.bkrepo.repository.api.FileReferenceClient
 import org.slf4j.LoggerFactory
-import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.data.mongodb.core.query.Criteria
 import org.springframework.data.mongodb.core.query.Query
 import org.springframework.data.mongodb.core.query.isEqualTo
@@ -49,11 +50,11 @@ import kotlin.reflect.KClass
 /**
  * 清理被标记为删除的node，同时减少文件引用
  */
-@Component("JobServiceDeletedBlockNodeCleanupJob")
-@EnableConfigurationProperties(DeletedBlockNodeCleanupJobProperties::class)
+@Component
 class DeletedBlockNodeCleanupJob(
+    private val blockNodeProperties: BlockNodeProperties,
     private val properties: DeletedBlockNodeCleanupJobProperties,
-    private val fileReferenceClient: FileReferenceClient
+    private val fileReferenceService: FileReferenceService
 ) : DefaultContextMongoDbJob<DeletedBlockNodeCleanupJob.BlockNode>(properties) {
 
     data class BlockNode(
@@ -66,11 +67,8 @@ class DeletedBlockNodeCleanupJob(
     override fun getLockAtMostFor(): Duration = Duration.ofDays(7)
 
     override fun collectionNames(): List<String> {
-        val collectionNames = mutableListOf<String>()
-        for (i in 0 until SHARDING_COUNT) {
-            collectionNames.add("$COLLECTION_NAME_PREFIX$i")
-        }
-        return collectionNames
+        val collectionNamePrefix = blockNodeProperties.collectionName.ifEmpty { COLLECTION_NAME_BLOCK_NODE }
+        return (0 until SHARDING_COUNT).map { "${collectionNamePrefix}_$it" }
     }
 
     override fun buildQuery(): Query {
@@ -106,11 +104,10 @@ class DeletedBlockNodeCleanupJob(
         with(blockNode) {
             val credentialsKey = RepositoryCommonUtils.getRepositoryDetail(projectId, repoName)
                 .storageCredentials?.key
-            fileReferenceClient.decrement(sha256, credentialsKey).data
+            fileReferenceService.decrement(sha256, credentialsKey)
         }
     }
     companion object {
         private val logger = LoggerFactory.getLogger(DeletedBlockNodeCleanupJob::class.java)
-        private const val COLLECTION_NAME_PREFIX = "block_node_"
     }
 }

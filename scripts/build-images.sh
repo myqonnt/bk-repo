@@ -194,11 +194,16 @@ if [[ $ALL -eq 1 || $BACKEND -eq 1 ]] ; then
     for SERVICE in "${BACKENDS[@]}";
     do
         log "构建${SERVICE}镜像..."
+        if [[ $SERVICE == "preview" ]]; then
+            DOCKERFILE="$IMAGE_DIR/backend/preview.Dockerfile"
+        else
+            DOCKERFILE="$IMAGE_DIR/backend/backend.Dockerfile"
+        fi
         $BACKEND_DIR/gradlew -p $BACKEND_DIR :$SERVICE:boot-$SERVICE:build -P'devops.assemblyMode'=k8s -x test
         rm -rf $tmp_dir/*
         cp $IMAGE_DIR/backend/startup.sh $tmp_dir/
         cp $BACKEND_DIR/release/boot-$SERVICE.jar $tmp_dir/app.jar
-        docker build -f $IMAGE_DIR/backend/backend.Dockerfile -t $REGISTRY/$NAMESPACE/bkrepo-$SERVICE:$VERSION $tmp_dir --network=host
+        docker build -f $DOCKERFILE -t $REGISTRY/$NAMESPACE/bkrepo-$SERVICE:$VERSION $tmp_dir --network=host
         if [[ $PUSH -eq 1 ]] ; then
             docker push $REGISTRY/$NAMESPACE/bkrepo-$SERVICE:$VERSION
         fi
@@ -212,6 +217,7 @@ if [[ $ALL -eq 1 || $INIT -eq 1 ]] ; then
     rm -rf $tmp_dir/*
     cp -rf $IMAGE_DIR/init/init-mongodb.sh $tmp_dir/
     cp -rf $ROOT_DIR/support-files/sql/init-data.js $tmp_dir/
+     cp -rf $ROOT_DIR/support-files/sql/init-data-tenant.js $tmp_dir/
     cp -rf $ROOT_DIR/support-files/sql/init-data-ext.js $tmp_dir/
     docker build -f $IMAGE_DIR/init/init.Dockerfile -t $REGISTRY/$NAMESPACE/bkrepo-init:$VERSION $tmp_dir --no-cache --network=host
     if [[ $PUSH -eq 1 ]] ; then

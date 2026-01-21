@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -30,12 +30,15 @@ package com.tencent.bkrepo.job.config.properties
 import com.tencent.bkrepo.common.artifact.constant.LOG
 import com.tencent.bkrepo.common.artifact.constant.REPORT
 
-open class StatJobProperties(
+open class StatJobProperties: MongodbJobProperties() {
     // 是否执行所有仓库统计
-    var runAllRepo: Boolean = false,
+    var runAllRepo: Boolean = false
     // 特殊仓库统计每周统计一次
-    var specialRepos: List<String> = listOf(REPORT, LOG),
+    var specialRepos: List<String> = listOf(REPORT, LOG)
     // 特殊仓库在每周第几天执行，默认周六
-    var specialDay: Int = 6,
-    var concurrencyNum: Int = 1,
-) : MongodbJobProperties()
+    var specialDay: Int = 6
+    var concurrencyNum: Int = 1
+    var userMemory: Boolean = true
+    var cacheNumLimit: Long = 10000
+
+}

@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -36,20 +36,23 @@ import com.tencent.bkrepo.auth.constant.PROJECT_VIEWER_ID
 import com.tencent.bkrepo.auth.dao.PermissionDao
 import com.tencent.bkrepo.auth.dao.PersonalPathDao
 import com.tencent.bkrepo.auth.dao.UserDao
+import com.tencent.bkrepo.auth.dao.repository.RoleRepository
 import com.tencent.bkrepo.auth.message.AuthMessageCode
+import com.tencent.bkrepo.auth.model.TAccount
+import com.tencent.bkrepo.auth.model.TPermission
 import com.tencent.bkrepo.auth.pojo.account.ScopeRule
-import com.tencent.bkrepo.auth.pojo.enums.ResourceType.REPO
+import com.tencent.bkrepo.auth.pojo.enums.PermissionAction
+import com.tencent.bkrepo.auth.pojo.enums.PermissionAction.DOWNLOAD
+import com.tencent.bkrepo.auth.pojo.enums.PermissionAction.MANAGE
+import com.tencent.bkrepo.auth.pojo.enums.PermissionAction.READ
+import com.tencent.bkrepo.auth.pojo.enums.ResourceType.ENDPOINT
 import com.tencent.bkrepo.auth.pojo.enums.ResourceType.NODE
 import com.tencent.bkrepo.auth.pojo.enums.ResourceType.PROJECT
-import com.tencent.bkrepo.auth.pojo.enums.ResourceType.ENDPOINT
+import com.tencent.bkrepo.auth.pojo.enums.ResourceType.REPO
 import com.tencent.bkrepo.auth.pojo.enums.RoleType
+import com.tencent.bkrepo.auth.pojo.oauth.AuthorizationGrantType
+import com.tencent.bkrepo.auth.pojo.permission.CheckPermissionContext
 import com.tencent.bkrepo.auth.pojo.permission.Permission
-import com.tencent.bkrepo.auth.dao.repository.RoleRepository
-import com.tencent.bkrepo.auth.model.TPermission
-import com.tencent.bkrepo.auth.pojo.enums.PermissionAction
-import com.tencent.bkrepo.auth.pojo.enums.PermissionAction.READ
-import com.tencent.bkrepo.auth.pojo.enums.PermissionAction.MANAGE
-import com.tencent.bkrepo.auth.pojo.permission.CheckPermissionRequest
 import com.tencent.bkrepo.auth.util.scope.RuleUtil
 import com.tencent.bkrepo.common.api.exception.ErrorCodeException
 import com.tencent.bkrepo.common.security.util.SecurityUtils
@@ -62,6 +65,7 @@ class PermissionHelper constructor(
     private val permissionDao: PermissionDao,
     private val personalPathDao: PersonalPathDao
 ) {
+
     // check user is existed
     private fun checkUserExistBatch(idList: List<String>) {
         idList.forEach {
@@ -81,19 +85,20 @@ class PermissionHelper constructor(
         }
     }
 
-    fun checkRepoAdmin(request: CheckPermissionRequest, roles: List<String>): Boolean {
+    fun checkRepoAdmin(context: CheckPermissionContext): Boolean {
         // check role repo admin
         var queryRoles = emptyList<String>()
-        if (roles.isNotEmpty() && request.projectId != null && request.repoName != null) {
+        val roles = context.roles
+        if (roles.isNotEmpty() && context.repoName != null) {
             queryRoles = roles.filter { !it.isNullOrEmpty() }.toList()
         }
         if (queryRoles.isEmpty()) return false
 
-        val result = roleRepository.findByProjectIdAndTypeAndAdminAndRepoNameAndIdIn(
-            projectId = request.projectId!!,
+        val result = roleRepository.findByTypeAndProjectIdAndAdminAndRepoNameAndIdIn(
             type = RoleType.REPO,
-            repoName = request.repoName!!,
+            projectId = context.projectId,
             admin = true,
+            repoName = context.repoName!!,
             ids = queryRoles
         )
         if (result.isNotEmpty()) return true
@@ -151,6 +156,13 @@ class PermissionHelper constructor(
         return userDao.findAllByRolesIn(roleIdArray).map { it.userId }.distinct()
     }
 
+    fun getServiceUser(roleId: String): List<String> {
+        val roleIdArray = mutableListOf<String>()
+        val role = roleRepository.findFirstByTypeAndRoleId(RoleType.SERVICE, roleId)
+        if (role != null) role.id?.let { roleIdArray.add(it) }
+        return userDao.findAllByRolesIn(roleIdArray).map { it.userId }.distinct()
+    }
+
     fun removeUserFromRoleBatchCommon(userIdList: List<String>, roleId: String): Boolean {
         logger.info("remove user from role batch userId : [$userIdList], roleId : [$roleId]")
         checkUserExistBatch(userIdList)
@@ -182,14 +194,16 @@ class PermissionHelper constructor(
         return resourceType == NODE.name || resourceType == REPO.name
     }
 
-    fun checkProjectReadAction(request: CheckPermissionRequest, isProjectUser: Boolean): Boolean {
-        return request.projectId != null && request.action == READ.name && isProjectUser
+    fun checkProjectReadAction(request: CheckPermissionContext, isProjectUser: Boolean): Boolean {
+        val readeOrdownload = request.action == READ.name || request.action == DOWNLOAD.name
+        return readeOrdownload && isProjectUser
     }
 
-    fun getNoPermissionPathFromConfig(
+    fun getPermissionPathFromConfig(
         userId: String,
         roles: List<String>,
-        config: List<TPermission>
+        config: List<TPermission>,
+        include: Boolean
     ): List<String> {
         val excludePath = mutableListOf<String>()
         val includePath = mutableListOf<String>()
@@ -221,14 +235,17 @@ class PermissionHelper constructor(
                 }
             }
         }
+        if (include) {
+            return includePath.distinct()
+        }
         val filterPath = includePath.distinct()
         return excludePath.distinct().filter { !filterPath.contains(it) }
     }
 
-    fun checkRepoReadAction(request: CheckPermissionRequest, roles: List<String>): Boolean {
-        with(request) {
+    fun checkRepoReadAction(context: CheckPermissionContext): Boolean {
+        with(context) {
             return resourceType == REPO.name && action == READ.name &&
-                    permissionDao.listPermissionInRepo(projectId!!, repoName!!, uid, roles).isNotEmpty()
+                    permissionDao.listPermissionInRepo(projectId, repoName!!, userId, roles).isNotEmpty()
         }
     }
 
@@ -289,7 +306,7 @@ class PermissionHelper constructor(
     fun getUserCommonRoleProject(roles: List<String>): List<String> {
         val projectList = mutableListOf<String>()
         roleRepository.findByIdIn(roles).forEach {
-            if (it.projectId.isNotEmpty() && it.roleId == PROJECT_VIEWER_ID) {
+            if (!it.projectId.isNullOrEmpty() && it.roleId == PROJECT_VIEWER_ID) {
                 projectList.add(it.projectId)
             }
         }
@@ -306,6 +323,14 @@ class PermissionHelper constructor(
             }
         }
         return projectList
+    }
+
+    fun isPlatformApp(platform: TAccount): Boolean {
+        val grantTypes = platform.authorizationGrantTypes ?: return true
+
+        if (grantTypes.contains(AuthorizationGrantType.PLATFORM)) return true
+
+        return false
     }
 
     private fun checkIncludePatternAction(
@@ -336,48 +361,55 @@ class PermissionHelper constructor(
         return permissionDao.updateById(id, key, value)
     }
 
-    fun checkNodeAction(request: CheckPermissionRequest, userRoles: List<String>?, isProjectUser: Boolean): Boolean {
-        with(request) {
-            var roles = userRoles
+    fun checkNodeActionWithOutCtrl(context: CheckPermissionContext, isProjectUser: Boolean): Boolean {
+        with(context) {
+            logger.debug("checkNodeActionWithOutCtrl [$context]")
             if (resourceType != NODE.name || path == null) return false
-            if (roles == null) {
-                val user = userDao.findFirstByUserId(uid) ?: run {
-                    throw ErrorCodeException(AuthMessageCode.AUTH_USER_NOT_EXIST)
-                }
-                roles = user.roles
-            }
-            val result = permissionDao.listInPermission(projectId!!, repoName!!, uid, resourceType, roles)
+            val result = permissionDao.listInPermission(projectId, repoName!!, userId, resourceType, roles)
             result.forEach {
                 if (checkIncludePatternAction(it.includePattern, path!!, it.actions, action)) return true
 
                 if (checkExcludePatternAction(it.excludePattern, path!!, it.actions, action)) return false
             }
 
-            val noPermissionResult = permissionDao.listNoPermission(projectId!!, repoName!!, uid, resourceType, roles)
+            val noPermissionResult =
+                permissionDao.listNoPermission(projectId, repoName!!, userId, resourceType, roles)
             noPermissionResult.forEach {
                 if (checkIncludePatternAction(it.includePattern, path!!, it.actions, action)) return false
             }
-            val personalPathCheck = checkPersonalPath(uid, projectId!!, repoName!!, path!!)
-            if (personalPathCheck != null) return personalPathCheck
+            val personalPathCheck = checkPersonalPath(userId, projectId, repoName!!, path!!)
+            if (personalPathCheck != null) {
+                return personalPathCheck
+            } else if (path!!.startsWith(defaultPersonalPrefix) && path!!.removeSuffix("/") != defaultPersonalPrefix) {
+                return false
+            }
         }
         return isProjectUser
     }
+
+    fun checkNodeActionWithCtrl(context: CheckPermissionContext): Boolean {
+        with(context) {
+            logger.debug("checkNodeActionWithCtrl [$context]")
+            if (resourceType != NODE.name || path == null) return false
+            val result = permissionDao.listInPermission(projectId, repoName!!, userId, resourceType, roles)
+            result.forEach {
+                if (checkIncludePatternAction(it.includePattern, path!!, it.actions, action)) return true
+            }
+            val personalPathCheck = checkPersonalPath(userId, projectId, repoName!!, path!!)
+            if (personalPathCheck != null) return personalPathCheck
+            return false
+        }
+    }
+
 
     private fun checkPersonalPath(userId: String, projectId: String, repoName: String, path: String): Boolean? {
         // check personal path
         val personalPath = personalPathDao.findOneByProjectAndRepo(userId, projectId, repoName)
         if (personalPath != null && path.startsWith(personalPath.fullPath)) return true
-
-        // check personal exclude path
-        val personalExcludePath = personalPathDao.listByProjectAndRepoAndExcludeUser(userId, projectId, repoName)
-        personalExcludePath.forEach {
-            if (path.startsWith(it.fullPath)) return false
-        }
         return null
     }
 
-    fun isUserLocalProjectAdmin(userId: String, projectId: String?): Boolean {
-        if (projectId == null) return false
+    fun isUserLocalProjectAdmin(userId: String, projectId: String): Boolean {
         val roleIdArray = mutableListOf<String>()
         roleRepository.findByTypeAndProjectIdAndAdmin(RoleType.PROJECT, projectId, true).forEach {
             roleIdArray.add(it.id!!)
@@ -395,7 +427,12 @@ class PermissionHelper constructor(
             .any { role -> role.projectId == projectId && role.roleId == PROJECT_VIEWER_ID }
     }
 
+    fun getDefaultPersonalPrefix(): String {
+        return defaultPersonalPrefix
+    }
+
     companion object {
+        const val defaultPersonalPrefix = "/Personal"
         private val logger = LoggerFactory.getLogger(PermissionHelper::class.java)
     }
 }

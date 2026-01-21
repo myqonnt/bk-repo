@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -31,7 +31,7 @@
 
 package com.tencent.bkrepo.common.security.permission
 
-import com.tencent.bkrepo.common.security.manager.PermissionManager
+import com.tencent.bkrepo.common.security.manager.PrincipalManager
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
@@ -46,7 +46,7 @@ class PermissionConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    fun permissionCheckHandler(permissionManager: PermissionManager): PermissionCheckHandler {
-        return DefaultPermissionCheckHandler(permissionManager)
+    fun permissionCheckHandler(principalManager: PrincipalManager): PermissionCheckHandler {
+        return DefaultPermissionCheckHandler(principalManager)
     }
 }

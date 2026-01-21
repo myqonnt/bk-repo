@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -27,8 +27,9 @@
 
 package com.tencent.bkrepo.replication.replica.replicator.commitedge
 
-import com.tencent.bkrepo.common.service.cluster.CommitEdgeCenterCondition
+import com.tencent.bkrepo.common.service.cluster.condition.CommitEdgeCenterCondition
 import com.tencent.bkrepo.replication.config.ReplicationProperties
+import com.tencent.bkrepo.replication.pojo.request.PackageVersionDeleteSummary
 import com.tencent.bkrepo.replication.replica.context.ReplicaContext
 import com.tencent.bkrepo.replication.replica.replicator.standalone.RemoteReplicator
 import com.tencent.bkrepo.replication.service.EdgeReplicaTaskRecordService
@@ -64,6 +65,13 @@ class CenterRemoteReplicator(
             size = packageVersion.size
         )
         edgeReplicaTaskRecordService.waitTaskFinish(edgeReplicaTaskRecord.id!!, estimateTime, ChronoUnit.SECONDS)
+        return true
+    }
+
+    override fun replicaDeletedPackage(
+        context: ReplicaContext,
+        packageVersionDeleteSummary: PackageVersionDeleteSummary
+    ): Boolean {
         return true
     }
 }

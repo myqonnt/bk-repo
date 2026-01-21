@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2019 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2019 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -28,7 +28,7 @@
 package com.tencent.bkrepo.webhook.controller
 
 import com.tencent.bkrepo.common.api.pojo.Response
-import com.tencent.bkrepo.common.operate.api.annotation.LogOperate
+import com.tencent.bkrepo.common.metadata.annotation.LogOperate
 import com.tencent.bkrepo.common.service.util.ResponseBuilder
 import com.tencent.bkrepo.webhook.constant.AssociationType
 import com.tencent.bkrepo.webhook.pojo.CreateWebHookRequest
@@ -36,8 +36,8 @@ import com.tencent.bkrepo.webhook.pojo.UpdateWebHookRequest
 import com.tencent.bkrepo.webhook.pojo.WebHook
 import com.tencent.bkrepo.webhook.pojo.WebHookLog
 import com.tencent.bkrepo.webhook.service.WebHookService
-import io.swagger.annotations.Api
-import io.swagger.annotations.ApiOperation
+import io.swagger.v3.oas.annotations.Operation
+import io.swagger.v3.oas.annotations.tags.Tag
 import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
@@ -49,14 +49,14 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 
-@Api("WebHook管理接口")
+@Tag(name = "WebHook管理接口")
 @RestController
 @RequestMapping("/api/webhook")
 class UserWebHookController(
     private val webHookService: WebHookService
 ) {
 
-    @ApiOperation("创建WebHook")
+    @Operation(summary = "创建WebHook")
     @PostMapping("/create")
     @LogOperate(type = "WEBHOOK_CREATE", desensitize = true)
     fun createWebHook(
@@ -67,7 +67,7 @@ class UserWebHookController(
         return ResponseBuilder.success()
     }
 
-    @ApiOperation("更新WebHook")
+    @Operation(summary = "更新WebHook")
     @PutMapping("/update")
     @LogOperate(type = "WEBHOOK_UPDATE", desensitize = true)
     fun updateWebHook(
@@ -78,7 +78,7 @@ class UserWebHookController(
         return ResponseBuilder.success()
     }
 
-    @ApiOperation("删除WebHook")
+    @Operation(summary = "删除WebHook")
     @DeleteMapping("/delete/{id}")
     @LogOperate(type = "WEBHOOK_DELETE")
     fun deleteWebHook(
@@ -89,7 +89,7 @@ class UserWebHookController(
         return ResponseBuilder.success()
     }
 
-    @ApiOperation("查询WebHook")
+    @Operation(summary = "查询WebHook")
     @GetMapping("/{id}")
     fun getWebHook(
         @RequestAttribute userId: String,
@@ -98,7 +98,7 @@ class UserWebHookController(
         return ResponseBuilder.success(webHookService.getWebHook(userId, id))
     }
 
-    @ApiOperation("查询WebHook列表")
+    @Operation(summary = "查询WebHook列表")
     @GetMapping("/list")
     @LogOperate(type = "WEBHOOK_LIST")
     fun listWebHook(
@@ -109,7 +109,7 @@ class UserWebHookController(
         return ResponseBuilder.success(webHookService.listWebHook(userId, associationType, associationId))
     }
 
-    @ApiOperation("测试WebHook")
+    @Operation(summary = "测试WebHook")
     @PostMapping("/test/{id}")
     fun testWebHook(
         @RequestAttribute userId: String,
@@ -118,7 +118,7 @@ class UserWebHookController(
         return ResponseBuilder.success(webHookService.testWebHook(userId, id))
     }
 
-    @ApiOperation("重试WebHook请求")
+    @Operation(summary = "重试WebHook请求")
     @PostMapping("/retry/{logId}")
     fun retryWebHookRequest(
         @PathVariable logId: String

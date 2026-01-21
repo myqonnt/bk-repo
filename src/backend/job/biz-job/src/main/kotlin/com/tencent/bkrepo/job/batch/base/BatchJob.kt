@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2019 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2019 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -28,11 +28,13 @@
 package com.tencent.bkrepo.job.batch.base
 
 import com.tencent.bkrepo.common.api.util.HumanReadable
+import com.tencent.bkrepo.common.api.util.TraceUtils
 import com.tencent.bkrepo.common.service.log.LoggerHolder
 import com.tencent.bkrepo.common.service.util.SpringContextUtils
 import com.tencent.bkrepo.job.config.JobProperties
 import com.tencent.bkrepo.job.config.properties.BatchJobProperties
 import com.tencent.bkrepo.job.listener.event.TaskExecutedEvent
+import io.micrometer.observation.ObservationRegistry
 import net.javacrumbs.shedlock.core.LockConfiguration
 import net.javacrumbs.shedlock.core.LockProvider
 import net.javacrumbs.shedlock.core.LockingTaskExecutor
@@ -114,41 +116,41 @@ abstract class BatchJob<C : JobContext>(open val batchJobProperties: BatchJobPro
     @Autowired
     private lateinit var jobProperties: JobProperties
 
+    @Autowired
+    protected lateinit var registry: ObservationRegistry
+
     open fun start(): Boolean {
         if (!shouldExecute()) {
             return false
         }
-        logger.info("Start to execute async job[${getJobName()}]")
-        stop = false
-        val jobContext = createJobContext()
-        val wasExecuted = if (isExclusive) {
-            var wasExecuted = false
-            lockProvider.lock(getLockConfiguration()).ifPresent {
-                lock = it
-                it.use { doStart(jobContext) }
-                lock = null
-                wasExecuted = true
+        return TraceUtils.newSpan(registry, getJobName(), init = true) {
+            logger.info("Start to execute async job[${getJobName()}]")
+            val wasExecuted = if (isExclusive) {
+                var wasExecuted = false
+                lockProvider.lock(getLockConfiguration()).ifPresent {
+                    lock = it
+                    it.use { doStart(createJobContext()) }
+                    lock = null
+                    wasExecuted = true
+                }
+                wasExecuted
+            } else {
+                doStart(createJobContext())
+                true
+            }
+            if (!wasExecuted) {
+                logger.info("Job[${getJobName()}] already execution.")
             }
             wasExecuted
-        } else {
-            doStart(jobContext)
-            true
         }
-        if (stop) {
-            logger.info("Job[${getJobName()}] stop execution.Execute result: $jobContext")
-            return true
-        }
-        if (!wasExecuted) {
-            logger.info("Job[${getJobName()}] already execution.")
-        }
-        return wasExecuted
     }
 
     /**
      * 启动任务的具体实现
      * */
-    private fun doStart(jobContext: C) {
+    fun doStart(jobContext: C) {
         try {
+            stop = false
             inProcess = true
             lastBeginTime = LocalDateTime.now()
             if (isFailover()) {
@@ -168,7 +170,7 @@ abstract class BatchJob<C : JobContext>(open val batchJobProperties: BatchJobPro
             )
             SpringContextUtils.publishEvent(event)
         } catch (e: Exception) {
-            logger.info("Job[${getJobName()}] execution failed.", e)
+            logger.error("Job[${getJobName()}] execution failed.", e)
         } finally {
             inProcess = false
         }

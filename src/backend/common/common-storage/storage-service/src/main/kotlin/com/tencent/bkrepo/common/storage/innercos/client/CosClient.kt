@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
@@ -42,9 +42,11 @@ import com.tencent.bkrepo.common.api.constant.retry
 import com.tencent.bkrepo.common.api.stream.ChunkedFuture
 import com.tencent.bkrepo.common.api.stream.ChunkedFutureInputStream
 import com.tencent.bkrepo.common.api.stream.EnhanceFileChunkedFutureWrapper
+import com.tencent.bkrepo.common.api.util.TraceUtils.trace
 import com.tencent.bkrepo.common.artifact.stream.DelegateInputStream
 import com.tencent.bkrepo.common.storage.credentials.InnerCosCredentials
 import com.tencent.bkrepo.common.storage.innercos.exception.InnerCosException
+import com.tencent.bkrepo.common.storage.innercos.exception.MigrateFailedException
 import com.tencent.bkrepo.common.storage.innercos.http.CosHttpClient
 import com.tencent.bkrepo.common.storage.innercos.http.HttpResponseHandler
 import com.tencent.bkrepo.common.storage.innercos.request.AbortMultipartUploadRequest
@@ -60,6 +62,7 @@ import com.tencent.bkrepo.common.storage.innercos.request.FileCleanupChunkedFutu
 import com.tencent.bkrepo.common.storage.innercos.request.GetObjectRequest
 import com.tencent.bkrepo.common.storage.innercos.request.HeadObjectRequest
 import com.tencent.bkrepo.common.storage.innercos.request.InitiateMultipartUploadRequest
+import com.tencent.bkrepo.common.storage.innercos.request.ListObjectsRequest
 import com.tencent.bkrepo.common.storage.innercos.request.MigrateObjectRequest
 import com.tencent.bkrepo.common.storage.innercos.request.PartETag
 import com.tencent.bkrepo.common.storage.innercos.request.PutObjectRequest
@@ -70,6 +73,7 @@ import com.tencent.bkrepo.common.storage.innercos.request.UploadPartRequest
 import com.tencent.bkrepo.common.storage.innercos.request.UploadPartRequestFactory
 import com.tencent.bkrepo.common.storage.innercos.response.CopyObjectResponse
 import com.tencent.bkrepo.common.storage.innercos.response.CosObject
+import com.tencent.bkrepo.common.storage.innercos.response.ListObjectsResponse
 import com.tencent.bkrepo.common.storage.innercos.response.PutObjectResponse
 import com.tencent.bkrepo.common.storage.innercos.response.handler.CheckArchiveObjectExistResponseHandler
 import com.tencent.bkrepo.common.storage.innercos.response.handler.CheckObjectRestoreResponseHandler
@@ -78,6 +82,8 @@ import com.tencent.bkrepo.common.storage.innercos.response.handler.CopyObjectRes
 import com.tencent.bkrepo.common.storage.innercos.response.handler.GetObjectResponseHandler
 import com.tencent.bkrepo.common.storage.innercos.response.handler.HeadObjectResponseHandler
 import com.tencent.bkrepo.common.storage.innercos.response.handler.InitiateMultipartUploadResponseHandler
+import com.tencent.bkrepo.common.storage.innercos.response.handler.ListObjects0ResponseHandler
+import com.tencent.bkrepo.common.storage.innercos.response.handler.ListObjectsResponseHandler
 import com.tencent.bkrepo.common.storage.innercos.response.handler.PutObjectResponseHandler
 import com.tencent.bkrepo.common.storage.innercos.response.handler.SlowLogHandler
 import com.tencent.bkrepo.common.storage.innercos.response.handler.UploadPartResponseHandler
@@ -94,10 +100,12 @@ import java.nio.file.Paths
 import java.util.concurrent.Callable
 import java.util.concurrent.Executors
 import java.util.concurrent.Future
+import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.PriorityBlockingQueue
 import java.util.concurrent.ThreadPoolExecutor
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.stream.Stream
 import kotlin.math.ceil
 import kotlin.math.max
 
@@ -111,14 +119,19 @@ class CosClient(val credentials: InnerCosCredentials) {
     /**
      * 分片上传使用的执行器
      */
-    private val uploadThreadPool = Executors.newFixedThreadPool(config.uploadWorkers)
-
+    private val uploadThreadPool = ThreadPoolExecutor(
+        config.uploadWorkers,
+        config.uploadWorkers,
+        60, TimeUnit.SECONDS,
+        LinkedBlockingQueue(),
+        ThreadFactoryBuilder().setNameFormat("CosClientUp-${credentials.key}-%d").build(),
+    ).apply { this.allowCoreThreadTimeOut(true) }
 
     /**
      * 分块下载使用的执行器。可以为null,为null则不使用分块下载
      * */
     private val downloadThreadPool: ThreadPoolExecutor? = if (config.downloadWorkers > 0) {
-        val namedThreadFactory = ThreadFactoryBuilder().setNameFormat("CosClient-${credentials.key}-%d").build()
+        val namedThreadFactory = ThreadFactoryBuilder().setNameFormat("CosClientDown-${credentials.key}-%d").build()
         // 因为客户端存储凭证可以动态更新，所以为了避免产生过多线程数，这里设置allowCoreThreadTimeOut为true
         ThreadPoolExecutor(
             config.downloadWorkers,
@@ -146,7 +159,6 @@ class CosClient(val credentials: InnerCosCredentials) {
     private val useChunkedLoad = (watchDog != null) && (downloadThreadPool != null)
 
     private val fastFallbackTimeout = config.timeout shr 1
-
 
     fun headObject(cosRequest: HeadObjectRequest): CosObject {
         val httpRequest = buildHttpRequest(cosRequest)
@@ -176,6 +188,12 @@ class CosClient(val credentials: InnerCosCredentials) {
                 return getObject(cosRequest)
             }
             val len = rangeEnd - rangeStart + 1
+            if (len == 0L) {
+                return CosObject(
+                    eTag = null, inputStream = StringPool.EMPTY.byteInputStream(),
+                    length = 0, crc64ecma = null
+                )
+            }
             if (!shouldUseMultipart(len)) {
                 return getObject(cosRequest)
             }
@@ -285,12 +303,12 @@ class CosClient(val credentials: InnerCosCredentials) {
             val uploadId = initiateMultipartUpload(key, null)
             val cosObject = fromClient.headObject(HeadObjectRequest(key))
             val length = cosObject.length!!
-            val crc64 = cosObject.crc64ecma!!
+            val crc64 = cosObject.crc64ecma
             if (length == 0L) {
                 return putObject(PutObjectRequest(key, StringPool.EMPTY.byteInputStream(), length))
             }
             val partSize = calculateOptimalPartSize(length, true)
-            val factory = DownloadPartRequestFactory(key, partSize, 0, length-1)
+            val factory = DownloadPartRequestFactory(key, partSize, 0, length - 1)
             while (factory.hasMoreRequests()) {
                 val getObjectRequest = factory.nextDownloadPartRequest()
                 val downloadRequest = fromClient.buildHttpRequest(getObjectRequest)
@@ -302,11 +320,13 @@ class CosClient(val credentials: InnerCosCredentials) {
             try {
                 val partETagList = futureList.map { it.get() }
                 val response = completeMultipartUpload(key, uploadId, partETagList)
-                if (response.crc64ecma != crc64) {
-                    throw InnerCosException("$crc64 not match response: ${response.crc64ecma}")
+                val dstObject = headObject(HeadObjectRequest(key))
+                // 部分历史文件没有crc64, 此时只校验文件长度
+                if (crc64 != null && dstObject.crc64ecma != crc64 || dstObject.length != length) {
+                    throw MigrateFailedException(crc64, length, dstObject.crc64ecma, dstObject.length)
                 }
                 return response
-            } catch (exception: InnerCosException) {
+            } catch (exception: MigrateFailedException) {
                 deleteObject(DeleteObjectRequest(key))
                 throw exception
             } catch (exception: IOException) {
@@ -317,28 +337,42 @@ class CosClient(val credentials: InnerCosCredentials) {
         }
     }
 
+    fun listObjects(cosRequest: ListObjectsRequest): Stream<String> {
+        val httpRequest = buildHttpRequest(cosRequest)
+        return CosHttpClient.execute(httpRequest, ListObjectsResponseHandler(this, cosRequest))
+    }
+
+    fun listObjects0(cosRequest: ListObjectsRequest): ListObjectsResponse {
+        val httpRequest = buildHttpRequest(cosRequest)
+        return CosHttpClient.execute(httpRequest, ListObjects0ResponseHandler())
+    }
+
     private fun multipartMigrate(
         key: String,
         uploadId: String,
         partNumber: Int,
-        downloadRequest: Request
+        downloadRequest: Request,
     ): Callable<PartETag> {
         return Callable {
             retry(RETRY_COUNT) {
                 CosHttpClient.request(downloadRequest).use {
+                    if (!it.isSuccessful) {
+                        throw InnerCosException("download object failed, " +
+                                "url:${it.request.url}, code:${it.code}")
+                    }
                     val putObjectRequest = buildHttpRequest(
                         StreamUploadPartRequest(
                             key = key,
                             uploadId = uploadId,
                             partNumber = partNumber,
                             partSize = it.header(HttpHeaders.CONTENT_LENGTH)!!.toLong(),
-                            inputStream = it.body!!.byteStream()
-                        )
+                            inputStream = it.body!!.byteStream(),
+                        ),
                     )
                     PartETag(partNumber, CosHttpClient.execute(putObjectRequest, UploadPartResponseHandler()).eTag)
                 }
             }
-        }
+        }.trace()
     }
 
     private fun multipartUpload(key: String, file: File, storageClass: String?): PutObjectResponse {
@@ -380,7 +414,7 @@ class CosClient(val credentials: InnerCosCredentials) {
                     CosHttpClient.execute(httpRequest, UploadPartResponseHandler().enableSpeedSlowLog())
                 PartETag(cosRequest.partNumber, uploadPartResponse.eTag)
             }
-        }
+        }.trace()
     }
 
     private fun completeMultipartUpload(
@@ -404,7 +438,7 @@ class CosClient(val credentials: InnerCosCredentials) {
         val httpRequest = buildHttpRequest(cosRequest)
         try {
             return CosHttpClient.execute(httpRequest, VoidResponseHandler())
-        } catch (ignored: IOException) {
+        } catch (_: IOException) {
         }
     }
 
@@ -537,7 +571,7 @@ class CosClient(val credentials: InnerCosCredentials) {
         cancelFutureList(futureList)
         try {
             cleanTempPath(activeCount, tempRootPath)
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             logger.error("Failed to delete cos temp chunked download dir[$tempRootPath]")
         }
     }
@@ -555,7 +589,7 @@ class CosClient(val credentials: InnerCosCredentials) {
             return
         }
         logger.info("Path[$path] has downloading count $count.")
-        val cleanTask = Runnable { cleanTempPath(activeCount, path) }
+        val cleanTask = Runnable { cleanTempPath(activeCount, path) }.trace()
         cleanerExecutors.schedule(cleanTask, DOWNLOADING_TEMP_FILE_CLEANUP_DELAY, TimeUnit.MILLISECONDS)
     }
 

@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -35,8 +35,8 @@ import com.tencent.bkrepo.common.query.enums.OperationType
 import com.tencent.bkrepo.common.query.interceptor.QueryContext
 import com.tencent.bkrepo.common.query.interceptor.QueryRuleInterceptor
 import com.tencent.bkrepo.common.query.model.Rule
-import com.tencent.bkrepo.repository.model.TPackage
-import com.tencent.bkrepo.repository.search.common.CommonQueryContext
+import com.tencent.bkrepo.common.metadata.model.TPackage
+import com.tencent.bkrepo.common.metadata.search.common.CommonQueryContext
 import org.springframework.data.mongodb.core.query.Criteria
 import org.springframework.stereotype.Component
 

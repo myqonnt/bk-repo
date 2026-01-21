@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -34,8 +34,8 @@ package com.tencent.bkrepo.repository.api
 import com.tencent.bkrepo.common.api.constant.REPOSITORY_SERVICE_NAME
 import com.tencent.bkrepo.common.api.pojo.Response
 import com.tencent.bkrepo.repository.pojo.metadata.packages.PackageMetadataSaveRequest
-import io.swagger.annotations.Api
-import io.swagger.annotations.ApiOperation
+import io.swagger.v3.oas.annotations.Operation
+import io.swagger.v3.oas.annotations.tags.Tag
 import org.springframework.cloud.openfeign.FeignClient
 import org.springframework.context.annotation.Primary
 import org.springframework.web.bind.annotation.PostMapping
@@ -45,13 +45,14 @@ import org.springframework.web.bind.annotation.RequestMapping
 /**
  * 节点元数据服务接口
  */
-@Api("节点元数据服务接口")
+@Tag(name = "节点元数据服务接口")
 @Primary
 @FeignClient(REPOSITORY_SERVICE_NAME, contextId = "PackageMetadataClient")
 @RequestMapping("/service/metadata/package")
+@Deprecated("replace with PackageMetadataService")
 interface PackageMetadataClient {
 
-    @ApiOperation("创建/更新元数据列表")
+    @Operation(summary = "创建/更新元数据列表")
     @PostMapping("/save")
     fun saveMetadata(@RequestBody request: PackageMetadataSaveRequest): Response<Void>
 

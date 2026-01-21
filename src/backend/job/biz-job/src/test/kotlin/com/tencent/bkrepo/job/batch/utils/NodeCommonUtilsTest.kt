@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2024 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2024 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -27,14 +27,23 @@
 
 package com.tencent.bkrepo.job.batch.utils
 
-import com.tencent.bkrepo.common.mongo.dao.util.sharding.HashShardingUtils
+import com.tencent.bkrepo.archive.api.ArchiveClient
+import com.tencent.bkrepo.auth.api.ServiceBkiamV3ResourceClient
+import com.tencent.bkrepo.auth.api.ServicePermissionClient
+import com.tencent.bkrepo.common.metadata.service.log.OperateLogService
+import com.tencent.bkrepo.common.mongo.api.util.sharding.HashShardingUtils
+import com.tencent.bkrepo.common.stream.event.supplier.MessageSupplier
 import com.tencent.bkrepo.job.SHARDING_COUNT
 import com.tencent.bkrepo.job.UT_PROJECT_ID
 import com.tencent.bkrepo.job.UT_REPO_NAME
 import com.tencent.bkrepo.job.UT_SHA256
+import com.tencent.bkrepo.job.UT_STORAGE_CREDENTIALS_KEY
 import com.tencent.bkrepo.job.batch.JobBaseTest
 import com.tencent.bkrepo.job.migrate.MigrateRepoStorageService
-import org.junit.jupiter.api.BeforeAll
+import com.tencent.bkrepo.job.migrate.utils.MigrateTestUtils.mockRepositoryCommonUtils
+import com.tencent.bkrepo.job.separation.service.SeparationTaskService
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
@@ -43,9 +52,9 @@ import org.mockito.ArgumentMatchers.anyString
 import org.mockito.kotlin.whenever
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.autoconfigure.data.mongo.DataMongoTest
-import org.springframework.boot.test.mock.mockito.MockBean
 import org.springframework.data.mongodb.core.MongoTemplate
 import org.springframework.data.mongodb.core.query.Query
+import org.springframework.test.context.bean.override.mockito.MockitoBean
 import java.time.LocalDateTime
 
 
@@ -55,18 +64,55 @@ import java.time.LocalDateTime
 class NodeCommonUtilsTest @Autowired constructor(
     private val mongoTemplate: MongoTemplate,
 ) : JobBaseTest() {
-    @MockBean
+
+    @MockitoBean
+    lateinit var servicePermissionClient: ServicePermissionClient
+
+    @MockitoBean
+    lateinit var serviceBkiamV3ResourceClient: ServiceBkiamV3ResourceClient
+
+    @MockitoBean
+    lateinit var messageSupplier: MessageSupplier
+
+    @MockitoBean
+    lateinit var archiveClient: ArchiveClient
+
+    @MockitoBean
     lateinit var migrateRepoStorageService: MigrateRepoStorageService
 
-    @BeforeAll
-    fun beforeAll() {
+    @MockitoBean
+    lateinit var separationTaskService: SeparationTaskService
+
+    @MockitoBean
+    lateinit var operateLogService: OperateLogService
+
+    private val nodeCollectionName = "node_${HashShardingUtils.shardingSequenceFor(UT_PROJECT_ID, SHARDING_COUNT)}"
+
+    @BeforeEach
+    fun beforeEach() {
+        mongoTemplate.remove(Query(), nodeCollectionName)
+        whenever(migrateRepoStorageService.migrating(anyString(), anyString())).thenReturn(true)
         NodeCommonUtils.mongoTemplate = mongoTemplate
         NodeCommonUtils.migrateRepoStorageService = migrateRepoStorageService
+        NodeCommonUtils.separationTaskService = separationTaskService
+        mockRepositoryCommonUtils()
     }
 
     @Test
     fun `throw IllegalStateException when repo was migrating`() {
-        whenever(migrateRepoStorageService.migrating(anyString(), anyString())).thenReturn(true)
+        whenever(separationTaskService.findDistinctSeparationDate()).thenReturn(emptySet())
+        mockNode()
+        assertThrows<IllegalStateException> { NodeCommonUtils.nodeExist(Query(), null) }
+    }
+
+    @Test
+    fun `findNodes should check migrating status when checkMigrating is true`() {
+        mockNode()
+        assertEquals(1, NodeCommonUtils.findNodes(Query(), UT_STORAGE_CREDENTIALS_KEY, false).size)
+        assertEquals(0, NodeCommonUtils.findNodes(Query(), UT_STORAGE_CREDENTIALS_KEY, true).size)
+    }
+
+    private fun mockNode() {
         val node = NodeCommonUtils.Node(
             "",
             UT_PROJECT_ID,
@@ -77,8 +123,6 @@ class NodeCommonUtilsTest @Autowired constructor(
             LocalDateTime.now(),
             null
         )
-        val collectionName = "node_${HashShardingUtils.shardingSequenceFor(UT_PROJECT_ID, SHARDING_COUNT)}"
-        mongoTemplate.insert(node, collectionName)
-        assertThrows<IllegalStateException> { NodeCommonUtils.exist(Query(), null) }
+        mongoTemplate.insert(node, nodeCollectionName)
     }
 }

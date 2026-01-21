@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2024 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2024 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -27,11 +27,21 @@
 
 package com.tencent.bkrepo.common.artifact.metrics
 
+import com.tencent.bkrepo.common.api.constant.CLOSED_SOURCE_PREFIX
+import com.tencent.bkrepo.common.api.constant.CODE_PROJECT_PREFIX
 import com.tencent.bkrepo.common.artifact.repository.context.ArtifactContextHolder
 import com.tencent.bkrepo.common.artifact.resolve.response.ArtifactResource
 import com.tencent.bkrepo.common.artifact.stream.ArtifactInputStream.Companion.METADATA_KEY_CACHE_ENABLED
 import com.tencent.bkrepo.common.artifact.stream.FileArtifactInputStream
-import com.tencent.bkrepo.common.storage.core.StorageProperties
+import com.tencent.bkrepo.common.metrics.constant.CACHE_ACCESS_FILE_SIZE
+import com.tencent.bkrepo.common.metrics.constant.CACHE_ACCESS_INTERVAL
+import com.tencent.bkrepo.common.metrics.constant.CACHE_COUNT_HIT
+import com.tencent.bkrepo.common.metrics.constant.CACHE_COUNT_LARGE_MISS
+import com.tencent.bkrepo.common.metrics.constant.CACHE_COUNT_MISS
+import com.tencent.bkrepo.common.metrics.constant.CACHE_PRELOAD_COUNT
+import com.tencent.bkrepo.common.metrics.constant.CACHE_PRELOAD_SIZE
+import com.tencent.bkrepo.common.metrics.constant.CACHE_SIZE_LARGE_MISS
+import com.tencent.bkrepo.common.storage.config.StorageProperties
 import com.tencent.bkrepo.common.storage.credentials.StorageCredentials
 import com.tencent.bkrepo.repository.pojo.repo.RepositoryDetail
 import io.micrometer.core.instrument.Counter
@@ -42,6 +52,7 @@ import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
 import java.nio.file.Files
 import java.nio.file.LinkOption
+import java.nio.file.NoSuchFileException
 import java.nio.file.Path
 import java.nio.file.attribute.BasicFileAttributes
 import java.time.Duration
@@ -76,10 +87,34 @@ class ArtifactCacheMetrics(
         }
     }
 
+    fun recordPreload(storageKey: String, projectId: String, size: Long, success: Boolean = true) {
+        if (success) {
+            Counter.builder(CACHE_PRELOAD_SIZE)
+                .baseUnit(BaseUnits.BYTES)
+                .tag(TAG_STORAGE_KEY, storageKey)
+                .tag(TAG_PROJECT_ID, projectId)
+                .description("storage preload size")
+                .register(registry)
+                .increment(size.toDouble())
+        }
+
+        Counter.builder(CACHE_PRELOAD_COUNT)
+            .tag(TAG_STORAGE_KEY, storageKey)
+            .tag(TAG_PROJECT_ID, projectId)
+            .tag("success", success.toString())
+            .description("storage preload count")
+            .register(registry)
+            .increment()
+    }
+
     private fun addMetrics(resource: ArtifactResource) {
         val repositoryDetail = ArtifactContextHolder.getRepoDetailOrNull()
         val projectId = repositoryDetail?.projectId
-        if (projectId == null || projectId.startsWith("CODE_") || projectId.startsWith("CLOSED_SOURCE_")) {
+        val repoName = repositoryDetail?.name
+        val fullPath = resource.node?.fullPath
+        if (projectId == null || projectId.startsWith(CODE_PROJECT_PREFIX)
+            || projectId.startsWith(CLOSED_SOURCE_PREFIX)
+        ) {
             return
         }
         val credentials = repositoryDetail.storageCredentials()
@@ -96,18 +131,32 @@ class ArtifactCacheMetrics(
                 // 统计缓存访问时间分布
                 recordAccessInterval(inputStream.file.toPath(), credentials.cache.expireDuration)
             } else {
-                if (inputStream.range.total!! > LOG_CACHE_MISS_FILE_SIZE) {
-                    val fullPath = resource.node?.fullPath
-                    logger.info(
-                        "large file cache miss, " +
-                            "project[$projectId], repoName[${repositoryDetail.name}], fullPath[$fullPath]"
-                    )
+                val size = inputStream.range.total!!
+                if (size > artifactMetricsProperties.largeFileThreshold.toBytes()) {
+                    logger.info("large file cache miss, project[$projectId], repoName[$repoName], fullPath[$fullPath]")
+                    recordLargeFileCacheMiss(credentials.key(), projectId, size)
                 }
                 incMissCount(credentials.key(), projectId)
             }
             // 统计访问的缓存文件大小分布
             recordAccessCacheFileSize(inputStream.range.total!!)
         }
+    }
+
+    private fun recordLargeFileCacheMiss(storageKey: String, projectId: String, size: Long) {
+        Counter.builder(CACHE_COUNT_LARGE_MISS)
+            .tag("storageKey", storageKey)
+            .tag("projectId", projectId)
+            .description("large file storage cache miss count")
+            .register(registry)
+            .increment()
+
+        Counter.builder(CACHE_SIZE_LARGE_MISS)
+            .tag("storageKey", storageKey)
+            .tag("projectId", projectId)
+            .description("large file storage cache miss size")
+            .register(registry)
+            .increment(size.toDouble())
     }
 
     /**
@@ -136,11 +185,18 @@ class ArtifactCacheMetrics(
      * 统计访问的缓存文件大小分布
      */
     private fun recordAccessCacheFileSize(size: Long) {
+        val fileSizeThreshold = storageProperties.receive.fileSizeThreshold.toBytes()
+        val minExpectedVal = if (fileSizeThreshold <= 0) {
+            // minimumExpectedValue must be greater than 0.
+            1.0
+        } else {
+            fileSizeThreshold.toDouble()
+        }
         DistributionSummary.builder(CACHE_ACCESS_FILE_SIZE)
             .description("storage cache file size")
             .baseUnit(BaseUnits.BYTES)
             .publishPercentileHistogram()
-            .minimumExpectedValue(storageProperties.receive.fileSizeThreshold.toBytes().toDouble())
+            .minimumExpectedValue(minExpectedVal)
             .maximumExpectedValue(MAX_CACHE_FILE_SIZE)
             .register(registry)
             .record(size.toDouble())
@@ -171,12 +227,9 @@ class ArtifactCacheMetrics(
 
     companion object {
         private val logger = LoggerFactory.getLogger(ArtifactCacheMetrics::class.java)
-        private const val LOG_CACHE_MISS_FILE_SIZE = 1L * 1024 * 1024 * 1024
         private const val MAX_CACHE_FILE_SIZE = 100.0 * 1024 * 1024 * 1024
         private const val MIN_CACHE_ACCESS_INTERVAL = 1000.0
-        private const val CACHE_COUNT_HIT = "storage.cache.count.hit"
-        private const val CACHE_COUNT_MISS = "storage.cache.count.miss"
-        private const val CACHE_ACCESS_INTERVAL = "storage.cache.access.interval"
-        private const val CACHE_ACCESS_FILE_SIZE = "storage.cache.access.file.size"
+        private const val TAG_STORAGE_KEY = "storageKey"
+        private const val TAG_PROJECT_ID = "projectId"
     }
 }

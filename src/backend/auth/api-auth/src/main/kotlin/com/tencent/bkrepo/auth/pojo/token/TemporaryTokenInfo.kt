@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2021 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2021 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -31,29 +31,29 @@
 
 package com.tencent.bkrepo.auth.pojo.token
 
-import io.swagger.annotations.ApiModel
-import io.swagger.annotations.ApiModelProperty
+import io.swagger.v3.oas.annotations.media.Schema
 
-@ApiModel("临时token信息")
+
+@Schema(title = "临时token信息")
 data class TemporaryTokenInfo(
-    @ApiModelProperty("项目")
+    @get:Schema(title = "项目")
     val projectId: String,
-    @ApiModelProperty("仓库")
+    @get:Schema(title = "仓库")
     val repoName: String,
-    @ApiModelProperty("授权路径")
+    @get:Schema(title = "授权路径")
     val fullPath: String,
-    @ApiModelProperty("token")
+    @get:Schema(title = "token")
     val token: String,
-    @ApiModelProperty("授权用户")
+    @get:Schema(title = "授权用户")
     val authorizedUserList: Set<String>,
-    @ApiModelProperty("授权IP")
+    @get:Schema(title = "授权IP")
     val authorizedIpList: Set<String>,
-    @ApiModelProperty("过期时间")
+    @get:Schema(title = "过期时间")
     val expireDate: String?,
-    @ApiModelProperty("允许下载次数")
+    @get:Schema(title = "允许下载次数")
     val permits: Int?,
-    @ApiModelProperty("token类型")
+    @get:Schema(title = "token类型")
     val type: TokenType,
-    @ApiModelProperty("创建者")
+    @get:Schema(title = "创建者")
     val createdBy: String
 )

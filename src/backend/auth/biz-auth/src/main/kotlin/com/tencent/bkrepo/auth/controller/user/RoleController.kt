@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -33,6 +33,8 @@ package com.tencent.bkrepo.auth.controller.user
 
 import com.tencent.bkrepo.auth.constant.AUTH_API_ROLE_PREFIX
 import com.tencent.bkrepo.auth.controller.OpenResource
+import com.tencent.bkrepo.auth.message.AuthMessageCode
+import com.tencent.bkrepo.auth.pojo.enums.RoleType
 import com.tencent.bkrepo.auth.pojo.role.CreateRoleRequest
 import com.tencent.bkrepo.auth.pojo.role.Role
 import com.tencent.bkrepo.auth.pojo.role.UpdateRoleRequest
@@ -41,9 +43,10 @@ import com.tencent.bkrepo.auth.service.PermissionService
 import com.tencent.bkrepo.auth.service.RoleService
 import com.tencent.bkrepo.auth.util.RequestUtil.buildProjectAdminRequest
 import com.tencent.bkrepo.auth.util.RequestUtil.buildRepoAdminRequest
+import com.tencent.bkrepo.common.api.exception.ErrorCodeException
 import com.tencent.bkrepo.common.api.pojo.Response
 import com.tencent.bkrepo.common.service.util.ResponseBuilder
-import io.swagger.annotations.ApiOperation
+import io.swagger.v3.oas.annotations.Operation
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.bind.annotation.DeleteMapping
@@ -62,70 +65,79 @@ class RoleController @Autowired constructor(
     permissionService: PermissionService
 ) : OpenResource(permissionService) {
 
-    @ApiOperation("创建角色")
+    @Operation(summary = "创建角色")
     @PostMapping("/create")
     fun createRole(@RequestBody request: CreateRoleRequest): Response<String?> {
-        preCheckProjectAdmin(request.projectId)
+        validateParams(request)
+        checkRolePermission(request.projectId)
         val id = roleService.createRole(request)
         return ResponseBuilder.success(id)
     }
 
-    @ApiOperation("创建项目管理员")
+    @Operation(summary = "创建项目管理员")
     @PostMapping("/create/project/manage/{projectId}")
     fun createProjectManage(@PathVariable projectId: String): Response<String?> {
+        preCheckProjectAdmin(projectId)
         val request = buildProjectAdminRequest(projectId)
         val id = roleService.createRole(request)
         return ResponseBuilder.success(id)
     }
 
-    @ApiOperation("创建仓库管理员")
+    @Operation(summary = "创建仓库管理员")
     @PostMapping("/create/repo/manage/{projectId}/{repoName}")
     fun createRepoManage(@PathVariable projectId: String, @PathVariable repoName: String): Response<String?> {
+        preCheckProjectAdmin(projectId)
         val request = buildRepoAdminRequest(projectId, repoName)
         val id = roleService.createRole(request)
         return ResponseBuilder.success(id)
     }
 
-    @ApiOperation("删除角色")
+    @Operation(summary = "删除角色")
     @DeleteMapping("/delete/{id}")
     fun deleteRole(@PathVariable id: String): Response<Boolean> {
         val role = roleService.detail(id) ?: return ResponseBuilder.success(false)
-        preCheckProjectAdmin(role.projectId)
+        checkRolePermission(role.projectId)
         roleService.deleteRoleById(id)
         return ResponseBuilder.success(true)
     }
 
-    @ApiOperation("根据主键id查询角色详情")
+    @Operation(summary = "根据主键id查询角色详情")
     @GetMapping("/detail/{id}")
     fun detail(@PathVariable id: String): Response<Role?> {
-        return ResponseBuilder.success(roleService.detail(id))
+        val role = roleService.detail(id) ?: return ResponseBuilder.success(null)
+        checkRolePermission(role.projectId)
+        return ResponseBuilder.success(role)
     }
 
-    @ApiOperation("根据角色ID与项目Id查询角色")
+    @Operation(summary = "根据角色ID与项目Id查询角色")
     @GetMapping("/detail/{rid}/{projectId}")
     fun detailByProject(@PathVariable rid: String, @PathVariable projectId: String): Response<Role?> {
+        preCheckProjectAdmin(projectId)
         val result = roleService.detail(rid, projectId)
         return ResponseBuilder.success(result)
     }
 
-    @ApiOperation("根据角色ID与项目Id,仓库名查询角色")
+    @Operation(summary = "根据角色ID与项目Id,仓库名查询角色")
     @GetMapping("/detail/{rid}/{projectId}/{repoName}")
     fun detailByProjectAndRepo(
         @PathVariable rid: String,
         @PathVariable projectId: String,
         @PathVariable repoName: String
     ): Response<Role?> {
+        preCheckProjectAdmin(projectId)
         val result = roleService.detail(rid, projectId, repoName)
         return ResponseBuilder.success(result)
     }
 
-    @ApiOperation("查询用户组下用户列表")
+    @Operation(summary = "查询用户组下用户列表")
     @GetMapping("/users/{id}")
     fun listUserByRole(@PathVariable id: String): Response<Set<UserResult>> {
+        val role = roleService.detail(id) ?: return ResponseBuilder.success(emptySet())
+        checkRolePermission(role.projectId)
         return ResponseBuilder.success(roleService.listUserByRoleId(id))
     }
 
-    @ApiOperation("编辑用户组信息")
+    @Operation(summary = "编辑用户组信息")
     @PutMapping("/update/info/{id}")
     @Transactional(rollbackFor = [Exception::class])
     fun updateRoleInfo(
@@ -133,7 +145,7 @@ class RoleController @Autowired constructor(
         @RequestBody updateRoleRequest: UpdateRoleRequest
     ): Response<Boolean> {
         val role = roleService.detail(id) ?: return ResponseBuilder.success(false)
-        preCheckProjectAdmin(role.projectId)
+        checkRolePermission(role.projectId)
         return ResponseBuilder.success(roleService.updateRoleInfo(id, updateRoleRequest))
     }
 
@@ -143,5 +155,33 @@ class RoleController @Autowired constructor(
     ): Response<List<Role>> {
         preCheckProjectAdmin(projectId)
         return ResponseBuilder.success(roleService.listRoleByProject(projectId))
+    }
+
+    private fun validateParams(request: CreateRoleRequest) {
+        // 验证projectId与角色类型的关系
+        if (request.projectId == null) {
+            // projectId为null时，只能创建非项目管理员的SERVICE角色
+            if (request.type != RoleType.SERVICE || request.admin) {
+                throw ErrorCodeException(AuthMessageCode.AUTH_CREATE_ROLE_INVALID_WITHOUT_PROJECT)
+            }
+        } else {
+            // projectId不为null时，不能创建SERVICE角色
+            if (request.type == RoleType.SERVICE) {
+                throw ErrorCodeException(AuthMessageCode.AUTH_CREATE_SERVICE_ROLE_WITH_PROJECT)
+            }
+        }
+    }
+
+    /**
+     * 根据projectId检查权限
+     * - projectId为null时，检查是否为系统管理员
+     * - projectId不为null时，检查是否为项目管理员
+     */
+    private fun checkRolePermission(projectId: String?) {
+        if (projectId == null) {
+            preCheckUserAdmin()
+        } else {
+            preCheckProjectAdmin(projectId)
+        }
     }
 }

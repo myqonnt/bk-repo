@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -27,6 +27,7 @@
 
 package com.tencent.bkrepo.job.batch.task.stat
 
+import com.tencent.bkrepo.common.api.constant.StringPool
 import com.tencent.bkrepo.job.DELETED_DATE
 import com.tencent.bkrepo.job.FOLDER
 import com.tencent.bkrepo.job.IGNORE_PROJECT_PREFIX_LIST
@@ -36,10 +37,11 @@ import com.tencent.bkrepo.job.batch.base.ActiveProjectService
 import com.tencent.bkrepo.job.batch.base.DefaultContextMongoDbJob
 import com.tencent.bkrepo.job.batch.base.JobContext
 import com.tencent.bkrepo.job.batch.context.NodeFolderJobContext
+import com.tencent.bkrepo.job.batch.utils.FolderUtils
 import com.tencent.bkrepo.job.batch.utils.StatUtils.specialRepoRunCheck
 import com.tencent.bkrepo.job.config.properties.InactiveProjectNodeFolderStatJobProperties
+import com.tencent.bkrepo.job.pojo.stat.StatNode
 import org.slf4j.LoggerFactory
-import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.data.mongodb.core.query.Criteria
 import org.springframework.data.mongodb.core.query.Query
 import org.springframework.stereotype.Component
@@ -51,18 +53,21 @@ import kotlin.reflect.KClass
  * 非活跃项目下目录大小以及文件个数统计
  */
 @Component
-@EnableConfigurationProperties(InactiveProjectNodeFolderStatJobProperties::class)
 class InactiveProjectNodeFolderStatJob(
     private val properties: InactiveProjectNodeFolderStatJobProperties,
     private val activeProjectService: ActiveProjectService,
     private val nodeFolderStat: NodeFolderStat,
-) : DefaultContextMongoDbJob<InactiveProjectNodeFolderStatJob.Node>(properties) {
+) : DefaultContextMongoDbJob<StatNode>(properties) {
 
     override fun collectionNames(): List<String> {
         return (0 until SHARDING_COUNT).map { "$COLLECTION_NAME_PREFIX$it" }.toList()
     }
 
     override fun buildQuery(): Query {
+        return Query(buildCriteria())
+    }
+
+    private fun buildCriteria(): Criteria {
         var criteria = Criteria.where(DELETED_DATE).`is`(null)
             .and(FOLDER).`is`(false)
         if (
@@ -71,26 +76,26 @@ class InactiveProjectNodeFolderStatJob(
         ) {
             criteria = criteria.and(REPO).nin(properties.specialRepos)
         }
-        return Query(criteria)
+        return criteria
     }
 
-    override fun mapToEntity(row: Map<String, Any?>): Node = Node(row)
+    override fun mapToEntity(row: Map<String, Any?>): StatNode = StatNode(row)
 
-    override fun entityClass(): KClass<Node> = Node::class
+    override fun entityClass(): KClass<StatNode> = StatNode::class
 
     /**
      * 最长加锁时间
      */
-    override fun getLockAtMostFor(): Duration = Duration.ofDays(1)
+    override fun getLockAtMostFor(): Duration = Duration.ofDays(14)
 
     fun statProjectCheck(
         projectId: String,
-        context: NodeFolderJobContext
+        context: NodeFolderJobContext,
     ): Boolean {
         return context.activeProjects[projectId] != null
     }
 
-    override fun run(row: Node, collectionName: String, context: JobContext) {
+    override fun run(row: StatNode, collectionName: String, context: JobContext) {
         require(context is NodeFolderJobContext)
         if (statProjectCheck(row.projectId, context)) return
         // 判断是否在不统计项目或者仓库列表中
@@ -104,17 +109,53 @@ class InactiveProjectNodeFolderStatJob(
             folder = row.folder,
             size = row.size
         )
-        nodeFolderStat.collectNode(node, context, collectionName)
+        nodeFolderStat.collectNode(
+            node = node,
+            context = context,
+            useMemory = properties.userMemory,
+            keyPrefix = KEY_PREFIX,
+            collectionName = collectionName,
+            cacheNumLimit = properties.cacheNumLimit
+        )
     }
 
     override fun createJobContext(): NodeFolderJobContext {
+        beforeRunCollection()
         val temp = mutableMapOf<String, Boolean>()
         activeProjectService.getActiveProjects().forEach {
             temp[it] = true
         }
         return NodeFolderJobContext(
-            activeProjects = temp
+            activeProjects = temp,
+            separationProjects = nodeFolderStat.buildSeparationProjectList()
         )
+    }
+
+    private fun beforeRunCollection() {
+        if (properties.userMemory) return
+        // 每次任务启动前要将redis上对应的key清理， 避免干扰
+        collectionNames().forEach {
+            val key = KEY_PREFIX + StringPool.COLON + FolderUtils.buildCacheKey(
+                collectionName = it, projectId = StringPool.EMPTY
+            )
+            nodeFolderStat.removeRedisKey(key)
+        }
+    }
+
+    override fun onRunCollectionStart(collectionName: String, context: JobContext) {
+        require(context is NodeFolderJobContext)
+        context.separationProjects[collectionName]?.let { projectSet ->
+            projectSet.filter { context.activeProjects[it] == null }.forEach { projectId ->
+                logger.info("Processing inactive projectId: $projectId in collection: $collectionName")
+                nodeFolderStat.processSeparationQuery(
+                    projectId = projectId,
+                    criteria = buildCriteria(),
+                    batchSize = properties.batchSize,
+                    shouldRun = shouldRun(),
+                    processor = { node -> run(node, collectionName, context) }
+                )
+            }
+        }
     }
 
     override fun onRunCollectionFinished(collectionName: String, context: JobContext) {
@@ -122,7 +163,23 @@ class InactiveProjectNodeFolderStatJob(
         require(context is NodeFolderJobContext)
         // 当表执行完成后，将属于该表的所有记录写入数据库
         logger.info("store memory cache to db withe table $collectionName")
-        nodeFolderStat.storeMemoryCacheToDB(context, collectionName, runCollection = true)
+        if (!properties.userMemory) {
+            nodeFolderStat.updateRedisCache(
+                context = context,
+                force = true,
+                keyPrefix = KEY_PREFIX,
+                collectionName = collectionName,
+                cacheNumLimit = properties.cacheNumLimit
+            )
+        }
+
+        if (properties.userMemory) {
+            logger.info("store memory cache to db withe table $collectionName")
+            nodeFolderStat.storeMemoryCacheToDB(context, collectionName, runCollection = true)
+        } else {
+            logger.info("store redis cache to db withe table $collectionName")
+            nodeFolderStat.storeRedisCacheToDB(context, KEY_PREFIX, collectionName, runCollection = true)
+        }
     }
 
     /**
@@ -132,42 +189,11 @@ class InactiveProjectNodeFolderStatJob(
         return IGNORE_PROJECT_PREFIX_LIST.firstOrNull { projectId.startsWith(it) } != null
     }
 
-    data class Node(private val map: Map<String, Any?>) {
-        // 需要通过@JvmField注解将Kotlin backing-field直接作为Java field使用，MongoDbBatchJob中才能解析出需要查询的字段
-        @JvmField
-        val id: String
-
-        @JvmField
-        val path: String
-
-        @JvmField
-        val fullPath: String
-
-        @JvmField
-        val size: Long
-
-        @JvmField
-        val projectId: String
-
-        @JvmField
-        val repoName: String
-
-        @JvmField
-        val folder: Boolean
-
-        init {
-            id = map[Node::id.name] as String
-            path = map[Node::path.name] as String
-            fullPath = map[Node::fullPath.name] as String
-            size = map[Node::size.name].toString().toLong()
-            projectId = map[Node::projectId.name] as String
-            repoName = map[Node::repoName.name] as String
-            folder = map[Node::folder.name] as Boolean
-        }
-    }
 
     companion object {
         private val logger = LoggerFactory.getLogger(InactiveProjectNodeFolderStatJob::class.java)
         private const val COLLECTION_NAME_PREFIX = "node_"
+        private const val KEY_PREFIX = "inactiveProjectNode"
+
     }
 }

@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -50,15 +50,16 @@ import com.tencent.bkrepo.common.api.exception.SystemErrorException
 import com.tencent.bkrepo.common.api.message.CommonMessageCode.RESOURCE_NOT_FOUND
 import com.tencent.bkrepo.common.api.message.CommonMessageCode.SYSTEM_ERROR
 import com.tencent.bkrepo.common.api.util.StreamUtils.readText
+import com.tencent.bkrepo.common.artifact.api.ArtifactInfo
+import com.tencent.bkrepo.common.artifact.manager.StorageManager
 import com.tencent.bkrepo.common.artifact.pojo.RepositoryType
-import com.tencent.bkrepo.common.artifact.stream.Range
+import com.tencent.bkrepo.common.metadata.service.node.NodeSearchService
+import com.tencent.bkrepo.common.metadata.service.node.NodeService
+import com.tencent.bkrepo.common.metadata.service.repo.StorageCredentialService
 import com.tencent.bkrepo.common.query.enums.OperationType
 import com.tencent.bkrepo.common.security.exception.AuthenticationException
 import com.tencent.bkrepo.common.service.util.HttpContextHolder
-import com.tencent.bkrepo.common.storage.core.StorageService
 import com.tencent.bkrepo.oci.util.OciUtils
-import com.tencent.bkrepo.repository.api.NodeClient
-import com.tencent.bkrepo.repository.api.StorageCredentialsClient
 import com.tencent.bkrepo.repository.pojo.node.NodeDetail
 import com.tencent.bkrepo.repository.pojo.search.NodeQueryBuilder
 import org.slf4j.LoggerFactory
@@ -75,9 +76,10 @@ class TemporaryScanTokenServiceImpl(
     private val temporaryTokenClient: ServiceTemporaryTokenClient,
     private val redisTemplate: RedisTemplate<String, String>,
     private val scannerProperties: ScannerProperties,
-    private val storageService: StorageService,
-    private val storageCredentialsClient: StorageCredentialsClient,
-    private val nodeClient: NodeClient
+    private val storageManager: StorageManager,
+    private val storageCredentialService: StorageCredentialService,
+    private val nodeService: NodeService,
+    private val nodeSearchService: NodeSearchService
 ) : TemporaryScanTokenService {
     private val baseUrl
         get() = scannerProperties.baseUrl.removeSuffix(SLASH)
@@ -166,7 +168,8 @@ class TemporaryScanTokenServiceImpl(
                 fullPathSet = fullPaths.keys,
                 expireSeconds = scannerProperties.tempDownloadUrlExpireDuration.seconds,
                 permits = scannerProperties.tempDownloadUrlPermits,
-                type = TokenType.DOWNLOAD
+                type = TokenType.DOWNLOAD,
+                bypassProjectDisable = true
             )
             val tokens = temporaryTokenClient.createToken(req)
             if (tokens.isNotOk()) {
@@ -189,9 +192,7 @@ class TemporaryScanTokenServiceImpl(
 
     private fun getFullPaths(subtask: SubScanTask): Map<String, FileUrl> = with(subtask) {
         return if (repoType == RepositoryType.DOCKER.name) {
-            val storageCredentials = credentialsKey?.let { storageCredentialsClient.findByKey(it).data!! }
-            val manifestContent = storageService.load(sha256, Range.full(size), storageCredentials)?.readText()
-                ?: throw ErrorCodeException(RESOURCE_NOT_FOUND, "file [$projectId:$repoName:$fullPath] not found")
+            val manifestContent = readManifest(projectId, repoName, sha256, credentialsKey)
             val schemeVersion = OciUtils.schemeVersion(manifestContent)
             val fullPaths = LinkedHashMap<String, FileUrl>()
             // 将manifest下载链接加入fullPaths列表，需要保证map第一项是manifest文件
@@ -222,11 +223,31 @@ class TemporaryScanTokenServiceImpl(
         }
     }
 
+    private fun readManifest(projectId: String, repoName: String, sha256: String, credentialsKey: String?): String {
+        val storageCredentials = credentialsKey?.let { storageCredentialService.findByKey(it)!! }
+        val nodes = nodeSearchService.searchWithoutCount(
+            NodeQueryBuilder()
+                .projectId(projectId)
+                .repoName(repoName)
+                .sha256(sha256)
+                .select(NodeDetail::fullPath.name)
+                .page(1, 1)
+                .build()
+        )
+        if (nodes.records.isEmpty()) {
+            throw ErrorCodeException(RESOURCE_NOT_FOUND, "file[$sha256] of [$projectId:$repoName] not found")
+        }
+        val fullPath = nodes.records[0][NodeDetail::fullPath.name].toString()
+        return nodeService.getNodeDetail(ArtifactInfo(projectId, repoName, fullPath))?.let { node ->
+            storageManager.loadFullArtifactInputStream(node, storageCredentials)?.readText()
+        } ?: throw ErrorCodeException(RESOURCE_NOT_FOUND, "file [$projectId:$repoName:$fullPath] not found")
+    }
+
     private fun tokenKey(subtaskId: String) = "scanner:token:$subtaskId"
 
     private fun getNodes(projectId: String, repoName: String, sha256: List<String>): List<Map<String, Any?>> {
         return sha256.toSet().map {
-            val res = nodeClient.queryWithoutCount(
+            val res = nodeSearchService.searchWithoutCount(
                 NodeQueryBuilder()
                     .projectId(projectId)
                     .repoName(repoName)
@@ -236,16 +257,11 @@ class TemporaryScanTokenServiceImpl(
                     .build()
             )
 
-            if (res.isNotOk()) {
-                logger.error("get node of layer[$it] failed, msg[${res.message}]")
-                throw SystemErrorException()
-            }
-
-            if (res.data!!.records.isEmpty()) {
+            if (res.records.isEmpty()) {
                 throw ArtifactDeletedException(it)
             }
 
-            res.data!!.records.first()
+            res.records.first()
         }
     }
 

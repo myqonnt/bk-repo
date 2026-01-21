@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2021 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2021 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -50,6 +50,8 @@ enum class EventType(val msgKey: String) {
     NODE_DELETED("artifact.event.node-deleted"),
     NODE_DOWNLOADED("artifact.event.node-downloaded"),
     NODE_CLEAN("artifact.event.node-clean"),
+    NODE_UPDATE_ACCESS_DATE("artifact.event.node-update-access-date"),
+    NODE_SEPARATION_RECOVERY("artifact.event.node-separation-recovery"),
 
     // METADATA
     METADATA_DELETED("artifact.event.metadata-deleted"),
@@ -92,6 +94,9 @@ enum class EventType(val msgKey: String) {
     SERVICE_INSTANCE("artifact.event.service-instance"),
     SERVICE_INSTANCE_LIST("artifact.event.service-instance-list"),
     SERVICE_LIST("artifact.event.service-list"),
+    SERVICE_INSTANCE_BANDWIDTH_LIST("artifact.event.service-bandwidth-instance-list"),
+    SERVICE_INSTANCE_BANDWIDTH_DELETE("artifact.event.service-bandwidth-instance-delete"),
+    SERVICE_INSTANCE_BANDWIDTH_IP_LIST("artifact.event.service-bandwidth-ip-list"),
 
     // EXT-PERMISSION
     EXT_PERMISSION_LIST("artifact.event.ext-permission-list"),

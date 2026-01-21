@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -36,6 +36,7 @@ import java.io.File
 import java.io.FileNotFoundException
 import java.io.OutputStream
 import java.nio.file.DirectoryIteratorException
+import java.nio.file.DirectoryNotEmptyException
 import java.nio.file.FileSystemException
 import java.nio.file.Files
 import java.nio.file.Path
@@ -47,7 +48,11 @@ fun String.toPath(): Path = Paths.get(this)
 fun Path.createFile(): File {
     if (!Files.isRegularFile(this)) {
         if (this.parent != null) {
-            Files.createDirectories(this.parent)
+            try {
+                Files.createDirectories(this.parent)
+            } catch (ignored: java.nio.file.FileAlreadyExistsException) {
+                // ignore
+            }
         }
         try {
             Files.createFile(this)
@@ -89,11 +94,16 @@ fun Path.delete(): Boolean {
     } catch (e: DirectoryIteratorException) {
         // 子目录已经被其他进程删除时会报该错误
         val cause = e.cause
-        if (cause is FileSystemException && cause.message?.contains("Stale file handle") == true) {
+        if (cause is FileSystemException &&
+            (cause.message?.contains("Stale file handle") == true ||
+                cause.message?.contains("Input/output error") == true)) {
             logger.warn("delete dir[$this] failed", e)
         } else {
             throw e
         }
+    } catch (e: DirectoryNotEmptyException) {
+        logger.info("delete dir[$this] failed: ${e.message}")
+        return false
     }
     // 目录还存在内容
     return false

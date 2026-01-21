@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -36,9 +36,10 @@ import com.tencent.bkrepo.common.artifact.api.ArtifactFile
 import com.tencent.bkrepo.common.artifact.api.FileSystemArtifactFile
 import com.tencent.bkrepo.common.artifact.hash.sha256
 import com.tencent.bkrepo.common.artifact.stream.Range
+import com.tencent.bkrepo.common.storage.NoopObservationRegistry
 import com.tencent.bkrepo.common.storage.StorageAutoConfiguration
 import com.tencent.bkrepo.common.storage.core.FileStorage
-import com.tencent.bkrepo.common.storage.core.StorageProperties
+import com.tencent.bkrepo.common.storage.config.StorageProperties
 import com.tencent.bkrepo.common.storage.core.StorageService
 import com.tencent.bkrepo.common.storage.core.locator.FileLocator
 import com.tencent.bkrepo.common.storage.filesystem.FileSystemClient
@@ -48,24 +49,24 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import org.junit.jupiter.api.assertDoesNotThrow
 import org.junit.jupiter.api.extension.ExtendWith
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.autoconfigure.ImportAutoConfiguration
 import org.springframework.boot.autoconfigure.task.TaskExecutionAutoConfiguration
+import org.springframework.context.annotation.Import
 import org.springframework.test.context.TestPropertySource
 import org.springframework.test.context.junit.jupiter.SpringExtension
+import org.springframework.util.StreamUtils
 import java.io.File
 import java.nio.charset.Charset
 import java.util.concurrent.CyclicBarrier
-import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.concurrent.thread
 import kotlin.random.Random
-import org.springframework.util.StreamUtils
 
 @ExtendWith(SpringExtension::class)
 @ImportAutoConfiguration(StorageAutoConfiguration::class, TaskExecutionAutoConfiguration::class)
 @TestPropertySource(locations = ["classpath:storage-cache-fs.properties"])
+@Import(NoopObservationRegistry::class)
 internal class CacheStorageServiceTest {
 
     @Autowired
@@ -224,16 +225,6 @@ internal class CacheStorageServiceTest {
 
         // check cache
         Assertions.assertFalse(cacheClient.exist(path, sha256))
-    }
-
-    @Test
-    fun cancelStoreTest() {
-        val size = 1024L
-        val artifactFile = createTempArtifactFile(size)
-        val sha256 = artifactFile.getFileSha256()
-        val cancel = AtomicBoolean(false)
-        cancel.set(true)
-        assertDoesNotThrow { storageService.store(sha256, artifactFile, null, cancel) }
     }
 
     @Test

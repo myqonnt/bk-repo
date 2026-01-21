@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2021 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2021 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -27,6 +27,7 @@
 
 package com.tencent.bkrepo.common.artifact.resolve
 
+import com.tencent.bkrepo.common.artifact.properties.EnableMultiTenantProperties
 import com.tencent.bkrepo.common.artifact.resolve.file.ArtifactFileCleanInterceptor
 import com.tencent.bkrepo.common.artifact.resolve.file.ArtifactFileFactory
 import com.tencent.bkrepo.common.artifact.resolve.file.UploadConfigElement
@@ -38,8 +39,10 @@ import com.tencent.bkrepo.common.artifact.resolve.path.DefaultArtifactInfoResolv
 import com.tencent.bkrepo.common.artifact.resolve.path.ResolverMap
 import com.tencent.bkrepo.common.artifact.resolve.response.ArtifactResourceWriter
 import com.tencent.bkrepo.common.artifact.resolve.response.DefaultArtifactResourceWriter
-import com.tencent.bkrepo.common.storage.core.StorageProperties
+import com.tencent.bkrepo.common.storage.config.StorageProperties
+import com.tencent.bkrepo.common.ratelimiter.service.RequestLimitCheckService
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
+import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.context.annotation.Import
@@ -49,6 +52,7 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer
 
 @Configuration
 @Import(ArtifactFileFactory::class)
+@EnableConfigurationProperties(EnableMultiTenantProperties::class)
 class ArtifactResolverConfiguration {
 
     @Bean
@@ -58,7 +62,9 @@ class ArtifactResolverConfiguration {
     fun resolverMap(resolverList: List<ArtifactInfoResolver>) = ResolverMap(resolverList)
 
     @Bean
-    fun artifactInfoMethodArgumentResolver(resolverMap: ResolverMap) = ArtifactInfoMethodArgumentResolver(resolverMap)
+    fun artifactInfoMethodArgumentResolver(
+        resolverMap: ResolverMap
+    ) = ArtifactInfoMethodArgumentResolver(resolverMap)
 
     @Bean
     fun artifactFileMethodArgumentResolver() = ArtifactFileMethodArgumentResolver()
@@ -84,8 +90,14 @@ class ArtifactResolverConfiguration {
 
     @Bean
     @ConditionalOnMissingBean(ArtifactResourceWriter::class)
-    fun artifactResourceWriter(storageProperties: StorageProperties): ArtifactResourceWriter {
-        return DefaultArtifactResourceWriter(storageProperties)
+    fun artifactResourceWriter(
+        storageProperties: StorageProperties,
+        requestLimitCheckService: RequestLimitCheckService
+    ): ArtifactResourceWriter {
+        return DefaultArtifactResourceWriter(
+            storageProperties,
+            requestLimitCheckService
+        )
     }
 
     @Bean

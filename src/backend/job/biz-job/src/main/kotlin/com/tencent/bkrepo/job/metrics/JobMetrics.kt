@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2019 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2019 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -27,16 +27,16 @@
 
 package com.tencent.bkrepo.job.metrics
 
-import com.tencent.bkrepo.job.JOB_ASYNC_TASK_ACTIVE_COUNT
-import com.tencent.bkrepo.job.JOB_ASYNC_TASK_ACTIVE_COUNT_DESC
-import com.tencent.bkrepo.job.JOB_ASYNC_TASK_QUEUE_SIZE
-import com.tencent.bkrepo.job.JOB_ASYNC_TASK_QUEUE_SIZE_DESC
-import com.tencent.bkrepo.job.JOB_BATCH_JOB_ACTIVE_COUNT
-import com.tencent.bkrepo.job.JOB_BATCH_JOB_ACTIVE_DESC
-import com.tencent.bkrepo.job.JOB_TASK_COUNT
-import com.tencent.bkrepo.job.JOB_TASK_COUNT_DESC
-import com.tencent.bkrepo.job.JOB_TIME_CONSUME
-import com.tencent.bkrepo.job.JOB_TIME_CONSUME_DESC
+import com.tencent.bkrepo.common.metrics.constant.JOB_ASYNC_TASK_ACTIVE_COUNT
+import com.tencent.bkrepo.common.metrics.constant.JOB_ASYNC_TASK_ACTIVE_COUNT_DESC
+import com.tencent.bkrepo.common.metrics.constant.JOB_ASYNC_TASK_QUEUE_SIZE
+import com.tencent.bkrepo.common.metrics.constant.JOB_ASYNC_TASK_QUEUE_SIZE_DESC
+import com.tencent.bkrepo.common.metrics.constant.JOB_BATCH_JOB_ACTIVE_COUNT
+import com.tencent.bkrepo.common.metrics.constant.JOB_BATCH_JOB_ACTIVE_DESC
+import com.tencent.bkrepo.common.metrics.constant.JOB_TASK_COUNT
+import com.tencent.bkrepo.common.metrics.constant.JOB_TASK_COUNT_DESC
+import com.tencent.bkrepo.common.metrics.constant.JOB_TIME_CONSUME
+import com.tencent.bkrepo.common.metrics.constant.JOB_TIME_CONSUME_DESC
 import com.tencent.bkrepo.job.TAG_NAME
 import com.tencent.bkrepo.job.TAG_STATUS
 import com.tencent.bkrepo.job.executor.BlockThreadPoolTaskExecutorDecorator
@@ -53,10 +53,11 @@ import org.springframework.stereotype.Component
 @Component
 class JobMetrics(
     val threadPoolTaskExecutor: BlockThreadPoolTaskExecutorDecorator,
-    private val registry: MeterRegistry
 ) : MeterBinder {
+    private lateinit var registry: MeterRegistry
 
     override fun bindTo(registry: MeterRegistry) {
+        this.registry = registry
         Gauge.builder(JOB_ASYNC_TASK_ACTIVE_COUNT, threadPoolTaskExecutor) { it.activeCount().toDouble() }
             .description(JOB_ASYNC_TASK_ACTIVE_COUNT_DESC)
             .register(registry)

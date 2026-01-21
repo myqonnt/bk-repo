@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2021 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2021 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -28,13 +28,13 @@
 package com.tencent.bkrepo.replication.pojo.task
 
 import com.tencent.bkrepo.replication.pojo.task.objects.ReplicaObjectInfo
-import io.swagger.annotations.ApiModel
-import io.swagger.annotations.ApiModelProperty
+import io.swagger.v3.oas.annotations.media.Schema
 
-@ApiModel("同步任务详情")
+
+@Schema(title = "同步任务详情")
 data class ReplicaTaskDetail(
-    @ApiModelProperty("同步任务基础信息")
+    @get:Schema(title = "同步任务基础信息")
     val task: ReplicaTaskInfo,
-    @ApiModelProperty("同步对象列表")
+    @get:Schema(title = "同步对象列表")
     val objects: List<ReplicaObjectInfo>
 )

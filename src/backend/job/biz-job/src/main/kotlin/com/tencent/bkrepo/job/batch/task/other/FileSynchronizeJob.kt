@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2019 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2019 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -28,25 +28,23 @@
 package com.tencent.bkrepo.job.batch.task.other
 
 import com.tencent.bkrepo.common.api.util.executeAndMeasureTime
-import com.tencent.bkrepo.common.service.cluster.ClusterProperties
+import com.tencent.bkrepo.common.metadata.service.repo.StorageCredentialService
+import com.tencent.bkrepo.common.service.cluster.properties.ClusterProperties
 import com.tencent.bkrepo.common.storage.core.StorageService
 import com.tencent.bkrepo.common.storage.credentials.StorageCredentials
 import com.tencent.bkrepo.job.batch.base.DefaultContextJob
 import com.tencent.bkrepo.job.batch.base.JobContext
 import com.tencent.bkrepo.job.config.properties.FileSynchronizeJobProperties
-import com.tencent.bkrepo.repository.api.StorageCredentialsClient
 import org.slf4j.LoggerFactory
-import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.stereotype.Component
 
 /**
  * 当文件上传存储失败时，后台任务进行补偿上传
  * */
 @Component
-@EnableConfigurationProperties(FileSynchronizeJobProperties::class)
 class FileSynchronizeJob(
     private val properties: FileSynchronizeJobProperties,
-    private val storageCredentialsClient: StorageCredentialsClient,
+    private val storageCredentialService: StorageCredentialService,
     private val storageService: StorageService,
     private val clusterProperties: ClusterProperties
 ) : DefaultContextJob(properties) {
@@ -59,8 +57,7 @@ class FileSynchronizeJob(
         // cleanup default storage
         syncStorage()
         // cleanup extended storage
-        storageCredentialsClient.list(clusterProperties.region)
-            .data?.forEach { syncStorage(it) }
+        storageCredentialService.list(clusterProperties.region).forEach { syncStorage(it) }
     }
 
     private fun syncStorage(storage: StorageCredentials? = null) {

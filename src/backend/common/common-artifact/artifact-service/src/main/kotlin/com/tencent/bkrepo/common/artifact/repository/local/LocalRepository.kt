@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -56,11 +56,14 @@ abstract class LocalRepository : AbstractArtifactRepository() {
 
     override fun onDownload(context: ArtifactDownloadContext): ArtifactResource? {
         with(context) {
-            val node = ArtifactContextHolder.getNodeDetail(artifactInfo)
-            node?.let { downloadIntercept(context, it) }
-            val inputStream = storageManager.loadArtifactInputStream(node, storageCredentials) ?: return null
+            val node = ArtifactContextHolder.getNodeDetail(artifactInfo) ?: return null
+            downloadIntercept(context, node)
+
+            val (load, loadStorage) = ArtifactContextHolder.getForwardNodeDetail(node, storageCredentials, userId)
+                ?: Pair(node, storageCredentials)
+            val inputStream = storageManager.loadArtifactInputStream(load, loadStorage) ?: return null
             val responseName = artifactInfo.getResponseName()
-            return ArtifactResource(inputStream, responseName, node, ArtifactChannel.LOCAL, useDisposition)
+            return ArtifactResource(inputStream, responseName, load, ArtifactChannel.LOCAL, useDisposition)
         }
     }
 
@@ -75,7 +78,7 @@ abstract class LocalRepository : AbstractArtifactRepository() {
             val packageKey = nodeDetail.packageName()?.let { PackageKeys.ofName(repo.type, it) }
             val version = nodeDetail.packageVersion()
             if (packageKey != null && version != null) {
-                packageClient.findVersionByName(projectId, repoName, packageKey, version).data?.let { packageVersion ->
+                packageService.findVersionByName(projectId, repoName, packageKey, version)?.let { packageVersion ->
                     downloadIntercept(context, packageVersion)
                 }
             }
@@ -101,6 +104,7 @@ abstract class LocalRepository : AbstractArtifactRepository() {
             fullPath = context.artifactInfo.getArtifactFullPath(),
             size = context.getArtifactFile().getSize(),
             sha256 = context.getArtifactSha256(),
+            crc64ecma = context.getArtifactCrc64ecma(),
             md5 = context.getArtifactMd5(),
             operator = context.userId
         )

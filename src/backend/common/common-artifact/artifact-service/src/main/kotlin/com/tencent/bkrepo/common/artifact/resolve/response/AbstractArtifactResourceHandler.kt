@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -29,24 +29,30 @@ package com.tencent.bkrepo.common.artifact.resolve.response
 
 import com.tencent.bkrepo.common.api.constant.HttpHeaders
 import com.tencent.bkrepo.common.api.constant.HttpStatus
+import com.tencent.bkrepo.common.api.constant.MediaTypes
+import com.tencent.bkrepo.common.api.exception.OverloadException
 import com.tencent.bkrepo.common.api.exception.TooManyRequestsException
 import com.tencent.bkrepo.common.artifact.exception.ArtifactResponseException
 import com.tencent.bkrepo.common.artifact.metrics.RecordAbleInputStream
 import com.tencent.bkrepo.common.artifact.repository.context.ArtifactContextHolder
 import com.tencent.bkrepo.common.artifact.stream.rateLimit
 import com.tencent.bkrepo.common.artifact.util.http.IOExceptionUtils
-import com.tencent.bkrepo.common.storage.core.StorageProperties
+import com.tencent.bkrepo.common.ratelimiter.service.RequestLimitCheckService
+import com.tencent.bkrepo.common.ratelimiter.stream.CommonRateLimitInputStream
+import com.tencent.bkrepo.common.storage.config.StorageProperties
 import com.tencent.bkrepo.common.storage.monitor.Throughput
 import com.tencent.bkrepo.common.storage.monitor.measureThroughput
+import jakarta.servlet.http.HttpServletRequest
+import jakarta.servlet.http.HttpServletResponse
+import org.slf4j.LoggerFactory
 import org.springframework.http.HttpMethod
 import org.springframework.util.unit.DataSize
 import java.io.IOException
-import javax.servlet.http.HttpServletRequest
-import javax.servlet.http.HttpServletResponse
 
 
 abstract class AbstractArtifactResourceHandler(
-    private val storageProperties: StorageProperties
+    private val storageProperties: StorageProperties,
+    private val requestLimitCheckService: RequestLimitCheckService
 ) : ArtifactResourceWriter {
     /**
      * 获取动态buffer size
@@ -80,11 +86,20 @@ abstract class AbstractArtifactResourceHandler(
     protected fun responseRateLimitCheck() {
         val rateLimitOfRepo = ArtifactContextHolder.getRateLimitOfRepo()
         if (rateLimitOfRepo.responseRateLimit != DataSize.ofBytes(-1) &&
-            rateLimitOfRepo.responseRateLimit <= storageProperties.response.circuitBreakerThreshold) {
+            rateLimitOfRepo.responseRateLimit <= storageProperties.response.circuitBreakerThreshold
+        ) {
             throw TooManyRequestsException(
                 "The circuit breaker is activated when too many download requests are made to the service!"
             )
         }
+    }
+
+    /**
+     * 当仓库配置下载限速小于等于最低限速时则直接将请求断开, 避免占用过多连接
+     */
+    protected fun downloadRateLimitCheck(resource: ArtifactResource) {
+        val applyPermits = resource.getTotalSize()
+        requestLimitCheckService.postLimitCheck(applyPermits)
     }
 
     /**
@@ -96,16 +111,26 @@ abstract class AbstractArtifactResourceHandler(
         response: HttpServletResponse
     ): Throughput {
         val inputStream = resource.getSingleStream()
-        if (request.method == HttpMethod.HEAD.name) {
+        if (request.method == HttpMethod.HEAD.name()) {
             return Throughput.EMPTY
         }
+        val length = inputStream.range.length
+        var rateLimitFlag = false
+        var exp: Exception? = null
         val recordAbleInputStream = RecordAbleInputStream(inputStream)
         try {
             return measureThroughput {
-                recordAbleInputStream.rateLimit(responseRateLimitWrapper(storageProperties.response.rateLimit)).use {
+                val stream = requestLimitCheckService.bandwidthCheck(
+                    recordAbleInputStream, storageProperties.response.circuitBreakerThreshold,
+                    length
+                ) ?: recordAbleInputStream.rateLimit(
+                    responseRateLimitWrapper(storageProperties.response.rateLimit)
+                )
+                rateLimitFlag = stream is CommonRateLimitInputStream
+                stream.use {
                     it.copyTo(
                         out = response.outputStream,
-                        bufferSize = getBufferSize(inputStream.range.length)
+                        bufferSize = getBufferSize(length)
                     )
                 }
             }
@@ -115,11 +140,21 @@ abstract class AbstractArtifactResourceHandler(
             // org.springframework.http.converter.HttpMessageNotWritableException异常，会重定向到/error页面
             // 又因为/error页面不存在，最终返回404，所以要对IOException进行包装，在上一层捕捉处理
             val message = exception.message.orEmpty()
-            val status = if (IOExceptionUtils.isClientBroken(exception))
+            val status = if (IOExceptionUtils.isClientBroken(exception)) {
                 HttpStatus.BAD_REQUEST
-            else
+            } else {
+                logger.warn("write range stream failed", exception)
                 HttpStatus.INTERNAL_SERVER_ERROR
+            }
+            exp = exception
             throw ArtifactResponseException(message, status)
+        } catch (overloadEx: OverloadException) {
+            exp = overloadEx
+            throw overloadEx
+        } finally {
+            if (rateLimitFlag) {
+                requestLimitCheckService.bandwidthFinish(exp)
+            }
         }
     }
 
@@ -131,4 +166,18 @@ abstract class AbstractArtifactResourceHandler(
         return if (isRangeRequest) HttpStatus.PARTIAL_CONTENT.value else HttpStatus.OK.value
     }
 
+    /**
+     * 判断charset,一些媒体类型设置了charset会影响其表现，如application/vnd.android.package-archive
+     * */
+    protected fun determineCharset(mediaType: String, defaultCharset: String): String? {
+        return if (binaryMediaTypes.contains(mediaType) ||
+            storageProperties.response.binaryMediaTypes.contains(mediaType)
+        ) null
+        else defaultCharset
+    }
+
+    companion object {
+        private val logger = LoggerFactory.getLogger(AbstractArtifactResourceHandler::class.java)
+        private val binaryMediaTypes = setOf(MediaTypes.APPLICATION_APK, MediaTypes.APPLICATION_WASM)
+    }
 }

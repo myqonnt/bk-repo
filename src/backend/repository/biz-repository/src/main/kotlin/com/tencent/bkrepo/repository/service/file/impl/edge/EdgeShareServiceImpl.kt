@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2019 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2019 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -27,16 +27,19 @@
 
 package com.tencent.bkrepo.repository.service.file.impl.edge
 
+import com.tencent.bkrepo.auth.api.ServiceTemporaryTokenClient
 import com.tencent.bkrepo.common.artifact.api.ArtifactInfo
-import com.tencent.bkrepo.common.service.cluster.ClusterProperties
-import com.tencent.bkrepo.common.service.cluster.CommitEdgeEdgeCondition
+import com.tencent.bkrepo.common.service.cluster.properties.ClusterProperties
+import com.tencent.bkrepo.common.service.cluster.condition.CommitEdgeEdgeCondition
 import com.tencent.bkrepo.common.service.feign.FeignClientFactory
-import com.tencent.bkrepo.repository.api.NodeShareClient
+import com.tencent.bkrepo.repository.api.cluster.ClusterNodeShareClient
+import com.tencent.bkrepo.repository.pojo.share.ClusterShareRecordCreateRequest
+import com.tencent.bkrepo.repository.pojo.share.ClusterShareTokenCheckRequest
 import com.tencent.bkrepo.repository.pojo.share.ShareRecordCreateRequest
 import com.tencent.bkrepo.repository.pojo.share.ShareRecordInfo
 import com.tencent.bkrepo.repository.service.file.impl.ShareServiceImpl
-import com.tencent.bkrepo.repository.service.node.NodeService
-import com.tencent.bkrepo.repository.service.repo.RepositoryService
+import com.tencent.bkrepo.common.metadata.service.node.NodeService
+import com.tencent.bkrepo.common.metadata.service.repo.RepositoryService
 import org.springframework.context.annotation.Conditional
 import org.springframework.data.mongodb.core.MongoTemplate
 import org.springframework.stereotype.Service
@@ -47,14 +50,16 @@ class EdgeShareServiceImpl(
     repositoryService: RepositoryService,
     nodeService: NodeService,
     mongoTemplate: MongoTemplate,
-    clusterProperties: ClusterProperties
+    clusterProperties: ClusterProperties,
+    temporaryTokenClient: ServiceTemporaryTokenClient,
 ) : ShareServiceImpl(
     repositoryService,
     nodeService,
-    mongoTemplate
+    mongoTemplate,
+    temporaryTokenClient
 ) {
 
-    private val centerShareClient: NodeShareClient by lazy {
+    private val centerShareClient: ClusterNodeShareClient by lazy {
         FeignClientFactory.create(clusterProperties.center, "repository", clusterProperties.self.name)
     }
 
@@ -63,10 +68,26 @@ class EdgeShareServiceImpl(
         artifactInfo: ArtifactInfo,
         request: ShareRecordCreateRequest
     ): ShareRecordInfo {
-        return centerShareClient.create(userId, artifactInfo, request).data!!
+        return centerShareClient.create(
+            ClusterShareRecordCreateRequest(
+                userId = userId,
+                projectId = artifactInfo.projectId,
+                repoName = artifactInfo.repoName,
+                fullPath = artifactInfo.getArtifactFullPath(),
+                createRequest = request
+            )
+        ).data!!
     }
 
     override fun checkToken(userId: String, token: String, artifactInfo: ArtifactInfo): ShareRecordInfo {
-        return centerShareClient.checkToken(userId, token, artifactInfo).data!!
+        return centerShareClient.checkToken(
+            ClusterShareTokenCheckRequest(
+                userId = userId,
+                projectId = artifactInfo.projectId,
+                repoName = artifactInfo.repoName,
+                fullPath = artifactInfo.getArtifactFullPath(),
+                token = token
+            )
+        ).data!!
     }
 }

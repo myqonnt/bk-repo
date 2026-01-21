@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2021 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2021 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -47,6 +47,16 @@ class ReplicaRecordDao : SimpleMongoDao<TReplicaRecord>() {
         val query = Query(TReplicaRecord::taskKey.isEqualTo(taskKey))
             .with(Sort.by(Sort.Direction.DESC, TReplicaRecord::startTime.name))
         return this.find(query)
+    }
+    
+    /**
+     * 根据[taskKey]查找最新任务
+     */
+    fun findLatestByTaskKey(taskKey: String): TReplicaRecord? {
+        val query = Query(TReplicaRecord::taskKey.isEqualTo(taskKey))
+            .with(Sort.by(Sort.Direction.DESC, TReplicaRecord::startTime.name))
+            .limit(1)
+        return this.findOne(query)
     }
 
     /**

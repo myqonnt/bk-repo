@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -27,18 +27,15 @@
 
 package com.tencent.bkrepo.job.batch.task.stat
 
-import com.tencent.bkrepo.common.artifact.constant.CUSTOM
-import com.tencent.bkrepo.common.artifact.constant.LOG
-import com.tencent.bkrepo.common.artifact.constant.PIPELINE
-import com.tencent.bkrepo.common.artifact.constant.REPORT
-import com.tencent.bkrepo.common.artifact.pojo.RepositoryType
+import com.tencent.bkrepo.common.api.constant.StringPool
 import com.tencent.bkrepo.job.batch.base.ActiveProjectService
 import com.tencent.bkrepo.job.batch.base.JobContext
 import com.tencent.bkrepo.job.batch.context.EmptyFolderCleanupJobContext
-import com.tencent.bkrepo.job.batch.utils.RepositoryCommonUtils
+import com.tencent.bkrepo.job.batch.utils.FolderUtils
 import com.tencent.bkrepo.job.config.properties.ActiveProjectEmptyFolderCleanupJobProperties
+import com.tencent.bkrepo.job.pojo.stat.StatNode
+import com.tencent.bkrepo.job.separation.service.SeparationTaskService
 import org.slf4j.LoggerFactory
-import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.data.mongodb.core.MongoTemplate
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor
 import org.springframework.stereotype.Component
@@ -49,14 +46,14 @@ import java.time.Duration
  * 空目录清理job
  */
 @Component
-@EnableConfigurationProperties(ActiveProjectEmptyFolderCleanupJobProperties::class)
 class ActiveProjectEmptyFolderCleanupJob(
-    properties: ActiveProjectEmptyFolderCleanupJobProperties,
+    val properties: ActiveProjectEmptyFolderCleanupJobProperties,
     executor: ThreadPoolTaskExecutor,
     private val activeProjectService: ActiveProjectService,
     private val mongoTemplate: MongoTemplate,
     private val emptyFolderCleanup: EmptyFolderCleanup,
-) : StatBaseJob(mongoTemplate, properties, executor) {
+    private val separationTaskService: SeparationTaskService,
+) : StatBaseJob(mongoTemplate, properties, executor, separationTaskService) {
 
     override fun doStart0(jobContext: JobContext) {
         logger.info("start to do empty folder cleanup job for active projects")
@@ -65,13 +62,18 @@ class ActiveProjectEmptyFolderCleanupJob(
         logger.info("empty folder cleanup job for active projects finished")
     }
 
+
+    override fun beforeRunProject(projectId: String) {
+        if (properties.userMemory) return
+        // 每次任务启动前要将redis上对应的key清理， 避免干扰
+        val key = KEY_PREFIX + StringPool.COLON +
+            FolderUtils.buildCacheKey(projectId = projectId, repoName = StringPool.EMPTY)
+        emptyFolderCleanup.removeRedisKey(key)
+    }
+
     override fun runRow(row: StatNode, context: JobContext) {
         require(context is EmptyFolderCleanupJobContext)
         try {
-            // 暂时只清理generic类型仓库下的空目录
-            if (row.repoName !in TARGET_REPO_LIST && RepositoryCommonUtils.getRepositoryDetail(
-                    row.projectId, row.repoName
-                ).type != RepositoryType.GENERIC) return
             val node = emptyFolderCleanup.buildNode(
                 id = row.id,
                 projectId = row.projectId,
@@ -81,14 +83,20 @@ class ActiveProjectEmptyFolderCleanupJob(
                 folder = row.folder,
                 size = row.size
             )
-            emptyFolderCleanup.collectEmptyFolder(node, context)
+            emptyFolderCleanup.collectEmptyFolderWithMemory(
+                row = node,
+                context = context,
+                keyPrefix = KEY_PREFIX,
+                useMemory = properties.userMemory,
+                cacheNumLimit = properties.cacheNumLimit
+            )
         } catch (e: Exception) {
             logger.error("run empty folder clean for Node $row failed, ${e.message}")
         }
     }
 
     override fun getLockAtMostFor(): Duration {
-        return Duration.ofDays(1)
+        return Duration.ofDays(14)
     }
 
     override fun createJobContext(): EmptyFolderCleanupJobContext {
@@ -104,11 +112,39 @@ class ActiveProjectEmptyFolderCleanupJob(
     override fun onRunProjectFinished(collection: String, projectId: String, context: JobContext) {
         require(context is EmptyFolderCleanupJobContext)
         logger.info("will filter empty folder in project $projectId")
-        emptyFolderCleanup.emptyFolderHandler(collection, context, projectId)
+
+        if (!properties.userMemory) {
+            emptyFolderCleanup.collectEmptyFolderWithRedis(
+                context = context,
+                force = true,
+                keyPrefix = KEY_PREFIX,
+                collectionName = null,
+                projectId = projectId,
+                cacheNumLimit = properties.cacheNumLimit
+            )
+        }
+        if (properties.userMemory) {
+            emptyFolderCleanup.emptyFolderHandlerWithMemory(
+                collection = collection,
+                context = context,
+                deletedEmptyFolder = properties.deletedEmptyFolder,
+                projectId = projectId,
+                deleteFolderRepos = properties.deleteFolderRepos
+            )
+        } else {
+            emptyFolderCleanup.emptyFolderHandlerWithRedis(
+                collection = collection,
+                keyPrefix = KEY_PREFIX,
+                context = context,
+                deletedEmptyFolder = properties.deletedEmptyFolder,
+                projectId = projectId,
+                deleteFolderRepos = properties.deleteFolderRepos
+            )
+        }
     }
 
     companion object {
         private val logger = LoggerFactory.getLogger(ActiveProjectEmptyFolderCleanupJob::class.java)
-        private val TARGET_REPO_LIST = listOf(REPORT, LOG, PIPELINE, CUSTOM, "remote-mirrors")
+        private const val KEY_PREFIX = "activeEmptyFolder"
     }
 }

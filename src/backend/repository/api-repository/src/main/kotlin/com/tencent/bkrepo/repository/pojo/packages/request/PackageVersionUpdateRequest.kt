@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -32,32 +32,35 @@
 package com.tencent.bkrepo.repository.pojo.packages.request
 
 import com.tencent.bkrepo.repository.pojo.metadata.MetadataModel
-import io.swagger.annotations.ApiModelProperty
+import io.swagger.v3.oas.annotations.media.Schema
+
 
 data class PackageVersionUpdateRequest(
-    @ApiModelProperty("项目id")
+    @get:Schema(title = "项目id")
     val projectId: String,
-    @ApiModelProperty("仓库名称")
+    @get:Schema(title = "仓库名称")
     val repoName: String,
-    @ApiModelProperty("包唯一标识符")
+    @get:Schema(title = "包唯一标识符")
     val packageKey: String,
-    @ApiModelProperty("版本名称")
+    @get:Schema(title = "版本名称")
     val versionName: String,
-    @ApiModelProperty("版本大小")
+    @get:Schema(title = "版本大小")
     val size: Long? = null,
-    @ApiModelProperty("版本描述文件路径")
+    @get:Schema(title = "版本描述文件路径")
     var manifestPath: String? = null,
-    @ApiModelProperty("版本内容文件路径")
+    @get:Schema(title = "版本内容文件路径")
     var artifactPath: String? = null,
-    @ApiModelProperty("版本构件阶段")
+    @get:Schema(title = "版本构件阶段")
     val stageTag: List<String>? = null,
-    @ApiModelProperty("标签")
+    @get:Schema(title = "标签")
     val tags: List<String>? = null,
-    @ApiModelProperty("版本元数据")
+    @get:Schema(title = "版本元数据")
     @Deprecated("仅用于兼容旧接口", replaceWith = ReplaceWith("packageMetadata"))
     val metadata: Map<String, Any>? = null,
-    @ApiModelProperty("版本元数据")
+    @get:Schema(title = "版本元数据")
     val packageMetadata: List<MetadataModel>? = null,
-    @ApiModelProperty("版本扩展字段")
-    val extension: Map<String, Any>? = null
+    @get:Schema(title = "版本扩展字段")
+    val extension: Map<String, Any>? = null,
+    @get:Schema(title = "操作来源,联邦仓库同步时源集群name", required = false)
+    val source: String? = null
 )

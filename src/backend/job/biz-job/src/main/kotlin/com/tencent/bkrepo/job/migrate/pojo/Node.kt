@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2024 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2024 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -35,4 +35,6 @@ data class Node(
     val size: Long,
     val sha256: String,
     val md5: String,
+    val archived: Boolean? = null,
+    val compressed: Boolean? = null,
 )

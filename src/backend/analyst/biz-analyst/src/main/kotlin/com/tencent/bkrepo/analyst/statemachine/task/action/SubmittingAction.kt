@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -45,6 +45,7 @@ import com.tencent.bkrepo.analyst.statemachine.Action
 import com.tencent.bkrepo.analyst.statemachine.TaskStateMachineConfiguration.Companion.STATE_MACHINE_ID_SCAN_TASK
 import com.tencent.bkrepo.analyst.statemachine.TaskStateMachineConfiguration.Companion.STATE_MACHINE_ID_SUB_SCAN_TASK
 import com.tencent.bkrepo.analyst.statemachine.iterator.IteratorManager
+import com.tencent.bkrepo.analyst.statemachine.iterator.NodeFilter
 import com.tencent.bkrepo.analyst.statemachine.subtask.SubtaskEvent
 import com.tencent.bkrepo.analyst.statemachine.subtask.context.CreateSubtaskContext
 import com.tencent.bkrepo.analyst.statemachine.task.ScanTaskEvent
@@ -154,7 +155,13 @@ class SubmittingAction(
         var submittedSubTaskCount = 0L
         var reuseResultTaskCount = 0L
         val nodeIterator = iteratorManager.createNodeIterator(scanTask, scanner, false)
+        val nodeFilter = NodeFilter(scanner.unsupportedArtifactNameRegex.map { it.toRegex() })
         for (node in nodeIterator) {
+            if (!nodeFilter.filter(node)) {
+                // 不需要扫描的node直接跳过
+                continue
+            }
+
             // 未使用扫描方案的情况直接取node的projectId
             projectScanConfiguration = projectScanConfiguration
                 ?: projectScanConfigurationService.findProjectOrGlobalScanConfiguration(node.projectId)

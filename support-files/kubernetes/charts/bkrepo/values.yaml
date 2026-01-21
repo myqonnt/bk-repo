@@ -20,6 +20,10 @@ commonAnnotations: {}
 ##
 rbac:
   create: true
+  rules:
+    - apiGroups: [""]
+      resources: ["configmaps"]
+      verbs: ["get", "list", "watch"]
 
 ## Specifies whether a ServiceAccount should be created
 ##
@@ -40,6 +44,13 @@ bkDomainScheme: http
 ## 是否强制跳转https配置
 forceHttps: false
 
+## 蓝鲸文档中心地址
+bkDocsCenterUrl:
+
+bkWebSiteAccess:
+  mode: ""
+  subPath: ""
+
 ## 日志采集配置
 bkLogConfig:
   enabled: false
@@ -49,6 +60,13 @@ bkLogConfig:
     dataId: 1
   gatewayError:
     dataId: 1
+
+## bkNotice 配置
+bkNotice:
+  enabled: false
+  apiBaseUrl:
+  appCode:
+  appSecret:
 
 ## ingress配置
 ingress:
@@ -89,6 +107,49 @@ mongodb:
   persistence:
     subPath: mongodb
     size: 20Gi
+
+redis:
+  enabled: false
+  host: "localhost"
+  port: "6379"
+  password: ""
+  database: ""
+
+## kafka配置
+## 用于Spring Cloud Stream消息事件处理
+kafka:
+  ## 是否启用kafka，默认为false，设置为true时开启
+  provider: false
+  ## kafka brokers地址，多个地址用逗号分隔
+  url: "localhost:9092"
+  ## SASL认证用户名
+  username: ""
+  ## SASL认证密码
+  password: ""
+
+tls:
+  mongodb:
+    enabled: false
+    ## 运维已经创建的secret，用作mongo客户端连接做init
+    existingPemSecret: ""
+    ## 客户端证书，包含key
+    clientCertPemFilename: ""
+    ## pem文件名
+    certPemFilename: "ca.pem"
+    ## 运维已经创建的secret，用作java程序
+    existingSecret: ""
+    ## jks文件名与密码
+    certJksFilename: "ca.jks"
+    trustStorePassword: ""
+    ## 双向tls认证配置
+    ## 密钥库类型：支持PKCS12、JKS，默认PKCS12
+    keyStoreType: "PKCS12"
+    ## 密钥库文件名称（与Secret中的Key一致）
+    keyStoreFilename: ""
+    ## 密钥库密码
+    keyStorePassword: ""
+    ## 是否校验主机名
+    verifyHostname: false
 
 ## 如果mongodb.enabled为false，bkrepo将使用下面的参数连接外部mongodb
 externalMongodb:
@@ -251,6 +312,8 @@ gateway:
   secretKey: ""
   ## 部署模式，standalone: 独立模式，ci: 与ci搭配模式 , saas模式: 蓝鲸saas部署模式
   deployMode: standalone
+  ## 发行模式，社区版不用填写
+  releaseMode:
   ## 网关认证模式，ticket, 校验bk_ticket token ，校验bk_token
   authMode: token
   ## bkci 域名
@@ -261,6 +324,10 @@ gateway:
   bkPaasUrl: paas.example.com
   ## ci模式必填，登录地址
   bkLoginUrl: http://paas.example.com/login/
+  ## 是否开启多租户
+  enableMultiTenantMode: false
+  ## 运营租户默认
+  oPTenantId: system
   ## ci模式必填，ssm ip
   ssmIP0:
   ## ci模式必填，ssm host
@@ -533,14 +600,67 @@ s3:
   podAnnotations: {}
   priorityClassName: ""
 
-## fs-server服务配置
-fsserver:
+## preview服务配置
+preview:
+  enabled: false
+  config:
+    # 是否开启预览缓存
+    cacheEnabled: true
+    # 外部文件预览项目id
+    projectId: bk-repo
+    # 外部文件预览仓库名称
+    repoName: convert
+    # 外部文件预览仓库是否公开
+    repoPublic: true
+    # 外部文件预览仓库配额(M),默认10G
+    repoQuota: 10240
+    # 默认水印
+    watermark:
+      txt: ""
+  ## Kubernetes 通用配置
+  image:
+    registry: registry.hub.docker.com
+    repository: bkrepo/bkrepo-preview
+    tag: 1.1.0
+    pullPolicy: IfNotPresent
+    pullSecrets: []
+  replicaCount: 1
+  hostAliases: []
+  resources:
+    requests:
+      cpu: 100m
+      memory: 1000Mi
+    limits:
+      cpu: 500m
+      memory: 1500Mi
+  containerSecurityContext:
+    enabled: false
+    runAsUser: 1001
+    runAsNonRoot: true
+  podSecurityContext:
+    enabled: false
+    fsGroup: 1001
+  podAffinityPreset: ""
+  podAntiAffinityPreset: ""
+  nodeAffinityPreset:
+    type: ""
+    key: ""
+    values: []
+  affinity: {}
+  nodeSelector: {}
+  tolerations: []
+  podLabels: {}
+  podAnnotations: {}
+  priorityClassName: ""
+
+## maven registry服务配置
+maven:
   enabled: true
   config: {}
   ## Kubernetes 通用配置
   image:
     registry: registry.hub.docker.com
-    repository: bkrepo/bkrepo-fs-server
+    repository: bkrepo/bkrepo-maven
     tag: 1.1.0
     pullPolicy: IfNotPresent
     pullSecrets: []

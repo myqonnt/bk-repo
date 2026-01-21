@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2024 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2024 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -27,6 +27,7 @@
 
 package com.tencent.bkrepo.job.migrate.executor
 
+import com.tencent.bkrepo.common.metadata.dao.node.NodeDao
 import com.tencent.bkrepo.job.UT_MD5
 import com.tencent.bkrepo.job.UT_PROJECT_ID
 import com.tencent.bkrepo.job.UT_REPO_NAME
@@ -35,6 +36,8 @@ import com.tencent.bkrepo.job.migrate.model.TMigrateFailedNode
 import com.tencent.bkrepo.job.migrate.pojo.MigrateRepoStorageTaskState.CORRECT_FINISHED
 import com.tencent.bkrepo.job.migrate.pojo.MigrateRepoStorageTaskState.MIGRATE_FAILED_NODE_FINISHED
 import com.tencent.bkrepo.job.migrate.pojo.MigrateRepoStorageTaskState.MIGRATING_FAILED_NODE
+import com.tencent.bkrepo.job.migrate.strategy.MigrateFailedNodeFixer
+import com.tencent.bkrepo.job.migrate.utils.MigrateTestUtils.createNode
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -46,15 +49,22 @@ import org.mockito.ArgumentMatchers.anyString
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.whenever
 import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.context.annotation.Import
+import org.springframework.data.mongodb.core.query.Criteria
 import org.springframework.data.mongodb.core.query.Query
+import org.springframework.data.mongodb.core.query.Update
+import org.springframework.data.mongodb.core.query.isEqualTo
 import java.io.FileNotFoundException
 import java.time.LocalDateTime
 import java.util.concurrent.TimeUnit
 
 @DisplayName("迁移失败Node执行器测试")
+@Import(MigrateFailedNodeFixer::class)
 class MigrateFailedNodeExecutorTest @Autowired constructor(
     private val executor: MigrateFailedNodeExecutor,
+    private val nodeDao: NodeDao,
 ) : ExecutorBaseTest() {
+
     @AfterAll
     fun afterAll() {
         executor.close(1L, TimeUnit.MINUTES)
@@ -75,7 +85,10 @@ class MigrateFailedNodeExecutorTest @Autowired constructor(
 
 
         // 创建待迁移的失败节点
-        createFailedNode(task.id!!)
+        val node1 = nodeDao.createNode(archived = false)
+        createFailedNode(task.id!!, node1.id!!)
+        val node2 = nodeDao.createNode(archived = true, deleted = LocalDateTime.now())
+        createFailedNode(task.id!!, node2.id!!)
         assertTrue(migrateFailedNodeDao.existsFailedNode(UT_PROJECT_ID, UT_REPO_NAME))
 
         // 执行任务
@@ -97,6 +110,7 @@ class MigrateFailedNodeExecutorTest @Autowired constructor(
     @Test
     fun testMigrateFailedNodeFailed() {
         whenever(storageService.copy(anyString(), anyOrNull(), anyOrNull())).then {
+            Thread.sleep(3000)
             throw FileNotFoundException()
         }
 
@@ -104,6 +118,13 @@ class MigrateFailedNodeExecutorTest @Autowired constructor(
         var task = createTask()
         updateTask(task.id!!, CORRECT_FINISHED.name, LocalDateTime.now())
         createFailedNode(task.id!!)
+
+        // 测试达到最大重试次数后自动修复成功将重试次数重置为0
+        migrateFailedNodeDao.updateFirst(
+            Query(Criteria.where(TMigrateFailedNode::taskId.name).isEqualTo(task.id!!)),
+            Update.update(TMigrateFailedNode::retryTimes.name, 2)
+        )
+        assertEquals(2, migrateFailedNodeDao.findOne(Query())!!.retryTimes)
 
         // 执行任务
         val context = executor.execute(buildContext(migrateTaskService.findTask(UT_PROJECT_ID, UT_REPO_NAME)!!))!!
@@ -114,15 +135,16 @@ class MigrateFailedNodeExecutorTest @Autowired constructor(
         task = migrateTaskService.findTask(UT_PROJECT_ID, UT_REPO_NAME)!!
         assertEquals(MIGRATING_FAILED_NODE.name, task.state)
         assertTrue(migrateFailedNodeDao.existsFailedNode(UT_PROJECT_ID, UT_REPO_NAME))
+        assertEquals(0, migrateFailedNodeDao.findOne(Query())!!.retryTimes)
     }
 
-    private fun createFailedNode(taskId: String) {
+    private fun createFailedNode(taskId: String, nodeId: String = "") {
         migrateFailedNodeDao.insert(
             TMigrateFailedNode(
                 id = null,
                 createdDate = LocalDateTime.now(),
                 lastModifiedDate = LocalDateTime.now(),
-                nodeId = "",
+                nodeId = nodeId,
                 taskId = taskId,
                 projectId = UT_PROJECT_ID,
                 repoName = UT_REPO_NAME,

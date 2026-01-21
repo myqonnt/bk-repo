@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -69,8 +69,9 @@ class ExecuteSubtaskAction(
             scanTaskDao.updateStartedDateTimeIfNotExists(subtask.parentScanTaskId, LocalDateTime.now())
             publisher.publishEvent(
                 SubtaskStatusChangedEvent(
-                    SubScanTaskStatus.valueOf(subtask.status),
-                    SubtaskConverter.convertToPlanSubtask(subtask, SubScanTaskStatus.EXECUTING.name)
+                    oldStatus = SubScanTaskStatus.valueOf(subtask.status),
+                    subtask = SubtaskConverter.convertToPlanSubtask(subtask, SubScanTaskStatus.EXECUTING.name),
+                    taskMetadata = subtask.metadata
                 )
             )
             return TransitResult(target)

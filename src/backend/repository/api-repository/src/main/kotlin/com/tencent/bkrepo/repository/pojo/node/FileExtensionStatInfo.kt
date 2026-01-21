@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -31,22 +31,22 @@
 
 package com.tencent.bkrepo.repository.pojo.node
 
-import io.swagger.annotations.ApiModel
-import io.swagger.annotations.ApiModelProperty
+import io.swagger.v3.oas.annotations.media.Schema
+
 
 /**
  * 文件后缀名统计信息类
  */
-@ApiModel("文件后缀名统计信息类")
+@Schema(title = "文件后缀名统计信息类")
 data class FileExtensionStatInfo(
-    @ApiModelProperty("项目id")
+    @get:Schema(title = "项目id")
     val projectId: String,
-    @ApiModelProperty("仓库名")
+    @get:Schema(title = "仓库名")
     val repoName: String?,
-    @ApiModelProperty("文件后缀名")
+    @get:Schema(title = "文件后缀名")
     val extension: String,
-    @ApiModelProperty("文件数量")
+    @get:Schema(title = "文件数量")
     val num: Long,
-    @ApiModelProperty("文件大小")
+    @get:Schema(title = "文件大小")
     val size: Long
 )

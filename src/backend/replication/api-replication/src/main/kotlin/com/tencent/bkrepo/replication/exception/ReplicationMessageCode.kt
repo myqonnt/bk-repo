@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2021 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2021 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -48,6 +48,16 @@ enum class ReplicationMessageCode(private val businessCode: Int, private val key
     REPLICA_CLUSTER_NOT_FOUND(13, "replica.cluster.not-found"),
     REPLICA_TASK_FAILED(14, "replica.task.failed"),
     REPLICA_NODE_DISPATCH_CONFIG_NOT_FOUND(15, "replica.node.dispatch.config.notfound"),
+    UNSUPPORTED_CLUSTER_VERSION(16, "unsupported.cluster.version"),
+    FEDERATION_REPOSITORY_CREATE_ERROR(17, "federation.repository.create.error"),
+    FEDERATION_REPOSITORY_FULL_SYNC_RUNNING(18, "federation.repository.full.sync.running"),
+    FEDERATION_REPOSITORY_FULL_SYNC_FAILED(19, "federation.repository.full.sync.failed"),
+    FEDERATION_REPOSITORY_DELETE_ERROR(20, "federation.repository.delete.error"),
+    FEDERATION_REPOSITORY_NOT_FOUND(21, "federation.repository.not.found"),
+    FEDERATION_REPOSITORY_UPDATE_ERROR(22, "federation.repository.update.error"),
+    FEDERATION_REPOSITORY_NAME_EXISTS(23, "federation.repository.name.exists"),
+    FEDERATION_TRACKING_RECORD_NOT_FOUND(24, "federation.tracking.record.not.found"),
+    REPLICA_FAILURE_RECORD_NOT_FOUND(25, "replica.failure.record.not.found")
     ;
 
     override fun getBusinessCode() = businessCode

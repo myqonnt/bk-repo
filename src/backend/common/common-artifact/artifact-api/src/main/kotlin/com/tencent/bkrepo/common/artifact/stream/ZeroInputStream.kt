@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -42,9 +42,9 @@ class ZeroInputStream(
 ) : InputStream() {
 
     /**
-     * 表示已经读取的自己数量
+     * 表示已经读取的字节数量
      */
-    private var read = 0
+    private var read = 0L
 
     override fun read(): Int {
         if (size in 0..read) return -1
@@ -53,6 +53,8 @@ class ZeroInputStream(
     }
 
     override fun available(): Int {
-        return if (size >= 0) size.toInt() - read else Int.MAX_VALUE
+        if (size < 0) return Int.MAX_VALUE
+        val remaining = size - read
+        return if (remaining > Int.MAX_VALUE) Int.MAX_VALUE else remaining.toInt()
     }
 }

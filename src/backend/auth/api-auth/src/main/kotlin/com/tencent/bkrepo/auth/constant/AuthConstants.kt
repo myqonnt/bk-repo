@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -32,8 +32,6 @@ const val AUTH_CONFIG_TYPE_NAME = "realm"
 const val AUTH_CONFIG_TYPE_VALUE_DEVOPS = "devops"
 const val AUTH_CONFIG_TYPE_VALUE_LOCAL = "local"
 const val AUTH_CONFIG_TYPE_VALUE_BKIAMV3 = "bkiamv3"
-
-const val BKIAMV3_CHECK = "bkiamv3Check"
 
 const val CUSTOM = "custom"
 const val PIPELINE = "pipeline"

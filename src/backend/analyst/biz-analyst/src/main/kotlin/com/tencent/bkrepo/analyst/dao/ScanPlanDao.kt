@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -28,6 +28,7 @@
 package com.tencent.bkrepo.analyst.dao
 
 import com.mongodb.client.result.UpdateResult
+import com.tencent.bkrepo.analyst.model.SubScanTaskDefinition
 import com.tencent.bkrepo.analyst.model.TScanPlan
 import com.tencent.bkrepo.analyst.pojo.ScanPlan
 import com.tencent.bkrepo.common.api.exception.NotFoundException
@@ -43,6 +44,7 @@ import org.springframework.data.mongodb.core.BulkOperations
 import org.springframework.data.mongodb.core.query.Criteria
 import org.springframework.data.mongodb.core.query.Query
 import org.springframework.data.mongodb.core.query.Update
+import org.springframework.data.mongodb.core.query.UpdateDefinition
 import org.springframework.data.mongodb.core.query.inValues
 import org.springframework.data.mongodb.core.query.isEqualTo
 import org.springframework.data.mongodb.core.query.size
@@ -71,15 +73,15 @@ class ScanPlanDao : ScannerSimpleMongoDao<TScanPlan>() {
     fun findByProjectIdAndRepoName(
         projectId: String,
         repoName: String,
-        planType: String,
-        scanOnNewArtifact: Boolean = true,
+        planType: String? = null,
+        scanOnNewArtifact: Boolean? = null,
         includeEmptyRepoNames: Boolean = true
     ): List<TScanPlan> {
         val criteria = Criteria
             .where(TScanPlan::projectId.name).isEqualTo(projectId)
-            .and(TScanPlan::scanOnNewArtifact.name).isEqualTo(scanOnNewArtifact)
-            .and(TScanPlan::type.name).isEqualTo(planType)
             .and(TScanPlan::deleted.name).isEqualTo(null)
+        scanOnNewArtifact?.let { criteria.and(TScanPlan::scanOnNewArtifact.name).isEqualTo(it) }
+        planType?.let { criteria.and(TScanPlan::type.name).isEqualTo(it) }
         if (!includeEmptyRepoNames) {
             criteria.and(TScanPlan::repoNames.name).isEqualTo(repoName)
         } else {
@@ -164,13 +166,26 @@ class ScanPlanDao : ScannerSimpleMongoDao<TScanPlan>() {
         return updateFirst(query, update)
     }
 
+    fun decrementScanResultOverview(subtasks: List<SubScanTaskDefinition>) {
+        // 统计每个扫描方案需要更新的结果预览值
+        val planOverviewMap = HashMap<String, MutableMap<String, Long>>()
+        for (subtask in subtasks) {
+            if (subtask.planId.isNullOrEmpty() || subtask.scanResultOverview.isNullOrEmpty()) {
+                continue
+            }
+            val planOverview = planOverviewMap.getOrPut(subtask.planId) { HashMap() }
+            updateOverview(planOverview, subtask.scanResultOverview)
+        }
+        decrementScanResultOverview(planOverviewMap)
+    }
+
     /**
      * 批量更新扫描方案扫描结果预览信息
      *
      * @param planOverviewMap key 为扫描方案id， value为扫描预览结果
      */
     fun decrementScanResultOverview(planOverviewMap: Map<String, Map<String, Number>>) {
-        val updates = ArrayList<org.springframework.data.util.Pair<Query, Update>>(planOverviewMap.size)
+        val updates = ArrayList<org.springframework.data.util.Pair<Query, UpdateDefinition>>(planOverviewMap.size)
         for (entry in planOverviewMap) {
             val planId = entry.key
             val overview = entry.value
@@ -218,6 +233,17 @@ class ScanPlanDao : ScannerSimpleMongoDao<TScanPlan>() {
         val query = Query(Criteria.where(ID).isEqualTo(planId))
         val update = Update.update(TScanPlan::scanQuality.name, quality)
         return updateFirst(query, update)
+    }
+
+    private fun updateOverview(planOverview: MutableMap<String, Long>, artifactOverview: Map<String, Number>?) {
+        if (artifactOverview == null) {
+            return
+        }
+
+        for (entry in artifactOverview) {
+            val planOverviewValue = planOverview.getOrDefault(entry.key, 0L)
+            planOverview[entry.key] = planOverviewValue + entry.value.toLong()
+        }
     }
 
     private fun buildOverviewUpdate(overview: Map<String, Any?>, dec: Boolean = false): Update? {

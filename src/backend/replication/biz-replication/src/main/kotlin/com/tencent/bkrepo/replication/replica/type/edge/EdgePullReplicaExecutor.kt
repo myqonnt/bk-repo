@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -29,6 +29,7 @@ package com.tencent.bkrepo.replication.replica.type.edge
 
 import com.tencent.bkrepo.common.api.constant.MediaTypes
 import com.tencent.bkrepo.common.api.constant.retry
+import com.tencent.bkrepo.common.api.exception.ErrorCodeException
 import com.tencent.bkrepo.common.api.util.toJsonString
 import com.tencent.bkrepo.common.artifact.constant.REPO_KEY
 import com.tencent.bkrepo.common.artifact.exception.ArtifactReceiveException
@@ -38,9 +39,10 @@ import com.tencent.bkrepo.common.artifact.manager.StorageManager
 import com.tencent.bkrepo.common.artifact.message.ArtifactMessageCode
 import com.tencent.bkrepo.common.artifact.resolve.file.ArtifactFileFactory
 import com.tencent.bkrepo.common.artifact.stream.Range
-import com.tencent.bkrepo.common.service.cluster.ClusterProperties
-import com.tencent.bkrepo.common.service.cluster.CommitEdgeEdgeCondition
-import com.tencent.bkrepo.common.service.exception.RemoteErrorCodeException
+import com.tencent.bkrepo.common.metadata.service.project.ProjectService
+import com.tencent.bkrepo.common.metadata.service.repo.RepositoryService
+import com.tencent.bkrepo.common.service.cluster.condition.CommitEdgeEdgeCondition
+import com.tencent.bkrepo.common.service.cluster.properties.ClusterProperties
 import com.tencent.bkrepo.common.service.feign.FeignClientFactory
 import com.tencent.bkrepo.common.service.util.HttpContextHolder
 import com.tencent.bkrepo.common.service.util.UrlUtils
@@ -53,11 +55,9 @@ import com.tencent.bkrepo.replication.pojo.task.ReplicaTaskInfo
 import com.tencent.bkrepo.replication.pojo.task.objects.ReplicaObjectInfo
 import com.tencent.bkrepo.replication.pojo.task.setting.ConflictStrategy
 import com.tencent.bkrepo.replication.pojo.task.setting.ErrorStrategy
-import com.tencent.bkrepo.replication.util.OkHttpClientPool
 import com.tencent.bkrepo.replication.replica.base.interceptor.SignInterceptor
 import com.tencent.bkrepo.replication.service.ReplicaRecordService
-import com.tencent.bkrepo.repository.api.ProjectClient
-import com.tencent.bkrepo.repository.api.RepositoryClient
+import com.tencent.bkrepo.replication.util.OkHttpClientPool
 import com.tencent.bkrepo.repository.api.cluster.ClusterNodeClient
 import com.tencent.bkrepo.repository.api.cluster.ClusterRepositoryClient
 import com.tencent.bkrepo.repository.pojo.node.NodeDetail
@@ -77,8 +77,8 @@ import java.time.LocalDateTime
 @Conditional(CommitEdgeEdgeCondition::class)
 class EdgePullReplicaExecutor(
     private val clusterProperties: ClusterProperties,
-    private val projectClient: ProjectClient,
-    private val repositoryClient: RepositoryClient,
+    private val projectService: ProjectService,
+    private val repositoryService: RepositoryService,
     private val storageManager: StorageManager,
     private val replicaRecordService: ReplicaRecordService
 ) {
@@ -143,7 +143,7 @@ class EdgePullReplicaExecutor(
             fullPath = fullPath
         ).data ?: throw NodeNotFoundException(fullPath)
 
-        val localRepo = repositoryClient.getRepoDetail(localProjectId, localRepoName).data
+        val localRepo = repositoryService.getRepoDetail(localProjectId, localRepoName)
             ?: createProjectAndRepo(centerRepo, localProjectId, localRepoName)
         // 手动重试时，需要把仓库信息添加到request attribute中
         HttpContextHolder.getRequestOrNull()?.setAttribute(REPO_KEY, localRepo)
@@ -191,9 +191,9 @@ class EdgePullReplicaExecutor(
             operator = centerRepo.createdBy
         )
         try {
-            projectClient.createProject(projectCreateRequest)
-        } catch (e: RemoteErrorCodeException) {
-            if (e.errorCode != ArtifactMessageCode.PROJECT_EXISTED.getCode()) {
+            projectService.createProject(projectCreateRequest)
+        } catch (e: ErrorCodeException) {
+            if (e.messageCode != ArtifactMessageCode.PROJECT_EXISTED) {
                 throw e
             }
         }
@@ -207,7 +207,7 @@ class EdgePullReplicaExecutor(
             description = centerRepo.description,
             operator = centerRepo.createdBy
         )
-        return repositoryClient.createRepo(repoCreateRequest).data!!
+        return repositoryService.createRepo(repoCreateRequest)
     }
 
     private fun buildNodeCreateRequest(
@@ -222,6 +222,7 @@ class EdgePullReplicaExecutor(
         overwrite = task.setting.conflictStrategy == ConflictStrategy.OVERWRITE,
         sha256 = nodeDetail.sha256,
         md5 = nodeDetail.md5,
+        crc64ecma = nodeDetail.crc64ecma,
         size = nodeDetail.size,
         nodeMetadata = nodeDetail.nodeMetadata,
         createdBy = nodeDetail.createdBy,

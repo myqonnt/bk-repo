@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -28,9 +28,9 @@
 package com.tencent.bkrepo.opdata.service
 
 import com.tencent.bkrepo.common.api.constant.StringPool
+import com.tencent.bkrepo.common.metadata.service.project.ProjectService
+import com.tencent.bkrepo.common.metadata.service.repo.RepositoryService
 import com.tencent.bkrepo.opdata.pojo.CleanupRules
-import com.tencent.bkrepo.repository.api.ProjectClient
-import com.tencent.bkrepo.repository.api.RepositoryClient
 import com.tencent.bkrepo.repository.constant.SYSTEM_USER
 import com.tencent.bkrepo.repository.pojo.project.ProjectInfo
 import com.tencent.bkrepo.repository.pojo.project.ProjectRangeQueryRequest
@@ -40,8 +40,8 @@ import org.springframework.stereotype.Service
 
 @Service
 class RepoService(
-    private val projectClient: ProjectClient,
-    private val repoClient: RepositoryClient,
+    private val projectService: ProjectService,
+    private val repositoryService: RepositoryService,
 ) {
 
     fun batchUpdateCleanupStrategy(rule: CleanupRules) {
@@ -61,10 +61,10 @@ class RepoService(
         var offset = 0L
         var projects: List<ProjectInfo?>?
         do {
-            projects = projectClient.rangeQuery(
+            projects = projectService.rangeQuery(
                 ProjectRangeQueryRequest(projectIds = emptyList(), offset = offset, limit = 1000)
-            ).data?.records
-            projects?.forEach {
+            ).records
+            projects.forEach {
                 runReposInProject(it!!, rule)
             }
             offset += 1000
@@ -122,12 +122,12 @@ class RepoService(
         if (repoNames.isNullOrEmpty() || cleanupValue.isEmpty() || cleanupType.isEmpty()) return
         repoNames.forEach {
             if (specialRepoRules.containsKey("$projectId/$it")) return
-            val repoInfo = repoClient.getRepoInfo(projectId, it).data ?: return
+            val repoInfo = repositoryService.getRepoInfo(projectId, it) ?: return
             val configuration = repoInfo.configuration
             if (configuration.settings["cleanupStrategy"] != null && !forceRefresh) return
             var useDefault = true
             if (!relatedRepo.isNullOrEmpty()) {
-                val relatedConfig = repoClient.getRepoInfo(projectId, relatedRepo).data?.configuration
+                val relatedConfig = repositoryService.getRepoInfo(projectId, relatedRepo)?.configuration
                     ?.getSetting<Map<String, Any>>("cleanupStrategy")
                 val relatedCleanupStrategy = toCleanupStrategy(relatedConfig)
                 if (relatedCleanupStrategy != null) {
@@ -150,7 +150,7 @@ class RepoService(
                 configuration = configuration,
                 operator = SYSTEM_USER
             )
-            repoClient.updateRepo(request)
+            repositoryService.updateRepo(request)
         }
     }
 
@@ -159,7 +159,7 @@ class RepoService(
         val cleanupStrategy = CleanupStrategy(
             enable = map[CleanupStrategy::enable.name] as? Boolean ?: false,
             cleanupType = map[CleanupStrategy::cleanupType.name] as? String,
-            cleanupValue = map[CleanupStrategy::cleanupValue.name] as? String,
+            cleanupValue = map[CleanupStrategy::cleanupValue.name]?.toString(),
             cleanTargets = map[CleanupStrategy::cleanTargets.name] as? List<String>,
         )
         if (cleanupStrategy.cleanupType.isNullOrEmpty() || cleanupStrategy.cleanupValue.isNullOrEmpty())

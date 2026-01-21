@@ -36,15 +36,16 @@ abstract class SubtaskPushDispatcher<T : ExecutionCluster>(
 
     override fun dispatch() {
         if (scanService.peek(executionCluster.name) == null) {
-            logger.info("cluster [${executionCluster.name}] has no subtask to dispatch")
+            logger.debug("cluster [${executionCluster.name}] has no subtask to dispatch")
+            return
+        }
+
+        if (!lock.tryLock()) {
+            logger.info("other process is dispatching to cluster[${executionCluster.name}], skip dispatching")
             return
         }
 
         try {
-            if (!lock.tryLock()) {
-                logger.info("other process is dispatching to cluster[${executionCluster.name}], skip dispatching")
-                return
-            }
             val availableCount = availableCount()
             logger.info("cluster [${executionCluster.name}] can execute $availableCount subtasks, starting to dispatch")
             if (availableCount == 0) {
@@ -57,6 +58,8 @@ abstract class SubtaskPushDispatcher<T : ExecutionCluster>(
                 executor.execute { doDispatch(subtask) }
             }
             logger.info("[$dispatchedTaskCount] subtask was dispatched to cluster[${executionCluster.name}]")
+        } catch (e: Exception) {
+            logger.error("cluster [${executionCluster.name}] dispatch failed", e)
         } finally {
             lock.unlock()
         }

@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2024 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2024 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -30,18 +30,19 @@ package com.tencent.bkrepo.repository.api
 import com.tencent.bkrepo.common.api.constant.REPOSITORY_SERVICE_NAME
 import com.tencent.bkrepo.common.api.pojo.Response
 import com.tencent.bkrepo.repository.pojo.node.NodeInfo
-import io.swagger.annotations.Api
-import io.swagger.annotations.ApiOperation
+import io.swagger.v3.oas.annotations.Operation
+import io.swagger.v3.oas.annotations.tags.Tag
 import org.springframework.cloud.openfeign.FeignClient
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.RequestMapping
 
-@Api("流水线节点")
+@Tag(name = "流水线节点")
 @FeignClient(REPOSITORY_SERVICE_NAME, contextId = "PipelineNodeClient", primary = false)
 @RequestMapping("/service/pipeline")
+@Deprecated("replace with PipelineNodeService")
 interface PipelineNodeClient {
     @GetMapping("/list/{projectId}/{repoName}")
-    @ApiOperation("获取流水线制品目录")
+    @Operation(summary = "获取流水线制品目录")
     fun listPipeline(@PathVariable projectId: String, @PathVariable repoName: String): Response<List<NodeInfo>>
 }

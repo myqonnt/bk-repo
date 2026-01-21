@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -35,7 +35,6 @@ package com.tencent.bkrepo.auth.helper
 import com.tencent.bkrepo.auth.dao.UserDao
 import com.tencent.bkrepo.auth.dao.repository.RoleRepository
 import com.tencent.bkrepo.auth.message.AuthMessageCode
-import com.tencent.bkrepo.auth.model.TRole
 import com.tencent.bkrepo.auth.model.TUser
 import com.tencent.bkrepo.auth.pojo.enums.RoleType
 import com.tencent.bkrepo.auth.pojo.role.CreateRoleRequest
@@ -43,7 +42,9 @@ import com.tencent.bkrepo.auth.util.DataDigestUtils
 import com.tencent.bkrepo.auth.util.IDUtil
 import com.tencent.bkrepo.auth.util.request.RoleRequestUtil
 import com.tencent.bkrepo.common.api.constant.ANONYMOUS_USER
+import com.tencent.bkrepo.common.api.constant.TENANT_ID
 import com.tencent.bkrepo.common.api.exception.ErrorCodeException
+import com.tencent.bkrepo.common.service.util.HttpContextHolder
 import org.slf4j.LoggerFactory
 
 class UserHelper constructor(
@@ -56,6 +57,14 @@ class UserHelper constructor(
             logger.warn("user [$userId] not exist.")
             throw ErrorCodeException(AuthMessageCode.AUTH_USER_NOT_EXIST)
         }
+    }
+
+    fun isUserExist(userId: String): Boolean {
+        return userDao.findFirstByUserId(userId) != null
+    }
+
+    fun getTenantId(): String? {
+        return HttpContextHolder.getRequestOrNull()?.getHeader(TENANT_ID)
     }
 
     fun checkUserRoleBind(userId: String, roleId: String): Boolean {
@@ -106,18 +115,40 @@ class UserHelper constructor(
 
     fun createRoleCommon(request: CreateRoleRequest): String? {
         logger.info("create role request:[$request] ")
-        val role: TRole? = if (request.type == RoleType.REPO) {
-            roleRepository.findFirstByRoleIdAndProjectIdAndRepoName(
-                request.roleId!!,
-                request.projectId,
-                request.repoName!!
-            )
-        } else {
-            roleRepository.findFirstByProjectIdAndTypeAndName(
-                projectId = request.projectId,
-                type = RoleType.PROJECT,
-                name = request.name
-            )
+        val role = when (request.type) {
+            RoleType.REPO -> {
+                require(request.roleId != null)
+                roleRepository.findFirstByTypeAndRoleIdAndProjectIdAndRepoName(
+                    type = RoleType.REPO,
+                    roleId = request.roleId,
+                    projectId = request.projectId!!,
+                    repoName = request.repoName!!
+                )
+            }
+            RoleType.PROJECT -> {
+                if (request.source == null) {
+                    roleRepository.findFirstByTypeAndProjectIdAndName(
+                        type = RoleType.PROJECT,
+                        projectId = request.projectId!!,
+                        name = request.name
+                    )
+                } else {
+                    require(request.roleId != null)
+                    roleRepository.findFirstByTypeAndRoleIdAndProjectIdAndSource(
+                        type = RoleType.PROJECT,
+                        roleId = request.roleId,
+                        projectId = request.projectId!!,
+                        source = request.source
+                    )
+                }
+            }
+            RoleType.SERVICE -> {
+                require(request.roleId != null && request.projectId == null)
+                roleRepository.findFirstByTypeAndRoleId(
+                    roleId = request.roleId,
+                    type = request.type
+                )
+            }
         }
 
         role?.let {
@@ -127,7 +158,8 @@ class UserHelper constructor(
 
         val roleId = when (request.type) {
             RoleType.REPO -> request.roleId!!
-            RoleType.PROJECT -> findUsableProjectTypeRoleId(request.roleId, request.projectId)
+            RoleType.PROJECT -> findUsableProjectTypeRoleId(request.roleId, request.projectId!!)
+            RoleType.SERVICE -> request.roleId!!
         }
 
         val result = roleRepository.insert(RoleRequestUtil.conv2TRole(roleId, request))
@@ -151,11 +183,15 @@ class UserHelper constructor(
     }
 
     private fun findUsableProjectTypeRoleId(roleId: String?, projectId: String): String {
-        var tempRoleId = roleId ?: "${projectId}_role_${IDUtil.shortUUID()}"
+        var tempRoleId = roleId ?: buildProjectRoleId(projectId)
         while (true) {
             val role = roleRepository.findFirstByRoleIdAndProjectId(tempRoleId, projectId)
-            if (role == null) return tempRoleId else tempRoleId = "${projectId}_role_${IDUtil.shortUUID()}"
+            if (role == null) return tempRoleId else tempRoleId = buildProjectRoleId(projectId)
         }
+    }
+
+    private fun buildProjectRoleId(projectId: String): String {
+        return "${projectId}_role_${IDUtil.shortUUID()}"
     }
 
     companion object {

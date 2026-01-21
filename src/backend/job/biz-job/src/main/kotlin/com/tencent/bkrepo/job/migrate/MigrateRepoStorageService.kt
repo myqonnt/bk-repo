@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2024 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2024 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -31,8 +31,11 @@ import com.google.common.base.CaseFormat.LOWER_CAMEL
 import com.google.common.base.CaseFormat.UPPER_CAMEL
 import com.tencent.bkrepo.common.api.exception.ErrorCodeException
 import com.tencent.bkrepo.common.api.message.CommonMessageCode
+import com.tencent.bkrepo.common.api.pojo.Page
+import com.tencent.bkrepo.common.metadata.service.repo.RepositoryService
+import com.tencent.bkrepo.common.mongo.util.Pages
 import com.tencent.bkrepo.common.service.actuator.ActuatorConfiguration.Companion.SERVICE_INSTANCE_ID
-import com.tencent.bkrepo.common.storage.core.StorageProperties
+import com.tencent.bkrepo.common.storage.config.StorageProperties
 import com.tencent.bkrepo.common.storage.credentials.StorageCredentials
 import com.tencent.bkrepo.job.batch.utils.RepositoryCommonUtils
 import com.tencent.bkrepo.job.migrate.config.MigrateRepoStorageProperties
@@ -57,9 +60,9 @@ import com.tencent.bkrepo.job.migrate.pojo.MigrateRepoStorageTaskState.MIGRATING
 import com.tencent.bkrepo.job.migrate.pojo.MigrateRepoStorageTaskState.PENDING
 import com.tencent.bkrepo.job.migrate.pojo.MigrationContext
 import com.tencent.bkrepo.job.migrate.utils.ExecutingTaskRecorder
-import com.tencent.bkrepo.repository.api.RepositoryClient
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
+import org.springframework.data.domain.PageRequest
 import org.springframework.stereotype.Service
 import java.time.LocalDateTime
 
@@ -73,7 +76,7 @@ class MigrateRepoStorageService(
     private val migrateRepoStorageTaskDao: MigrateRepoStorageTaskDao,
     private val executors: Map<String, TaskExecutor>,
     private val executingTaskRecorder: ExecutingTaskRecorder,
-    private val repositoryClient: RepositoryClient,
+    private val repositoryService: RepositoryService,
 ) {
     @Value(SERVICE_INSTANCE_ID)
     protected lateinit var instanceId: String
@@ -89,7 +92,7 @@ class MigrateRepoStorageService(
                 throw ErrorCodeException(CommonMessageCode.RESOURCE_EXISTED, "$projectId/$repoName")
             }
             val now = LocalDateTime.now()
-            val repo = repositoryClient.getRepoDetail(projectId, repoName).data!!
+            val repo = repositoryService.getRepoDetail(projectId, repoName)!!
             if (repo.storageCredentials?.key == dstCredentialsKey) {
                 throw ErrorCodeException(CommonMessageCode.PARAMETER_INVALID, "src key cant be same as dst key")
             }
@@ -110,6 +113,20 @@ class MigrateRepoStorageService(
             logger.info("create migrate task for $projectId/$repoName success")
             return task.toDto()
         }
+    }
+
+    /**
+     * 分页查询迁移任务
+     *
+     * @param state 任务状态，未指定时查询所有任务
+     * @param pageRequest 分页请求
+     *
+     * @return 迁移任务分页
+     */
+    fun findTask(state: String?, pageRequest: PageRequest): Page<MigrateRepoStorageTask> {
+        val count = migrateRepoStorageTaskDao.count(state)
+        val records = migrateRepoStorageTaskDao.find(state, pageRequest).map { it.toDto() }
+        return Pages.ofResponse(pageRequest, count, records)
     }
 
     /**

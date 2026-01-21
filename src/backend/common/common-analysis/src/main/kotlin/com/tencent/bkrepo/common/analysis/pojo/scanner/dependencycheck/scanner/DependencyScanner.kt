@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -28,13 +28,13 @@
 package com.tencent.bkrepo.common.analysis.pojo.scanner.dependencycheck.scanner
 
 import com.tencent.bkrepo.common.analysis.pojo.scanner.Scanner
-import io.swagger.annotations.ApiModel
-import io.swagger.annotations.ApiModelProperty
+import io.swagger.v3.oas.annotations.media.Schema
 
-@ApiModel("DependencyCheck扫描器配置")
+
+@Schema(title = "DependencyCheck扫描器配置")
 class DependencyScanner(
     override val name: String,
-    @ApiModelProperty("扫描器版本")
+    @get:Schema(title = "扫描器版本")
     override val version: String
 ) : Scanner(name, TYPE, version) {
     companion object {

@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2019 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2019 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -30,7 +30,7 @@ package com.tencent.bkrepo.webhook.payload.builder.version
 import com.tencent.bkrepo.common.api.exception.NotFoundException
 import com.tencent.bkrepo.common.artifact.event.base.ArtifactEvent
 import com.tencent.bkrepo.common.artifact.event.base.EventType
-import com.tencent.bkrepo.repository.api.PackageClient
+import com.tencent.bkrepo.common.metadata.service.packages.PackageService
 import com.tencent.bkrepo.repository.pojo.packages.PackageVersion
 import com.tencent.bkrepo.webhook.exception.WebHookMessageCode
 import com.tencent.bkrepo.webhook.payload.builder.EventPayloadBuilder
@@ -39,16 +39,22 @@ import org.springframework.stereotype.Component
 
 @Component
 class VersionCreatedPayloadBuilder(
-    private val packageClient: PackageClient
+    private val packageService: PackageService
 ) : EventPayloadBuilder(
     eventType = EventType.VERSION_CREATED
 ) {
 
     override fun build(event: ArtifactEvent): VersionCreatedEventPayload {
+        val packageKey = event.data["packageKey"].toString()
         return VersionCreatedEventPayload(
             user = getUser(event.userId),
-            packageVersion = getPackageVersion(event.projectId, event.repoName,
-                event.data["packageKey"].toString(), event.data["packageVersion"].toString())
+            packageKey = packageKey,
+            packageVersion = getPackageVersion(
+                projectId = event.projectId,
+                repoName = event.repoName,
+                packageKey = packageKey,
+                version = event.data["packageVersion"].toString()
+            )
         )
     }
 
@@ -58,7 +64,7 @@ class VersionCreatedPayloadBuilder(
         packageKey: String,
         version: String
     ): PackageVersion {
-        return packageClient.findVersionByName(projectId, repoName, packageKey, version).data
+        return packageService.findVersionByName(projectId, repoName, packageKey, version)
             ?: throw NotFoundException(WebHookMessageCode.WEBHOOK_VERSION_NOT_FOUND)
     }
 }

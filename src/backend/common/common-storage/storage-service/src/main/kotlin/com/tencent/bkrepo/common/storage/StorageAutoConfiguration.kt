@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -33,8 +33,8 @@ package com.tencent.bkrepo.common.storage
 
 import com.tencent.bkrepo.common.api.exception.SystemErrorException
 import com.tencent.bkrepo.common.api.message.CommonMessageCode
+import com.tencent.bkrepo.common.storage.config.StorageProperties
 import com.tencent.bkrepo.common.storage.core.FileStorage
-import com.tencent.bkrepo.common.storage.core.StorageProperties
 import com.tencent.bkrepo.common.storage.core.StorageService
 import com.tencent.bkrepo.common.storage.core.cache.CacheStorageService
 import com.tencent.bkrepo.common.storage.core.cache.indexer.StorageCacheIndexConfiguration
@@ -43,13 +43,16 @@ import com.tencent.bkrepo.common.storage.core.locator.HashFileLocator
 import com.tencent.bkrepo.common.storage.core.simple.SimpleStorageService
 import com.tencent.bkrepo.common.storage.credentials.StorageType
 import com.tencent.bkrepo.common.storage.filesystem.FileSystemStorage
-import com.tencent.bkrepo.common.storage.filesystem.cleanup.FileExpireResolver
+import com.tencent.bkrepo.common.storage.filesystem.cleanup.FileRetainResolver
 import com.tencent.bkrepo.common.storage.innercos.InnerCosFileStorage
+import com.tencent.bkrepo.common.storage.innercos.http.CosHttpClient
+import com.tencent.bkrepo.common.storage.innercos.metrics.CosUploadMetrics
 import com.tencent.bkrepo.common.storage.monitor.StorageHealthMonitor
 import com.tencent.bkrepo.common.storage.monitor.StorageHealthMonitorHelper
 import com.tencent.bkrepo.common.storage.s3.S3Storage
 import com.tencent.bkrepo.common.storage.util.PolarisUtil
 import com.tencent.bkrepo.common.storage.util.StorageUtils
+import io.micrometer.observation.ObservationRegistry
 import org.slf4j.LoggerFactory
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.context.properties.EnableConfigurationProperties
@@ -69,6 +72,7 @@ import java.util.concurrent.ConcurrentHashMap
 @Import(
     StorageUtils::class,
     StorageCacheIndexConfiguration::class,
+    CosUploadMetrics::class
 )
 class StorageAutoConfiguration {
 
@@ -93,17 +97,12 @@ class StorageAutoConfiguration {
     fun storageService(
         properties: StorageProperties,
         threadPoolTaskExecutor: ThreadPoolTaskExecutor,
-        fileExpireResolver: FileExpireResolver?,
+        fileRetainResolver: FileRetainResolver?,
     ): StorageService {
-        fileExpireResolver?.let {
-            logger.info("Use FileExpireResolver[${fileExpireResolver::class.simpleName}].")
-        }
+        fileRetainResolver?.let { logger.info("Use FileRetainResolver[${fileRetainResolver::class.simpleName}].") }
         val cacheEnabled = properties.defaultStorageCredentials().cache.enabled
         val storageService = if (cacheEnabled) {
-            CacheStorageService(
-                threadPoolTaskExecutor,
-                fileExpireResolver,
-            )
+            CacheStorageService(threadPoolTaskExecutor, fileRetainResolver)
         } else {
             SimpleStorageService()
         }
@@ -113,14 +112,7 @@ class StorageAutoConfiguration {
 
     @Bean
     fun storageHealthMonitorHelper(storageProperties: StorageProperties): StorageHealthMonitorHelper {
-        val map = ConcurrentHashMap<String, StorageHealthMonitor>()
-        val location = storageProperties
-            .defaultStorageCredentials().upload.location
-        map[location] = StorageHealthMonitor(
-            storageProperties,
-            location,
-        )
-        return StorageHealthMonitorHelper(map)
+        return StorageHealthMonitorHelper(ConcurrentHashMap<String, StorageHealthMonitor>())
     }
 
     @Bean
@@ -129,6 +121,9 @@ class StorageAutoConfiguration {
 
     @Bean
     fun polarisUtil(storageProperties: StorageProperties) = PolarisUtil(storageProperties)
+
+    @Bean
+    fun cosHttpClient(registry: ObservationRegistry) = CosHttpClient(registry)
 
     companion object {
         private val logger = LoggerFactory.getLogger(StorageAutoConfiguration::class.java)

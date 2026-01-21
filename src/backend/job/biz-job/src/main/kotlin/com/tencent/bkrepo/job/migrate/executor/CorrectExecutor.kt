@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2024 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2024 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -27,16 +27,18 @@
 
 package com.tencent.bkrepo.job.migrate.executor
 
+import com.tencent.bkrepo.common.metadata.service.file.FileReferenceService
 import com.tencent.bkrepo.common.storage.core.StorageService
 import com.tencent.bkrepo.job.migrate.config.MigrateRepoStorageProperties
 import com.tencent.bkrepo.job.migrate.dao.MigrateFailedNodeDao
 import com.tencent.bkrepo.job.migrate.dao.MigrateRepoStorageTaskDao
+import com.tencent.bkrepo.job.migrate.executor.handler.MigrateFailedHandler
 import com.tencent.bkrepo.job.migrate.pojo.MigrationContext
 import com.tencent.bkrepo.job.migrate.utils.ExecutingTaskRecorder
 import com.tencent.bkrepo.job.migrate.utils.MigrateRepoStorageUtils.buildThreadPoolExecutor
 import com.tencent.bkrepo.job.migrate.utils.NodeIterator
 import com.tencent.bkrepo.job.migrate.utils.TransferDataExecutor
-import com.tencent.bkrepo.repository.api.FileReferenceClient
+import com.tencent.bkrepo.job.service.MigrateArchivedFileService
 import org.slf4j.LoggerFactory
 import org.springframework.data.mongodb.core.MongoTemplate
 import org.springframework.stereotype.Component
@@ -46,20 +48,23 @@ import java.util.concurrent.TimeUnit
 @Component
 class CorrectExecutor(
     properties: MigrateRepoStorageProperties,
-    fileReferenceClient: FileReferenceClient,
+    fileReferenceService: FileReferenceService,
     migrateRepoStorageTaskDao: MigrateRepoStorageTaskDao,
     migrateFailedNodeDao: MigrateFailedNodeDao,
     storageService: StorageService,
     executingTaskRecorder: ExecutingTaskRecorder,
+    migrateArchivedFileService: MigrateArchivedFileService,
+    private val migrateFailedHandler: MigrateFailedHandler,
     private val transferDataExecutor: TransferDataExecutor,
     private val mongoTemplate: MongoTemplate,
 ) : BaseTaskExecutor(
     properties,
     migrateRepoStorageTaskDao,
     migrateFailedNodeDao,
-    fileReferenceClient,
+    fileReferenceService,
     storageService,
     executingTaskRecorder,
+    migrateArchivedFileService,
 ) {
     /**
      * 用于执行数据矫正的线程池
@@ -80,14 +85,11 @@ class CorrectExecutor(
             val iterator = NodeIterator(task, mongoTemplate)
             iterator.forEach { node ->
                 context.incTransferringCount()
-                transferDataExecutor.execute {
+                transferDataExecutor.execute(node) {
                     try {
                         correctNode(context, node)
                     } catch (e: Exception) {
-                        saveMigrateFailedNode(task.id!!, node)
-                        logger.error(
-                            "correct node[${node.fullPath}] failed, task[${task.projectId}/${task.repoName}]", e
-                        )
+                        migrateFailedHandler.handle(task, node, e)
                     } finally {
                         context.decTransferringCount()
                     }

@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -31,22 +31,21 @@
 
 package com.tencent.bkrepo.repository.pojo.download
 
-import io.swagger.annotations.ApiModel
-import io.swagger.annotations.ApiModelProperty
+import io.swagger.v3.oas.annotations.media.Schema
 import java.time.LocalDate
 
-@ApiModel("包下载记录查询请求")
+@Schema(title = "包下载记录查询请求")
 data class DetailsQueryRequest(
-    @ApiModelProperty("所属项目", required = true)
+    @get:Schema(title = "所属项目", required = true)
     val projectId: String,
-    @ApiModelProperty("仓库名称", required = true)
+    @get:Schema(title = "仓库名称", required = true)
     val repoName: String,
-    @ApiModelProperty("包唯一key", required = true)
+    @get:Schema(title = "包唯一key", required = true)
     val packageKey: String,
-    @ApiModelProperty("包版本，不提供则查询所有包版本数据", required = false)
+    @get:Schema(title = "包版本，不提供则查询所有包版本数据", required = false)
     val packageVersion: String? = null,
-    @ApiModelProperty("查询起始日期，默认为今天", required = false)
+    @get:Schema(title = "查询起始日期，默认为今天", required = false)
     val fromDate: LocalDate? = null,
-    @ApiModelProperty("查询截止日期，默认为今天", required = false)
+    @get:Schema(title = "查询截止日期，默认为今天", required = false)
     val toDate: LocalDate? = null
 )

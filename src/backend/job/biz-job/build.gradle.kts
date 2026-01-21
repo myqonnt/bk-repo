@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2019 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2019 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -26,7 +26,7 @@
  */
 dependencies {
     implementation(project(":job:api-job"))
-    implementation(project(":common:common-service"))
+    implementation(project(":common:common-service:service-servlet"))
     implementation(project(":common:common-job"))
     implementation(project(":common:common-security"))
     implementation(project(":common:common-storage:storage-service"))
@@ -36,15 +36,19 @@ dependencies {
     implementation(project(":common:common-mongo-reactive"))
     implementation(project(":common:common-artifact:artifact-service"))
     implementation(project(":common:common-artifact:artifact-cache"))
+    implementation(project(":common:common-lock"))
     implementation(project(":repository:api-repository"))
-    implementation(project(":helm:api-helm"))
-    implementation(project(":oci:api-oci"))
+    implementation(project(":core:helm:api-helm"))
+    implementation(project(":core:oci:api-oci"))
+    implementation(project(":core:maven:api-maven"))
     implementation(project(":replication:api-replication"))
     implementation(project(":archive:api-archive"))
-    implementation(project(":common:common-operate:operate-service"))
+    implementation(project(":common:common-archive:archive-service"))
     implementation("org.springframework.boot:spring-boot-starter-data-mongodb")
     implementation("io.micrometer:micrometer-registry-prometheus")
+    implementation("com.tencent.devops:devops-schedule-common")
     testImplementation("org.springframework.boot:spring-boot-starter-test")
+    testImplementation("de.flapdoodle.embed:de.flapdoodle.embed.mongo.spring30x")
     testImplementation("de.flapdoodle.embed:de.flapdoodle.embed.mongo")
     testImplementation("org.mockito.kotlin:mockito-kotlin")
     testImplementation("io.mockk:mockk")

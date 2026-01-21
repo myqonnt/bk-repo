@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -28,6 +28,7 @@
 package com.tencent.bkrepo.analyst.service
 
 import com.tencent.bkrepo.analyst.pojo.ScanTask
+import com.tencent.bkrepo.analyst.pojo.ScanTaskWaitingTime
 import com.tencent.bkrepo.analyst.pojo.request.ArtifactVulnerabilityRequest
 import com.tencent.bkrepo.analyst.pojo.request.FileScanResultDetailRequest
 import com.tencent.bkrepo.analyst.pojo.request.FileScanResultOverviewRequest
@@ -155,4 +156,9 @@ interface ScanTaskService {
      * @return 制品扫描结果预览信息
      */
     fun subtaskLicenseOverview(subtaskId: String): FileLicensesResultOverview
+
+    /**
+     * 获取完成扫描任务的预估等待时间
+     */
+    fun taskWaitTime(taskId: String): ScanTaskWaitingTime
 }

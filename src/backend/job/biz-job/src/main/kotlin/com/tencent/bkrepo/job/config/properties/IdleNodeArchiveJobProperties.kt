@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2019 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2019 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -27,16 +27,21 @@
 
 package com.tencent.bkrepo.job.config.properties
 
+import com.tencent.bkrepo.archive.constant.ArchiveStorageClass
 import com.tencent.bkrepo.common.artifact.pojo.RepositoryType
 import org.springframework.boot.context.properties.ConfigurationProperties
+import org.springframework.stereotype.Component
 import org.springframework.util.unit.DataSize
 
+@Component
 @ConfigurationProperties(value = "job.idle-node-archive")
-class IdleNodeArchiveJobProperties(
-    override var cron: String = "0 0 0 * * ?",
-    var days: Int = 365,
-    var fileSizeThreshold: DataSize = DataSize.ofMegabytes(10),
-    var projects: Set<String> = emptySet(),
-    var ignoreStorageCredentialsKeys: Set<String> = emptySet(),
-    var ignoreRepoType: Set<String> = setOf(RepositoryType.DOCKER.name, RepositoryType.OCI.name),
-) : MongodbJobProperties()
+class IdleNodeArchiveJobProperties: MongodbJobProperties() {
+    override var enabled: Boolean = false
+    override var cron: String = "0 0 0 * * ?"
+    var days: Int = 365
+    var fileSizeThreshold: DataSize = DataSize.ofMegabytes(10)
+    var storageClass: ArchiveStorageClass = ArchiveStorageClass.DEEP_ARCHIVE
+    var projectArchiveCredentialsKeys: Map<String, String?> = emptyMap()
+    var ignoreStorageCredentialsKeys: Set<String> = emptySet()
+    var ignoreRepoType: Set<String> = setOf(RepositoryType.DOCKER.name, RepositoryType.OCI.name)
+}

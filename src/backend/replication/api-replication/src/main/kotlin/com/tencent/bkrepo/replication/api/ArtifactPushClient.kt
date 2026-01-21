@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -34,8 +34,8 @@ package com.tencent.bkrepo.replication.api
 import com.tencent.bkrepo.common.api.constant.REPLICATION_SERVICE_NAME
 import com.tencent.bkrepo.common.api.pojo.Response
 import com.tencent.bkrepo.replication.pojo.remote.request.ArtifactPushRequest
-import io.swagger.annotations.Api
-import io.swagger.annotations.ApiOperation
+import io.swagger.v3.oas.annotations.Operation
+import io.swagger.v3.oas.annotations.tags.Tag
 import org.springframework.cloud.openfeign.FeignClient
 import org.springframework.context.annotation.Primary
 import org.springframework.web.bind.annotation.PostMapping
@@ -45,12 +45,12 @@ import org.springframework.web.bind.annotation.RequestMapping
 /**
  * 制品同步到远端仓库
  */
-@Api("制品同步到远端仓库")
+@Tag(name = "制品同步到远端仓库")
 @Primary
 @FeignClient(REPLICATION_SERVICE_NAME, contextId = "ArtifactPushClient")
 @RequestMapping("/service/push")
 interface ArtifactPushClient {
-    @ApiOperation("推送对应artifact到配置的远端仓库")
+    @Operation(summary = "推送对应artifact到配置的远端仓库")
     @PostMapping("/artifact")
     fun artifactPush(@RequestBody request: ArtifactPushRequest): Response<Void>
 }

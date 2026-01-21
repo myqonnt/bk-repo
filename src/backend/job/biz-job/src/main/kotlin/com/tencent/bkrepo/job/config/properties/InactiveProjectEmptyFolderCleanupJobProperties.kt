@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -27,13 +27,22 @@
 
 package com.tencent.bkrepo.job.config.properties
 
+import com.tencent.bkrepo.common.artifact.constant.CUSTOM
+import com.tencent.bkrepo.common.artifact.constant.LOG
+import com.tencent.bkrepo.common.artifact.constant.PIPELINE
+import com.tencent.bkrepo.common.artifact.constant.REPORT
 import org.springframework.boot.context.properties.ConfigurationProperties
+import org.springframework.stereotype.Component
 
 /**
  * 无变更项目空目录清理任务配置项
  */
+@Component
 @ConfigurationProperties("job.inactive-project-empty-folder-cleanup")
-class InactiveProjectEmptyFolderCleanupJobProperties(
-    override var enabled: Boolean = true,
-    override var cron: String = "0 0 0/12 * * ?",
-) : StatJobProperties()
+class InactiveProjectEmptyFolderCleanupJobProperties: StatJobProperties() {
+    override var enabled: Boolean = true
+    override var cron: String = "0 0 0/12 * * ?"
+    var deletedEmptyFolder: Boolean = false
+    // 允许删除空目录的仓库列表
+    var deleteFolderRepos: List<String> = listOf(REPORT, LOG, PIPELINE, CUSTOM)
+}

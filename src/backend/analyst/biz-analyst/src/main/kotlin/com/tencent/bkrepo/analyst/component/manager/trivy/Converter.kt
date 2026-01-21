@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -32,6 +32,7 @@ import com.tencent.bkrepo.common.analysis.pojo.scanner.trivy.VulnerabilityItem
 import com.tencent.bkrepo.repository.constant.SYSTEM_USER
 import com.tencent.bkrepo.analyst.component.manager.knowledgebase.TCve
 import java.time.LocalDateTime
+import java.util.Locale
 
 object Converter {
     /**
@@ -63,5 +64,6 @@ object Converter {
         }
     }
 
-    private fun pocIdOf(vulnerabilityId: String) = "${TrivyScanner.TYPE.toLowerCase()}-$vulnerabilityId"
+    private fun pocIdOf(vulnerabilityId: String) =
+        "${TrivyScanner.TYPE.lowercase(Locale.getDefault())}-$vulnerabilityId"
 }

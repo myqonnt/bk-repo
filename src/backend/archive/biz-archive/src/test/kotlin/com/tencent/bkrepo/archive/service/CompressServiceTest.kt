@@ -10,9 +10,6 @@ import com.tencent.bkrepo.common.api.constant.StringPool
 import com.tencent.bkrepo.common.api.exception.ErrorCodeException
 import com.tencent.bkrepo.common.storage.StorageAutoConfiguration
 import com.tencent.bkrepo.common.storage.core.StorageService
-import com.tencent.bkrepo.repository.api.FileReferenceClient
-import com.tencent.bkrepo.repository.api.RepositoryClient
-import com.tencent.bkrepo.repository.api.StorageCredentialsClient
 import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -21,7 +18,7 @@ import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.autoconfigure.ImportAutoConfiguration
 import org.springframework.boot.autoconfigure.task.TaskExecutionAutoConfiguration
 import org.springframework.boot.test.autoconfigure.data.mongo.DataMongoTest
-import org.springframework.boot.test.mock.mockito.MockBean
+import org.springframework.test.context.bean.override.mockito.MockitoBean
 
 @DataMongoTest
 @ImportAutoConfiguration(StorageAutoConfiguration::class, TaskExecutionAutoConfiguration::class)
@@ -29,20 +26,11 @@ class CompressServiceTest @Autowired constructor(
     private val compressService: CompressService,
     private val compressFileRepository: CompressFileRepository,
 ) : BaseTest() {
-    @MockBean
+    @MockitoBean
     lateinit var bdZipManager: BDZipManager
 
-    @MockBean
+    @MockitoBean
     lateinit var storageService: StorageService
-
-    @MockBean
-    lateinit var fileReferenceClient: FileReferenceClient
-
-    @MockBean
-    lateinit var storageCredentialsClient: StorageCredentialsClient
-
-    @MockBean
-    lateinit var repositoryClient: RepositoryClient
 
     @BeforeEach
     fun beforeEach() {

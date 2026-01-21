@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -106,6 +106,7 @@ const val DEFAULT_STORAGE_KEY = "default"
  */
 const val X_CHECKSUM_MD5 = "X-Checksum-Md5"
 const val X_CHECKSUM_SHA256 = "X-Checksum-Sha256"
+const val X_CHECKSUM_CRC64ECMA = "X-Checksum-Crc64ecma"
 
 /**
  * 流水线仓库
@@ -161,6 +162,7 @@ const val SOURCE_TYPE = "sourceType"
 const val FORBID_STATUS = "forbidStatus"
 const val FORBID_USER = "forbidUser"
 const val FORBID_TYPE = "forbidType"
+const val FORBID_REASON = "forbidReason"
 
 // 制品扫描状态
 const val SCAN_STATUS = "scanStatus"
@@ -185,3 +187,13 @@ const val METADATA_KEY_LINK_FULL_PATH = "targetFullPath"
  * sha256长度
  */
 const val SHA256_STR_LENGTH = 64
+
+/**
+ * 下载请求参数，用于指示从远程仓库下载时是否读取缓存
+ */
+const val FLAG_QUERY_CACHE = "queryCacheFlag"
+
+/**
+ * 制品加解密key请求头
+ */
+const val HEADER_CRYPT_KEY = "X-BKREPO-CRYPT-KEY"

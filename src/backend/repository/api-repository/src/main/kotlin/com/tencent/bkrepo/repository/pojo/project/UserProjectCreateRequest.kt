@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -31,19 +31,19 @@
 
 package com.tencent.bkrepo.repository.pojo.project
 
-import io.swagger.annotations.ApiModel
-import io.swagger.annotations.ApiModelProperty
+import io.swagger.v3.oas.annotations.media.Schema
 
-@ApiModel("创建项目请求")
+
+@Schema(title = "创建项目请求")
 data class UserProjectCreateRequest(
-    @ApiModelProperty("项目名")
+    @get:Schema(title = "项目名")
     override val name: String,
-    @ApiModelProperty("显示名")
+    @get:Schema(title = "显示名")
     val displayName: String,
-    @ApiModelProperty("描述")
+    @get:Schema(title = "描述")
     val description: String,
-    @ApiModelProperty("创建本地权限")
+    @get:Schema(title = "创建本地权限")
     val createPermission: Boolean = true,
-    @ApiModelProperty("项目元数据")
+    @get:Schema(title = "项目元数据")
     val metadata: List<ProjectMetadata> = emptyList(),
 ) : ProjectRequest

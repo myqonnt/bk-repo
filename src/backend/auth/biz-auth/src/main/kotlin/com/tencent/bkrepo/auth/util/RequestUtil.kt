@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -35,6 +35,8 @@ import com.tencent.bkrepo.auth.constant.PROJECT_MANAGE_ID
 import com.tencent.bkrepo.auth.constant.PROJECT_MANAGE_NAME
 import com.tencent.bkrepo.auth.constant.PROJECT_VIEWER_ID
 import com.tencent.bkrepo.auth.constant.PROJECT_VIEWER_NAME
+import com.tencent.bkrepo.auth.constant.REPLICATION_MANAGE_ID
+import com.tencent.bkrepo.auth.constant.REPLICATION_MANAGE_NAME
 import com.tencent.bkrepo.auth.constant.REPO_MANAGE_ID
 import com.tencent.bkrepo.auth.constant.REPO_MANAGE_NAME
 import com.tencent.bkrepo.auth.pojo.enums.RoleType
@@ -79,6 +81,18 @@ object RequestUtil {
             projectId = projectId,
             repoName = repoName,
             admin = true
+        )
+    }
+
+    /**
+     * 构造replication管理员请求
+     */
+    fun buildReplicationAdminRequest(): CreateRoleRequest {
+        return CreateRoleRequest(
+            roleId = REPLICATION_MANAGE_ID,
+            name = REPLICATION_MANAGE_NAME,
+            type = RoleType.SERVICE,
+            admin = false
         )
     }
 }

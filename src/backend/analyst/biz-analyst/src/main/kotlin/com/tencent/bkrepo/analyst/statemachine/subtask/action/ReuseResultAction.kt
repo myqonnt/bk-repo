@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -46,6 +46,7 @@ import com.tencent.bkrepo.statemachine.Event
 import com.tencent.bkrepo.statemachine.TransitResult
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.context.ApplicationEventPublisher
+import org.springframework.context.annotation.Lazy
 import org.springframework.transaction.annotation.Transactional
 import java.time.LocalDateTime
 
@@ -62,6 +63,7 @@ class ReuseResultAction(
     private val publisher: ApplicationEventPublisher
 ) : SubtaskAction {
     @Autowired
+    @Lazy
     private lateinit var self: ReuseResultAction
 
     override fun execute(source: String, target: String, event: Event): TransitResult {

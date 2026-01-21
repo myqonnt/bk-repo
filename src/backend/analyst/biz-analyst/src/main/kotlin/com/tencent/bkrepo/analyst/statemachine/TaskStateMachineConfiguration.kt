@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -97,8 +97,7 @@ class TaskStateMachineConfiguration(
             transition(NEVER_SCANNED, CREATED, CREATE, subtaskActions)
             transition(NEVER_SCANNED, BLOCKED, BLOCK, subtaskActions)
             transition(BLOCKED, CREATED, NOTIFY, subtaskActions)
-            // 通过dispatcher多次分发失败时，可能从CREATED状态转移到FAILED状态
-            transition(CREATED, FAILED, SubtaskEvent.FAILED, subtaskActions)
+            transition(CREATED, TIMEOUT, SubtaskEvent.TIMEOUT, subtaskActions)
             transitions(arrayOf(CREATED, EXECUTING), PULLED, PULL, subtaskActions)
             transition(PULLED, PULLED, PULL, subtaskActions)
             transition(PULLED, EXECUTING, EXECUTE, subtaskActions)

@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -36,7 +36,7 @@ import com.tencent.bkrepo.common.analysis.pojo.scanner.dependencycheck.result.De
 import com.tencent.bkrepo.common.analysis.pojo.scanner.dependencycheck.result.DependencyScanExecutorResult
 import com.tencent.bkrepo.common.analysis.pojo.scanner.dependencycheck.scanner.DependencyScanner
 import com.tencent.bkrepo.common.analysis.pojo.scanner.utils.normalizedLevel
-import com.tencent.bkrepo.common.storage.core.StorageProperties
+import com.tencent.bkrepo.common.storage.config.StorageProperties
 import com.tencent.bkrepo.analysis.executor.ScanExecutor
 import com.tencent.bkrepo.analysis.executor.pojo.ScanExecutorTask
 import org.slf4j.LoggerFactory
@@ -55,7 +55,6 @@ class DependencyScanExecutor @Autowired constructor(
             val sha256 = task.sha256
             val first = sha256.substring(0, 2)
             val second = sha256.substring(2, 4)
-            logger.info("storageProperties:${storageProperties.toJsonString()}")
             val path = storageProperties.filesystem.path
             val storePath = if (!path.startsWith("/")) {
                 "${System.getProperties()["user.dir"]}/$path".removeSuffix("/")

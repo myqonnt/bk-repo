@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -30,6 +30,7 @@ package com.tencent.bkrepo.analyst.model
 import org.springframework.data.mongodb.core.index.CompoundIndex
 import org.springframework.data.mongodb.core.index.CompoundIndexes
 import org.springframework.data.mongodb.core.mapping.Document
+import org.springframework.util.unit.DataSize
 import java.time.LocalDateTime
 
 @Document("scanner")
@@ -76,4 +77,8 @@ data class TScanner(
      * 支持扫描的类型[com.tencent.bkrepo.common.analysis.pojo.scanner.ScanType]
      */
     val supportScanTypes: List<String> = emptyList(),
+    /**
+     * 扫描速率
+     */
+    val scanRate: Long? = DataSize.ofMegabytes(20).toBytes()
 )

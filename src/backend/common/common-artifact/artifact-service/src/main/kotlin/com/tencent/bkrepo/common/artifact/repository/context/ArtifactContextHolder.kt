@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -32,6 +32,7 @@
 package com.tencent.bkrepo.common.artifact.repository.context
 
 import com.google.common.cache.CacheBuilder
+import com.tencent.bk.audit.context.ActionAuditContext
 import com.tencent.bkrepo.common.api.constant.CharPool
 import com.tencent.bkrepo.common.artifact.api.ArtifactInfo
 import com.tencent.bkrepo.common.artifact.config.ArtifactConfigurer
@@ -43,22 +44,26 @@ import com.tencent.bkrepo.common.artifact.constant.REPO_KEY
 import com.tencent.bkrepo.common.artifact.constant.REPO_NAME
 import com.tencent.bkrepo.common.artifact.constant.REPO_RATE_LIMIT_KEY
 import com.tencent.bkrepo.common.artifact.exception.RepoNotFoundException
+import com.tencent.bkrepo.common.artifact.manager.NodeForwardService
 import com.tencent.bkrepo.common.artifact.pojo.RepositoryCategory
+import com.tencent.bkrepo.common.artifact.pojo.RepositoryId
 import com.tencent.bkrepo.common.artifact.pojo.RepositoryType
 import com.tencent.bkrepo.common.artifact.repository.composite.CompositeRepository
 import com.tencent.bkrepo.common.artifact.repository.core.ArtifactRepository
 import com.tencent.bkrepo.common.artifact.repository.proxy.ProxyRepository
 import com.tencent.bkrepo.common.security.http.core.HttpAuthSecurity
+import com.tencent.bkrepo.common.security.util.SecurityUtils
 import com.tencent.bkrepo.common.service.util.HttpContextHolder
-import com.tencent.bkrepo.common.storage.core.config.RateLimitProperties
+import com.tencent.bkrepo.common.storage.config.RateLimitProperties
+import com.tencent.bkrepo.common.storage.credentials.StorageCredentials
 import com.tencent.bkrepo.repository.pojo.node.NodeDetail
 import com.tencent.bkrepo.repository.pojo.repo.RepositoryDetail
+import jakarta.servlet.http.HttpServletRequest
+import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.util.unit.DataSize
 import org.springframework.web.servlet.HandlerMapping
 import java.util.concurrent.TimeUnit
-import javax.servlet.http.HttpServletRequest
-import kotlin.collections.set
 
 @Suppress("LateinitUsage", "LongParameterList", "TooManyFunctions") // 静态成员通过init构造函数初始化
 class ArtifactContextHolder(
@@ -66,7 +71,8 @@ class ArtifactContextHolder(
     compositeRepository: CompositeRepository,
     proxyRepository: ProxyRepository,
     artifactClient: ArtifactClient,
-    private val httpAuthSecurity: ObjectProvider<HttpAuthSecurity>
+    httpAuthSecurity: ObjectProvider<HttpAuthSecurity>,
+    nodeForwardService: ObjectProvider<NodeForwardService>,
 ) {
 
     init {
@@ -75,6 +81,7 @@ class ArtifactContextHolder(
         Companion.proxyRepository = proxyRepository
         Companion.artifactClient = artifactClient
         Companion.httpAuthSecurity = httpAuthSecurity
+        Companion.nodeForwardService = nodeForwardService
         require(artifactConfigurers.isNotEmpty()) { "No ArtifactConfigurer found!" }
         artifactConfigurers.forEach {
             artifactConfigurerMap[it.getRepositoryType()] = it
@@ -82,11 +89,13 @@ class ArtifactContextHolder(
     }
 
     companion object {
+        private val logger = LoggerFactory.getLogger(ArtifactContextHolder::class.java)
         private lateinit var artifactConfigurers: List<ArtifactConfigurer>
         private lateinit var compositeRepository: CompositeRepository
         private lateinit var proxyRepository: ProxyRepository
         private lateinit var artifactClient: ArtifactClient
         private lateinit var httpAuthSecurity: ObjectProvider<HttpAuthSecurity>
+        private lateinit var nodeForwardService: ObjectProvider<NodeForwardService>
 
 
         private const val RECEIVE_RATE_LIMIT_OF_REPO = "receiveRateLimit"
@@ -286,6 +295,34 @@ class ArtifactContextHolder(
         }
 
         /**
+         * 判断是否需要forward
+         *
+         * @param node 待下载node
+         * @param storageCredentials 待下载node所在存储
+         * @param userId 正在下载的用户id
+         *
+         * @return 不需要forward时返回null，需要时候返回forward node与其所在存储
+         */
+        fun getForwardNodeDetail(
+            node: NodeDetail,
+            storageCredentials: StorageCredentials?,
+            userId: String = SecurityUtils.getUserId(),
+        ): Pair<NodeDetail, StorageCredentials?>? {
+            val forwardNode: NodeDetail = nodeForwardService.ifAvailable?.forward(node, userId) ?: return null
+            logger.info("Load[${node.identity()}] forward to [${forwardNode.identity()}].")
+            ActionAuditContext.current().addExtendData("alphaApkSha256", forwardNode.sha256)
+            ActionAuditContext.current().addExtendData("alphaApkMd5", forwardNode.md5)
+            val forwardNodeStorageCredentials = if (forwardNode.repoName == node.repoName) {
+                storageCredentials
+            } else {
+                val repo = getRepoDetail(RepositoryId(forwardNode.projectId, forwardNode.repoName))
+                logger.info("use forward node storage credentials[${repo.storageCredentials?.key}]")
+                repo.storageCredentials
+            }
+            return Pair(forwardNode, forwardNodeStorageCredentials)
+        }
+
+        /**
          * 获取仓库级别的限速配置
          */
         fun getRateLimitOfRepo(): RateLimitProperties {
@@ -313,15 +350,6 @@ class ArtifactContextHolder(
             } catch (e: Exception) {
                 DataSize.ofBytes(-1)
             }
-        }
-    }
-
-    /**
-     * 仓库标识类
-     */
-    data class RepositoryId(val projectId: String, val repoName: String) {
-        override fun toString(): String {
-            return StringBuilder(projectId).append(CharPool.SLASH).append(repoName).toString()
         }
     }
 }

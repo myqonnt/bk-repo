@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -31,10 +31,9 @@
 
 dependencies {
     implementation(project(":common:common-api"))
-    implementation(project(":common:common-operate:operate-annotation"))
     api(project(":common:common-artifact:artifact-service"))
     implementation(project(":common:common-artifact:artifact-api"))
     api("com.alibaba:easyexcel:3.1.1")
+    api(project(":common:common-metadata:metadata-api"))
     compileOnly("org.springframework.cloud:spring-cloud-openfeign-core")
-    testImplementation(project(":common:common-operate:operate-service"))
 }

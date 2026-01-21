@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -75,6 +75,22 @@ object FolderUtils {
                     repoName = values[1],
                     fullPath = values[2]
                 )
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    /**
+     * 从缓存key中解析出collectionName
+     */
+    fun extractCollectionNameFromCacheKey(key: String, runCollection: Boolean = false): String? {
+        val values = key.split(StringPool.COLON)
+        return try {
+            if (runCollection) {
+                values.firstOrNull()
+            } else {
+                null
             }
         } catch (e: Exception) {
             null

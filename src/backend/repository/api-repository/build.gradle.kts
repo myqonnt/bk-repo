@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -34,6 +34,6 @@ dependencies {
     api(project(":common:common-artifact:artifact-api"))
     api(project(":common:common-query:query-api"))
     api(project(":common:common-storage:storage-api"))
-    api(project(":common:common-operate:operate-api"))
+    api(project(":common:common-metadata:metadata-api"))
     compileOnly("org.springframework.cloud:spring-cloud-openfeign-core")
 }

@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -28,15 +28,16 @@
 package com.tencent.bkrepo.analyst.pojo.request.scancodetoolkit
 
 import com.tencent.bkrepo.analyst.pojo.request.LoadResultArguments
-import com.tencent.bkrepo.common.query.model.PageLimit
 import com.tencent.bkrepo.common.analysis.pojo.scanner.scanCodeCheck.scanner.ScancodeToolkitScanner
-import io.swagger.annotations.ApiModelProperty
+import com.tencent.bkrepo.common.query.model.PageLimit
+import io.swagger.v3.oas.annotations.media.Schema
+
 
 class ScancodeToolkitResultArguments(
-    @ApiModelProperty("需要的许可id列表")
+    @get:Schema(title = "需要的许可id列表")
     val licenseIds: List<String> = emptyList(),
-    @ApiModelProperty("需要的许可风险等级列表")
+    @get:Schema(title = "需要的许可风险等级列表")
     val riskLevels: List<String> = emptyList(),
-    @ApiModelProperty("分页参数")
+    @get:Schema(title = "分页参数")
     val pageLimit: PageLimit = PageLimit()
 ) : LoadResultArguments(ScancodeToolkitScanner.TYPE)

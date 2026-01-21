@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -39,10 +39,13 @@ class NodeCleanEvent(
     override val resourceKey: String,
     override val userId: String,
     val deletedDate: String,
+    override val eventId: String? = generateEventId(),
+    override val source: String?,
 ) : ArtifactEvent(
     type = EventType.NODE_CLEAN,
     projectId = projectId,
     repoName = repoName,
     resourceKey = resourceKey,
-    userId = userId
+    userId = userId,
+    eventId = eventId
 )

@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2023 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2023 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -31,17 +31,18 @@
 
 package com.tencent.bkrepo.repository.pojo.favorite
 
-import io.swagger.annotations.ApiModelProperty
+import io.swagger.v3.oas.annotations.media.Schema
+
 
 data class FavoriteResult(
-    @ApiModelProperty("id")
+    @get:Schema(title = "id")
     val id: String?,
-    @ApiModelProperty("项目id")
+    @get:Schema(title = "项目id")
     val projectId: String,
-    @ApiModelProperty("仓库id")
+    @get:Schema(title = "仓库id")
     val repoName: String,
-    @ApiModelProperty("文件夹路径")
+    @get:Schema(title = "文件夹路径")
     val path: String,
-    @ApiModelProperty("文件夹路径")
+    @get:Schema(title = "文件夹路径")
     val type: FavoriteType
 )

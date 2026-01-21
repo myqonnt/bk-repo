@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2021 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2021 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -31,17 +31,18 @@
 
 package com.tencent.bkrepo.repository.pojo.node
 
-import io.swagger.annotations.ApiModelProperty
+import io.swagger.v3.oas.annotations.media.Schema
+
 
 /**
  * 节点恢复结果
  */
 data class NodeRestoreResult(
     val fullPath: String,
-    @ApiModelProperty("实际恢复的节点数量，包含了conflictCount")
+    @get:Schema(title = "实际恢复的节点数量，包含了conflictCount")
     val restoreCount: Long = 0L,
-    @ApiModelProperty("发生冲突并跳过的节点数量")
+    @get:Schema(title = "发生冲突并跳过的节点数量")
     val skipCount: Long = 0L,
-    @ApiModelProperty("发生冲突并覆盖的节点数量")
+    @get:Schema(title = "发生冲突并覆盖的节点数量")
     val conflictCount: Long = 0L
 )

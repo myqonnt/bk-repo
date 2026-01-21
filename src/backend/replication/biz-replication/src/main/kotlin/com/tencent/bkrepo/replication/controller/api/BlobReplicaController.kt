@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2019 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2019 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -27,6 +27,8 @@
 
 package com.tencent.bkrepo.replication.controller.api
 
+import com.tencent.bkrepo.auth.pojo.enums.PermissionAction
+import com.tencent.bkrepo.auth.pojo.enums.ResourceType
 import com.tencent.bkrepo.common.api.exception.ErrorCodeException
 import com.tencent.bkrepo.common.api.exception.NotFoundException
 import com.tencent.bkrepo.common.api.pojo.Response
@@ -35,8 +37,7 @@ import com.tencent.bkrepo.common.artifact.cns.CnsService
 import com.tencent.bkrepo.common.artifact.message.ArtifactMessageCode
 import com.tencent.bkrepo.common.artifact.pojo.RepositoryType
 import com.tencent.bkrepo.common.artifact.resolve.file.ArtifactFileFactory
-import com.tencent.bkrepo.common.security.permission.Principal
-import com.tencent.bkrepo.common.security.permission.PrincipalType
+import com.tencent.bkrepo.common.security.permission.Permission
 import com.tencent.bkrepo.common.service.util.ResponseBuilder
 import com.tencent.bkrepo.common.storage.core.StorageService
 import com.tencent.bkrepo.common.storage.credentials.StorageCredentials
@@ -66,7 +67,6 @@ import org.springframework.web.multipart.MultipartFile
  * blob数据同步接口
  * 用于同个集群中不同节点之间blob数据同步
  */
-@Principal(type = PrincipalType.ADMIN)
 @RestController
 class BlobReplicaController(
     private val storageService: StorageService,
@@ -78,6 +78,7 @@ class BlobReplicaController(
     private var cnsService: CnsService? = null
 
     @PostMapping(BLOB_PULL_URI)
+    @Permission(ResourceType.REPLICATION, PermissionAction.WRITE)
     fun pull(@RequestBody request: BlobPullRequest): ResponseEntity<InputStreamResource> {
         with(request) {
             val credentials = baseCacheHandler.credentialsCache.get(storageKey.orEmpty())
@@ -88,6 +89,7 @@ class BlobReplicaController(
     }
 
     @PostMapping(BLOB_PUSH_URI)
+    @Permission(ResourceType.REPLICATION, PermissionAction.WRITE)
     fun push(
         @RequestPart file: MultipartFile,
         @RequestParam sha256: String,
@@ -113,12 +115,16 @@ class BlobReplicaController(
         return if (fileName.isNullOrEmpty()) {
             ArtifactFileFactory.build(file, credentials)
         } else {
-            val filepath: String = credentials.upload.location + "/" + fileName
+            val randomId = System.nanoTime()
+            // 文件名加个随机值，避免并发存储同一个文件时，
+            // 前一个文件存储完后删除临时文件，导致其他线程读取时大小为0，导致文件存储异常
+            val filepath: String = credentials.upload.location + "/" + fileName + "-$randomId"
             ArtifactFileFactory.build(file, filepath)
         }
     }
 
     @GetMapping(BLOB_CHECK_URI)
+    @Permission(ResourceType.REPLICATION, PermissionAction.VIEW)
     fun check(
         @RequestParam sha256: String,
         @RequestParam storageKey: String? = null,
@@ -140,6 +146,7 @@ class BlobReplicaController(
      * 3:Close the session (PUT)
      */
     @PostMapping(BOLBS_UPLOAD_FIRST_STEP_URL)
+    @Permission(ResourceType.REPLICATION, PermissionAction.WRITE)
     fun startBlobUpload(
         @RequestParam sha256: String,
         @PathVariable projectId: String,
@@ -160,6 +167,7 @@ class BlobReplicaController(
         method = [RequestMethod.PATCH],
         value = [BOLBS_UPLOAD_SECOND_STEP_URL]
     )
+    @Permission(ResourceType.REPLICATION, PermissionAction.WRITE)
     fun uploadChunkedBlob(
         artifactFile: ArtifactFile,
         @RequestParam sha256: String,
@@ -184,17 +192,21 @@ class BlobReplicaController(
         method = [RequestMethod.PUT],
         value = [BOLBS_UPLOAD_SECOND_STEP_URL]
     )
+    @Permission(ResourceType.REPLICATION, PermissionAction.WRITE)
     fun finishBlobUpload(
         artifactFile: ArtifactFile,
         @RequestParam sha256: String,
         @RequestParam storageKey: String? = null,
         @RequestParam size: Long? = null,
         @RequestParam md5: String? = null,
+        @RequestParam(required = false) crc64ecma: String? = null,
         @PathVariable uuid: String,
         @PathVariable projectId: String,
         @PathVariable repoName: String,
     ) {
-        logger.info("The file (sha256 [$sha256], size [$size], md5 [$md5]) will be finished with $uuid")
+        logger.info(
+            "The file (sha256 [$sha256], size [$size], md5 [$md5], crc64ecma[$crc64ecma]) will be finished with $uuid"
+        )
         val credentials = baseCacheHandler.credentialsCache.get(storageKey.orEmpty())
         blobChunkedService.finishChunkedUpload(
             projectId = projectId,
@@ -204,7 +216,8 @@ class BlobReplicaController(
             artifactFile = artifactFile,
             uuid = uuid,
             size = size,
-            md5 = md5
+            md5 = md5,
+            crc64ecma = crc64ecma,
         )
     }
 

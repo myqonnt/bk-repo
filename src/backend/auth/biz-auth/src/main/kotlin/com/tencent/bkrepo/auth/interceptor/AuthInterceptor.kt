@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -32,41 +32,20 @@
 package com.tencent.bkrepo.auth.interceptor
 
 import com.tencent.bkrepo.auth.constant.AUTHORIZATION
-import com.tencent.bkrepo.auth.constant.AUTH_API_PERMISSION_AVAILABLE
 import com.tencent.bkrepo.auth.constant.AUTH_API_ACCOUNT_PREFIX
-import com.tencent.bkrepo.auth.constant.AUTH_API_EXT_PERMISSION_PREFIX
-import com.tencent.bkrepo.auth.constant.AUTH_API_INFO_PREFIX
-import com.tencent.bkrepo.auth.constant.AUTH_API_KEY_PREFIX
+import com.tencent.bkrepo.auth.constant.AUTH_API_AUTH_MODE_PREFIX
 import com.tencent.bkrepo.auth.constant.AUTH_API_OAUTH_PREFIX
-import com.tencent.bkrepo.auth.constant.AUTH_API_PERMISSION_LIST_IN_PROJECT_PREFIX
-import com.tencent.bkrepo.auth.constant.AUTH_API_PERMISSION_USER_PREFIX
-import com.tencent.bkrepo.auth.constant.AUTH_API_PROJECT_ADMIN_PREFIX
-import com.tencent.bkrepo.auth.constant.AUTH_API_ROLE_LIST_PREFIX
-import com.tencent.bkrepo.auth.constant.AUTH_API_TOKEN_LIST_PREFIX
-import com.tencent.bkrepo.auth.constant.AUTH_API_TOKEN_PREFIX
-import com.tencent.bkrepo.auth.constant.AUTH_API_USER_ASSET_USER_GROUP_PREFIX
-import com.tencent.bkrepo.auth.constant.AUTH_API_USER_DELETE_PREFIX
-import com.tencent.bkrepo.auth.constant.AUTH_API_USER_BKIAMV3_PREFIX
-import com.tencent.bkrepo.auth.constant.AUTH_API_USER_INFO_PREFIX
-import com.tencent.bkrepo.auth.constant.AUTH_API_USER_LIST_PREFIX
-import com.tencent.bkrepo.auth.constant.AUTH_API_USER_UPDATE_PREFIX
+import com.tencent.bkrepo.auth.constant.AUTH_API_PERMISSION_PREFIX
+import com.tencent.bkrepo.auth.constant.AUTH_API_ROLE_PREFIX
+import com.tencent.bkrepo.auth.constant.AUTH_API_USER_PREFIX
 import com.tencent.bkrepo.auth.constant.AUTH_CLUSTER_PERMISSION_CHECK_PREFIX
+import com.tencent.bkrepo.auth.constant.AUTH_CLUSTER_PREFIX
 import com.tencent.bkrepo.auth.constant.AUTH_CLUSTER_TOKEN_DECREMENT_PREFIX
 import com.tencent.bkrepo.auth.constant.AUTH_CLUSTER_TOKEN_DELETE_PREFIX
 import com.tencent.bkrepo.auth.constant.AUTH_CLUSTER_TOKEN_INFO_PREFIX
 import com.tencent.bkrepo.auth.constant.AUTH_FAILED_RESPONSE
-import com.tencent.bkrepo.auth.constant.AUTH_PROJECT_SUFFIX
-import com.tencent.bkrepo.auth.constant.AUTH_REPO_SUFFIX
 import com.tencent.bkrepo.auth.constant.BASIC_AUTH_HEADER_PREFIX
 import com.tencent.bkrepo.auth.constant.PLATFORM_AUTH_HEADER_PREFIX
-import com.tencent.bkrepo.auth.constant.AUTH_API_PERMISSION_LIST_PREFIX
-import com.tencent.bkrepo.auth.constant.AUTH_API_PERMISSION_CREATE_PREFIX
-import com.tencent.bkrepo.auth.constant.AUTH_API_PERMISSION_DELETE_PREFIX
-import com.tencent.bkrepo.auth.constant.AUTH_API_PERMISSION_UPDATE_PREFIX
-import com.tencent.bkrepo.auth.constant.AUTH_API_ROLE_DELETE_PREFIX
-import com.tencent.bkrepo.auth.constant.AUTH_API_ROLE_CREATE_PREFIX
-import com.tencent.bkrepo.auth.constant.AUTH_API_ROLE_EDIT_PREFIX
-import com.tencent.bkrepo.auth.constant.AUTH_API_PERMISSION_PERSONAL_PATH
 import com.tencent.bkrepo.auth.pojo.oauth.AuthorizationGrantType
 import com.tencent.bkrepo.auth.pojo.user.CreateUserRequest
 import com.tencent.bkrepo.auth.service.AccountService
@@ -87,13 +66,13 @@ import com.tencent.bkrepo.common.security.manager.AuthenticationManager
 import com.tencent.bkrepo.common.service.util.HttpSigner
 import com.tencent.bkrepo.common.service.util.SpringContextUtils
 import com.tencent.bkrepo.repository.constant.SYSTEM_USER
+import jakarta.servlet.http.HttpServletRequest
+import jakarta.servlet.http.HttpServletResponse
 import org.apache.commons.codec.digest.HmacAlgorithms
 import org.slf4j.LoggerFactory
 import org.springframework.web.servlet.HandlerInterceptor
 import org.springframework.web.servlet.HandlerMapping
 import java.util.Base64
-import javax.servlet.http.HttpServletRequest
-import javax.servlet.http.HttpServletResponse
 
 class AuthInterceptor(
     private val httpAuthSecurity: HttpAuthSecurity
@@ -107,7 +86,7 @@ class AuthInterceptor(
 
     override fun preHandle(request: HttpServletRequest, response: HttpServletResponse, handler: Any): Boolean {
         val authHeader = request.getHeader(AUTHORIZATION).orEmpty()
-        var authFailStr = String.format(AUTH_FAILED_RESPONSE, authHeader)
+        var authFailStr = String.format(AUTH_FAILED_RESPONSE, "empty auth header")
         try {
             // basic认证
             if (authHeader.startsWith(BASIC_AUTH_HEADER_PREFIX)) {
@@ -116,7 +95,7 @@ class AuthInterceptor(
 
             // platform认证
             if (authHeader.startsWith(PLATFORM_AUTH_HEADER_PREFIX)) {
-                authFailStr = String.format(AUTH_FAILED_RESPONSE, "illegal AUTHORIZATION")
+                authFailStr = String.format(AUTH_FAILED_RESPONSE, "illegal platform token")
                 return checkUserFromPlatform(request, authHeader)
             }
 
@@ -143,23 +122,22 @@ class AuthInterceptor(
     }
 
     private fun checkUserFromBasic(request: HttpServletRequest, authHeader: String): Boolean {
-        val projectAccess = userProjectApiSet.any { request.requestURI.contains(it) }
         val userAccess = userAccessApiSet.any { request.requestURI.contains(it) }
         val encodedCredentials = authHeader.removePrefix(BASIC_AUTH_HEADER_PREFIX)
         val decodedHeader = String(Base64.getDecoder().decode(encodedCredentials))
         val parts = decodedHeader.split(COLON)
-        require(parts.size == 2)
+        require(parts.size == CREDENTIAL_PARTS_SIZE)
         val user = userService.findUserByUserToken(parts[0], parts[1]) ?: run {
             logger.warn("find no user [${parts[0]}]")
-            throw IllegalArgumentException("check credential fail")
+            throw IllegalArgumentException("user name token mismatch")
         }
 
         request.setAttribute(USER_KEY, parts[0])
         request.setAttribute(ADMIN_USER, user.admin)
         // 非管理员访问非授权endpoint
-        if (!user.admin && !(projectAccess || userAccess)) {
+        if (!user.admin && !userAccess) {
             logger.warn("user [${parts[0]}] can not access this endpoint [${request.requestURI}]")
-            throw IllegalArgumentException("check credential fail")
+            throw IllegalArgumentException("user has no permission")
         }
         return true
     }
@@ -169,15 +147,15 @@ class AuthInterceptor(
         val encodedCredentials = authHeader.removePrefix(PLATFORM_AUTH_HEADER_PREFIX)
         val decodedHeader = String(Base64.getDecoder().decode(encodedCredentials))
         val parts = decodedHeader.split(COLON)
-        require(parts.size == 2)
+        require(parts.size == CREDENTIAL_PARTS_SIZE)
         val appId = accountService.checkCredential(parts[0], parts[1], AuthorizationGrantType.PLATFORM) ?: run {
             logger.warn("find no account [$parts[0]]")
-            throw IllegalArgumentException("check auth credential fail")
+            throw IllegalArgumentException("check platform credential failed")
         }
         val userId = request.getHeader(AUTH_HEADER_UID).orEmpty().trim()
         if (userId.isEmpty()) {
             logger.warn("platform auth with empty userId")
-            throw IllegalArgumentException("userId is empty")
+            throw IllegalArgumentException("platform auth with empty userId")
         }
         setAuthAttribute(userId, appId, request)
         return true
@@ -211,7 +189,6 @@ class AuthInterceptor(
     }
 
     private fun setAuthAttribute(userId: String, appId: String, request: HttpServletRequest) {
-        val projectAccess = userProjectApiSet.any { request.requestURI.contains(it) }
         val userAccess = userAccessApiSet.any { request.requestURI.contains(it) }
         val anonymousAccess = anonymousAccessApiSet.any { request.requestURI.contains(it) }
         val userInfo = userService.getUserInfoById(userId)
@@ -221,7 +198,7 @@ class AuthInterceptor(
             userService.createUser(createRequest)
         }
 
-        val condition = !anonymousAccess && !isAdmin && !userAccess && !projectAccess
+        val condition = !anonymousAccess && !isAdmin && !userAccess
         if (condition) {
             logger.warn("user [$userId] can not access the endpoint [${request.requestURI}]")
             throw IllegalArgumentException("user access admin endpoint")
@@ -256,46 +233,21 @@ class AuthInterceptor(
     }
 
     companion object {
-
         private val logger = LoggerFactory.getLogger(AuthInterceptor::class.java)
+        private const val CREDENTIAL_PARTS_SIZE = 2
 
         // 项目内权限校验api, 开放给项目内有权限用户使用，具体校验权限在方法内
-        private val userProjectApiSet = setOf(
-            AUTH_REPO_SUFFIX,
-            AUTH_PROJECT_SUFFIX,
-            AUTH_API_ACCOUNT_PREFIX,
-            AUTH_API_KEY_PREFIX,
-            AUTH_API_OAUTH_PREFIX,
-            AUTH_API_EXT_PERMISSION_PREFIX,
-            AUTH_API_PERMISSION_LIST_PREFIX,
-            AUTH_API_PERMISSION_CREATE_PREFIX,
-            AUTH_API_PERMISSION_DELETE_PREFIX,
-            AUTH_API_PERMISSION_UPDATE_PREFIX,
-            AUTH_API_ROLE_LIST_PREFIX,
-            AUTH_API_ROLE_CREATE_PREFIX,
-            AUTH_API_ROLE_DELETE_PREFIX,
-            AUTH_API_ROLE_EDIT_PREFIX
-        )
-
-        // 普通用户可访问api,开放给basic and platform用户访问
         private val userAccessApiSet = setOf(
-            AUTH_API_PROJECT_ADMIN_PREFIX,
-            AUTH_API_USER_INFO_PREFIX,
-            AUTH_API_TOKEN_LIST_PREFIX,
-            AUTH_API_TOKEN_PREFIX,
-            AUTH_API_USER_LIST_PREFIX,
-            AUTH_API_INFO_PREFIX,
-            AUTH_API_PERMISSION_LIST_IN_PROJECT_PREFIX,
-            AUTH_API_PERMISSION_USER_PREFIX,
-            AUTH_API_USER_UPDATE_PREFIX,
-            AUTH_API_USER_DELETE_PREFIX,
-            AUTH_API_USER_ASSET_USER_GROUP_PREFIX,
-            AUTH_API_USER_BKIAMV3_PREFIX,
-            AUTH_API_PERMISSION_PERSONAL_PATH
+            AUTH_API_USER_PREFIX,
+            AUTH_API_ACCOUNT_PREFIX,
+            AUTH_API_ROLE_PREFIX,
+            AUTH_API_PERMISSION_PREFIX,
+            AUTH_API_OAUTH_PREFIX,
+            AUTH_API_AUTH_MODE_PREFIX,
+            AUTH_CLUSTER_PREFIX
         )
 
         private val anonymousAccessApiSet = setOf(
-            AUTH_API_PERMISSION_AVAILABLE,
             AUTH_CLUSTER_PERMISSION_CHECK_PREFIX,
             AUTH_CLUSTER_TOKEN_INFO_PREFIX,
             AUTH_CLUSTER_TOKEN_DELETE_PREFIX,

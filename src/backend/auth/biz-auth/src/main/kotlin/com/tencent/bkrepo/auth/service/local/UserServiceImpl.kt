@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -34,6 +34,8 @@ package com.tencent.bkrepo.auth.service.local
 import com.tencent.bkrepo.auth.config.DevopsAuthConfig
 import com.tencent.bkrepo.auth.constant.DEFAULT_PASSWORD
 import com.tencent.bkrepo.auth.dao.UserDao
+import com.tencent.bkrepo.auth.dao.repository.RoleRepository
+import com.tencent.bkrepo.auth.helper.UserHelper
 import com.tencent.bkrepo.auth.message.AuthMessageCode
 import com.tencent.bkrepo.auth.pojo.token.Token
 import com.tencent.bkrepo.auth.pojo.token.TokenResult
@@ -43,19 +45,17 @@ import com.tencent.bkrepo.auth.pojo.user.CreateUserToRepoRequest
 import com.tencent.bkrepo.auth.pojo.user.UpdateUserRequest
 import com.tencent.bkrepo.auth.pojo.user.User
 import com.tencent.bkrepo.auth.pojo.user.UserInfo
-import com.tencent.bkrepo.auth.dao.repository.RoleRepository
-import com.tencent.bkrepo.auth.helper.UserHelper
 import com.tencent.bkrepo.auth.service.UserService
 import com.tencent.bkrepo.auth.util.DataDigestUtils
 import com.tencent.bkrepo.auth.util.request.UserRequestUtil
-import com.tencent.bkrepo.common.api.constant.ANONYMOUS_USER
+import com.tencent.bkrepo.auth.util.request.UserRequestUtil.validate
 import com.tencent.bkrepo.common.api.exception.ErrorCodeException
 import com.tencent.bkrepo.common.api.message.CommonMessageCode
 import com.tencent.bkrepo.common.api.pojo.Page
+import com.tencent.bkrepo.common.metadata.service.project.ProjectService
+import com.tencent.bkrepo.common.metadata.service.repo.RepositoryService
+import com.tencent.bkrepo.common.metadata.util.DesensitizedUtils
 import com.tencent.bkrepo.common.mongo.dao.util.Pages
-import com.tencent.bkrepo.common.operate.service.util.DesensitizedUtils
-import com.tencent.bkrepo.repository.api.ProjectClient
-import com.tencent.bkrepo.repository.api.RepositoryClient
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.dao.DuplicateKeyException
@@ -69,10 +69,10 @@ class UserServiceImpl constructor(
 ) : UserService {
 
     @Autowired
-    lateinit var repoClient: RepositoryClient
+    lateinit var repositoryService: RepositoryService
 
     @Autowired
-    lateinit var projectClient: ProjectClient
+    lateinit var projectService: ProjectService
 
     @Autowired
     lateinit var bkAuthConfig: DevopsAuthConfig
@@ -80,20 +80,12 @@ class UserServiceImpl constructor(
     private val userHelper by lazy { UserHelper(userDao, roleRepository) }
 
     override fun createUser(request: CreateUserRequest): Boolean {
-        // todo 校验
+        request.validate()
         logger.info("create user request : [${DesensitizedUtils.toString(request)}]")
-        // create a anonymous user is not allowed
-        if (request.userId == ANONYMOUS_USER) {
-            logger.warn("create user [${request.userId}]  is exist.")
-            throw ErrorCodeException(AuthMessageCode.AUTH_DUP_UID)
-        }
         val user = userDao.findFirstByUserId(request.userId)
         user?.let {
             logger.warn("create user [${request.userId}]  is exist.")
             return true
-        }
-        if (request.group && request.asstUsers.isEmpty()) {
-            throw ErrorCodeException(AuthMessageCode.AUTH_ASST_USER_EMPTY)
         }
         // check asstUsers
         request.asstUsers.forEach {
@@ -111,7 +103,9 @@ class UserServiceImpl constructor(
         } else {
             DataDigestUtils.md5FromStr(request.pwd!!)
         }
-        val userRequest = UserRequestUtil.convToTUser(request, hashPwd)
+        val tenantIdFromHeader = userHelper.getTenantId()
+        val tenantId = if (tenantIdFromHeader.isNullOrEmpty()) request.tenantId else tenantIdFromHeader
+        val userRequest = UserRequestUtil.convToTUser(request, hashPwd, tenantId)
         try {
             userDao.insert(userRequest)
         } catch (ignore: DuplicateKeyException) {
@@ -122,7 +116,7 @@ class UserServiceImpl constructor(
 
     override fun createUserToRepo(request: CreateUserToRepoRequest): Boolean {
         logger.info("create user to repo request : [${DesensitizedUtils.toString(request)}]")
-        repoClient.getRepoInfo(request.projectId, request.repoName).data ?: run {
+        repositoryService.getRepoInfo(request.projectId, request.repoName) ?: run {
             logger.warn("repo [${request.projectId}/${request.repoName}]  not exist.")
             throw ErrorCodeException(AuthMessageCode.AUTH_REPO_NOT_EXIST)
         }
@@ -130,7 +124,7 @@ class UserServiceImpl constructor(
         try {
             val userResult = createUser(UserRequestUtil.convToCreateRepoUserRequest(request))
             if (!userResult) {
-                logger.warn("create user fail [$request]")
+                logger.warn("create user fail for userId [${request.userId}]")
                 return false
             }
             request.pwd?.let {
@@ -148,7 +142,7 @@ class UserServiceImpl constructor(
 
     override fun createUserToProject(request: CreateUserToProjectRequest): Boolean {
         logger.info("create user to project request : [${DesensitizedUtils.toString(request)}]")
-        projectClient.getProjectInfo(request.projectId).data ?: run {
+        projectService.getProjectInfo(request.projectId) ?: run {
             logger.warn("project [${request.projectId}]  not exist.")
             throw ErrorCodeException(AuthMessageCode.AUTH_PROJECT_NOT_EXIST)
         }
@@ -156,7 +150,7 @@ class UserServiceImpl constructor(
         try {
             val userResult = createUser(UserRequestUtil.convToCreateProjectUserRequest(request))
             if (!userResult) {
-                logger.warn("create user fail [$request]")
+                logger.warn("create user fail for userId [${request.userId}]")
                 return false
             }
             request.pwd?.let {
@@ -172,11 +166,11 @@ class UserServiceImpl constructor(
         return true
     }
 
-    override fun listUser(rids: List<String>): List<User> {
+    override fun listUser(rids: List<String>, tenantId: String?): List<User> {
         logger.debug("list user rids : [$rids]")
         return if (rids.isEmpty()) {
             // 排除被锁定的用户
-            userDao.getUserNotLocked().map { UserRequestUtil.convToUser(it) }
+            userDao.getUserNotLocked(tenantId).map { UserRequestUtil.convToUser(it) }
         } else {
             userDao.findAllByRolesIn(rids).map { UserRequestUtil.convToUser(it) }
         }
@@ -222,7 +216,7 @@ class UserServiceImpl constructor(
     }
 
     override fun updateUserById(userId: String, request: UpdateUserRequest): Boolean {
-        logger.info("update user userId : [$userId], request : [$request]")
+        logger.info("update user userId : [$userId]")
         userHelper.checkUserExist(userId)
         return userDao.updateUserById(userId, request)
     }
@@ -231,6 +225,24 @@ class UserServiceImpl constructor(
         logger.info("create token userId : [$userId]")
         val token = UserRequestUtil.generateToken()
         return addUserToken(userId, token, null)
+    }
+
+    override fun createOrUpdateUser(userId: String, name: String, tenantId: String?) {
+        logger.info("create or update user : [$userId,$name,$tenantId]")
+        if (!userHelper.isUserExist(userId)) {
+            val userName = name.ifEmpty { userId }
+            val createRequest = CreateUserRequest(userId = userId, name = userName, tenantId = tenantId)
+            createUser(createRequest)
+        } else {
+            val updateUserRequest = UpdateUserRequest(name = userId)
+            if (name.isNotEmpty()) {
+                updateUserRequest.name = name
+            }
+            tenantId?.let {
+                updateUserRequest.tenantId = tenantId
+            }
+            updateUserById(userId, updateUserRequest)
+        }
     }
 
     override fun addUserToken(userId: String, name: String, expiredAt: String?): Token? {
@@ -353,6 +365,11 @@ class UserServiceImpl constructor(
         return UserRequestUtil.convToUserInfo(tUser)
     }
 
+    override fun getUserInfoByToken(token: String): UserInfo? {
+        val tUser = userDao.findFirstByToken(token) ?: return null
+        return UserRequestUtil.convToUserInfo(tUser)
+    }
+
     override fun getUserPwdById(userId: String): String? {
         val tUser = userDao.findFirstByUserId(userId) ?: return null
         return tUser.pwd
@@ -399,7 +416,12 @@ class UserServiceImpl constructor(
         return userDao.getUserByAsstUser(userId).map { UserRequestUtil.convToUserInfo(it) }
     }
 
+    override fun listAdminUsers(): List<String> {
+        return userDao.findAllAdminUsers().map { it.userId }
+    }
+
     companion object {
         private val logger = LoggerFactory.getLogger(UserServiceImpl::class.java)
     }
 }
+

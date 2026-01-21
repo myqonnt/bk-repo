@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -32,6 +32,8 @@ import com.google.common.cache.CacheLoader
 import com.google.common.cache.LoadingCache
 import com.tencent.bkrepo.analysis.executor.api.ExecutorClient
 import com.tencent.bkrepo.analyst.event.SubtaskStatusChangedEvent
+import com.tencent.bkrepo.analyst.pojo.execution.ExecutionCluster
+import com.tencent.bkrepo.analyst.pojo.execution.KubernetesDeploymentExecutionCluster
 import com.tencent.bkrepo.analyst.service.ExecutionClusterService
 import com.tencent.bkrepo.analyst.service.ScannerService
 import com.tencent.bkrepo.analyst.utils.SubtaskConverter
@@ -67,12 +69,26 @@ open class SubtaskPoller(
 
     @Scheduled(initialDelay = POLL_INITIAL_DELAY, fixedDelay = POLL_DELAY)
     open fun dispatch() {
-        executionClusterService.list().forEach {
-            executor.execute {
-                logger.info("cluster [${it.name}] start to dispatch subtask")
-                dispatcherCache.get(it.name).dispatch()
-                logger.info("cluster [${it.name}] dispatch finished")
-            }
+        executionClusterService.list()
+            .filter { it.type != KubernetesDeploymentExecutionCluster.type }
+            .forEach { doDispatch(it) }
+    }
+
+    /**
+     * deployment类型分发器通过常驻pod轮询拉取任务，不需要频繁调用dispatch方法也能及时执行任务，因此单独配置一个周期较长的定时任务
+     */
+    @Scheduled(initialDelay = CREATE_DEPLOYMENT_INITIAL_DELAY, fixedRate = CREATE_DEPLOYMENT_DELAY)
+    open fun createDeployment() {
+        executionClusterService.list()
+            .filter { it.type == KubernetesDeploymentExecutionCluster.type }
+            .forEach { doDispatch(it) }
+    }
+
+    private fun doDispatch(executionCluster: ExecutionCluster) {
+        executor.execute {
+            logger.debug("cluster [${executionCluster.name}] start to dispatch subtask")
+            dispatcherCache.get(executionCluster.name).dispatch()
+            logger.debug("cluster [${executionCluster.name}] dispatch finished")
         }
     }
 
@@ -82,7 +98,7 @@ open class SubtaskPoller(
     @Async
     @EventListener(SubtaskStatusChangedEvent::class)
     open fun clean(event: SubtaskStatusChangedEvent) {
-        val dispatcher = event.dispatcher?.let { dispatcherCache.get(it) }
+        val dispatcher = event.dispatcher()?.let { dispatcherCache.get(it) }
         val subtaskFinished = SubScanTaskStatus.finishedStatus(event.subtask.status)
         if (subtaskFinished && dispatcher != null) {
             val scanner = scannerService.get(event.subtask.scanner)
@@ -93,7 +109,7 @@ open class SubtaskPoller(
 
         // oldStatus为null时说明是复用扫描结果，此时不调用executor接口清理
         val reuseResult = event.oldStatus == null
-        if (subtaskFinished && event.dispatcher.isNullOrEmpty() && !reuseResult) {
+        if (subtaskFinished && event.dispatcher().isNullOrEmpty() && !reuseResult) {
             // dispatcher为空时表示通过analysis-executor执行的任务，此时调用其接口进行清理
             val subtaskId = event.subtask.latestSubScanTaskId!!
             val result = executorClient.ifAvailable?.stop(subtaskId)
@@ -105,6 +121,8 @@ open class SubtaskPoller(
         private val logger = LoggerFactory.getLogger(SubtaskPoller::class.java)
         private const val POLL_INITIAL_DELAY = 30000L
         private const val POLL_DELAY = 5000L
+        private const val CREATE_DEPLOYMENT_INITIAL_DELAY = 60000L
+        private const val CREATE_DEPLOYMENT_DELAY = 60000L
         private const val MAX_EXECUTION_CLUSTER_CACHE_SIZE = 10L
     }
 }

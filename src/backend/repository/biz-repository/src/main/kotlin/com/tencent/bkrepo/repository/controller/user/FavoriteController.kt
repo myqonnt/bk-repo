@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2023 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2023 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -36,16 +36,16 @@ import com.tencent.bkrepo.common.api.constant.ANONYMOUS_USER
 import com.tencent.bkrepo.common.api.constant.HttpStatus
 import com.tencent.bkrepo.common.api.pojo.Page
 import com.tencent.bkrepo.common.api.pojo.Response
-import com.tencent.bkrepo.common.security.manager.PermissionManager
+import com.tencent.bkrepo.common.metadata.permission.PermissionManager
 import com.tencent.bkrepo.common.service.util.ResponseBuilder
-import com.tencent.bkrepo.repository.pojo.favorite.FavoriteRequest
-import com.tencent.bkrepo.repository.pojo.favorite.FavoriteType
 import com.tencent.bkrepo.repository.pojo.favorite.FavoriteCreateRequest
 import com.tencent.bkrepo.repository.pojo.favorite.FavoriteQueryRequest
+import com.tencent.bkrepo.repository.pojo.favorite.FavoriteRequest
 import com.tencent.bkrepo.repository.pojo.favorite.FavoriteResult
+import com.tencent.bkrepo.repository.pojo.favorite.FavoriteType
 import com.tencent.bkrepo.repository.service.favorites.FavoriteService
-import io.swagger.annotations.Api
-import io.swagger.annotations.ApiOperation
+import io.swagger.v3.oas.annotations.Operation
+import io.swagger.v3.oas.annotations.tags.Tag
 import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
@@ -55,7 +55,7 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
 import java.time.LocalDateTime
 
-@Api("用户收藏接口")
+@Tag(name = "用户收藏接口")
 @RestController
 @RequestMapping("/api/favorite")
 class FavoriteController(
@@ -63,7 +63,7 @@ class FavoriteController(
     private val permissionManager: PermissionManager
 ) {
 
-    @ApiOperation("创建收藏文件夹")
+    @Operation(summary = "创建收藏文件夹")
     @PostMapping("/create")
     fun createFavorite(
         @RequestAttribute userId: String,
@@ -90,7 +90,7 @@ class FavoriteController(
         }
     }
 
-    @ApiOperation("删除收藏")
+    @Operation(summary = "删除收藏")
     @DeleteMapping("/delete/{id}")
     fun removeFavorite(
         @RequestAttribute userId: String,
@@ -108,7 +108,7 @@ class FavoriteController(
         return ResponseBuilder.fail(HttpStatus.BAD_REQUEST.value, "id not existed")
     }
 
-    @ApiOperation("收藏文件夹分页查询")
+    @Operation(summary = "收藏文件夹分页查询")
     @PostMapping("/query")
     fun pageFavorite(
         @RequestAttribute userId: String,

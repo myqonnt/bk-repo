@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -34,22 +34,24 @@ package com.tencent.bkrepo.repository.pojo.metadata
 import com.tencent.bkrepo.repository.constant.SYSTEM_USER
 import com.tencent.bkrepo.repository.pojo.ServiceRequest
 import com.tencent.bkrepo.repository.pojo.node.NodeRequest
-import io.swagger.annotations.ApiModel
-import io.swagger.annotations.ApiModelProperty
+import io.swagger.v3.oas.annotations.media.Schema
+
 
 /**
  * 元数据删除请求
  */
-@ApiModel("元数据删除请求")
+@Schema(title = "元数据删除请求")
 data class MetadataDeleteRequest(
-    @ApiModelProperty("项目id", required = true)
+    @get:Schema(title = "项目id", required = true)
     override val projectId: String,
-    @ApiModelProperty("仓库名称", required = true)
+    @get:Schema(title = "仓库名称", required = true)
     override val repoName: String,
-    @ApiModelProperty("节点完整路径", required = true)
+    @get:Schema(title = "节点完整路径", required = true)
     override val fullPath: String,
-    @ApiModelProperty("待删除的元数据key列表", required = true)
+    @get:Schema(title = "待删除的元数据key列表", required = true)
     val keyList: Set<String>,
-    @ApiModelProperty("操作用户")
-    override val operator: String = SYSTEM_USER
+    @get:Schema(title = "操作用户")
+    override val operator: String = SYSTEM_USER,
+    @get:Schema(title = "操作来源,联邦仓库同步时源集群name", required = false)
+    val source: String? = null
 ) : NodeRequest, ServiceRequest

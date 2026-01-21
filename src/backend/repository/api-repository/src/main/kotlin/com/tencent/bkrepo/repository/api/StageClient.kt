@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -34,7 +34,7 @@ package com.tencent.bkrepo.repository.api
 import com.tencent.bkrepo.common.api.constant.REPOSITORY_SERVICE_NAME
 import com.tencent.bkrepo.common.api.pojo.Response
 import com.tencent.bkrepo.repository.pojo.stage.StageUpgradeRequest
-import io.swagger.annotations.ApiOperation
+import io.swagger.v3.oas.annotations.Operation
 import org.springframework.cloud.openfeign.FeignClient
 import org.springframework.context.annotation.Primary
 import org.springframework.web.bind.annotation.GetMapping
@@ -47,9 +47,10 @@ import org.springframework.web.bind.annotation.RequestParam
 @Primary
 @FeignClient(REPOSITORY_SERVICE_NAME, contextId = "StageClient")
 @RequestMapping("/service/stage")
+@Deprecated("replace with StageService")
 interface StageClient {
 
-    @ApiOperation("查询晋级状态")
+    @Operation(summary = "查询晋级状态")
     @GetMapping("/{projectId}/{repoName}")
     fun query(
         @PathVariable projectId: String,
@@ -58,7 +59,7 @@ interface StageClient {
         @RequestParam version: String
     ): Response<List<String>>
 
-    @ApiOperation("制品晋级")
+    @Operation(summary = "制品晋级")
     @PostMapping("/upgrade")
     fun upgrade(@RequestBody request: StageUpgradeRequest): Response<Void>
 }

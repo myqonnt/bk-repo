@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2019 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2019 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -31,12 +31,12 @@ import com.tencent.bkrepo.auth.constant.AUTH_SERVICE_EXT_PERMISSION_PREFIX
 import com.tencent.bkrepo.auth.pojo.externalPermission.ExternalPermission
 import com.tencent.bkrepo.common.api.constant.AUTH_SERVICE_NAME
 import com.tencent.bkrepo.common.api.pojo.Response
-import io.swagger.annotations.Api
+import io.swagger.v3.oas.annotations.tags.Tag
 import org.springframework.cloud.openfeign.FeignClient
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.RequestMapping
 
-@Api(tags = ["SERVICE_EXTERNAL_PERMISSION"], description = "服务-外部权限接口")
+@Tag(name = "SERVICE_EXTERNAL_PERMISSION", description = "服务-外部权限接口")
 @FeignClient(AUTH_SERVICE_NAME, contextId = "ServiceExternalPermissionResource")
 @RequestMapping(AUTH_SERVICE_EXT_PERMISSION_PREFIX)
 interface ServiceExternalPermissionClient {

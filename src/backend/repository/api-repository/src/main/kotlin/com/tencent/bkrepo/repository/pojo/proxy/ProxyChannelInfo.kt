@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -32,29 +32,34 @@
 package com.tencent.bkrepo.repository.pojo.proxy
 
 import com.tencent.bkrepo.common.artifact.pojo.RepositoryType
-import io.swagger.annotations.ApiModel
-import io.swagger.annotations.ApiModelProperty
+import io.swagger.v3.oas.annotations.media.Schema
+import java.time.LocalDateTime
 
-@ApiModel("代理源信息")
+
+@Schema(title = "代理源信息")
 data class ProxyChannelInfo(
-    @ApiModelProperty("所属项目id", required = true)
+    @get:Schema(title = "所属项目id", required = true)
     val projectId: String,
-    @ApiModelProperty("仓库名称", required = true)
+    @get:Schema(title = "仓库名称", required = true)
     val repoName: String,
-    @ApiModelProperty("id")
+    @get:Schema(title = "id")
     val id: String,
-    @ApiModelProperty("是否为公有源")
+    @get:Schema(title = "是否为公有源")
     val public: Boolean,
-    @ApiModelProperty("代理源名称")
+    @get:Schema(title = "代理源名称")
     val name: String,
-    @ApiModelProperty("代理源url")
+    @get:Schema(title = "代理源url")
     val url: String,
-    @ApiModelProperty("代理源仓库类型")
+    @get:Schema(title = "代理源仓库类型")
     val repoType: RepositoryType,
-    @ApiModelProperty("代理源认证凭证key")
+    @get:Schema(title = "代理源认证凭证key")
     val credentialKey: String? = null,
-    @ApiModelProperty("代理源认证用户名")
+    @get:Schema(title = "代理源认证用户名")
     val username: String? = null,
-    @ApiModelProperty("代理源认证密码")
-    val password: String? = null
+    @get:Schema(title = "代理源认证密码")
+    val password: String? = null,
+    @get:Schema(title = "代理源最近同步状态")
+    val lastSyncStatus: Boolean? = null,
+    @get:Schema(title = "代理源最近同步时间")
+    val lastSyncDate: LocalDateTime? = null,
 )

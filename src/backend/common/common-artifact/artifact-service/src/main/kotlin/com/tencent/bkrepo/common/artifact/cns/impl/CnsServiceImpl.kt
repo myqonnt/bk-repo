@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2023 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2023 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -31,16 +31,16 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder
 import com.tencent.bkrepo.common.api.constant.MS_AUTH_HEADER_UID
 import com.tencent.bkrepo.common.api.constant.USER_KEY
 import com.tencent.bkrepo.common.api.pojo.Response
+import com.tencent.bkrepo.common.api.util.TraceUtils.trace
 import com.tencent.bkrepo.common.artifact.cns.CnsProperties
 import com.tencent.bkrepo.common.artifact.cns.CnsService
 import com.tencent.bkrepo.common.artifact.pojo.RepositoryType
+import com.tencent.bkrepo.common.metadata.service.repo.StorageCredentialService
 import com.tencent.bkrepo.common.security.constant.MS_AUTH_HEADER_SECURITY_TOKEN
 import com.tencent.bkrepo.common.security.service.ServiceAuthManager
-import com.tencent.bkrepo.common.service.otel.util.AsyncUtils.trace
 import com.tencent.bkrepo.common.service.util.HttpContextHolder
-import com.tencent.bkrepo.common.storage.core.StorageProperties
+import com.tencent.bkrepo.common.storage.config.StorageProperties
 import com.tencent.bkrepo.common.storage.core.StorageService
-import com.tencent.bkrepo.repository.api.StorageCredentialsClient
 import com.tencent.bkrepo.repository.constant.SYSTEM_USER
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
@@ -53,6 +53,7 @@ import org.springframework.http.HttpMethod
 import org.springframework.stereotype.Service
 import org.springframework.web.client.RestTemplate
 import java.net.URI
+import java.util.Locale.getDefault
 import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.Callable
 import java.util.concurrent.ThreadPoolExecutor
@@ -62,7 +63,7 @@ import java.util.concurrent.TimeUnit
 class CnsServiceImpl(
     private val discoveryClient: DiscoveryClient,
     private val storageService: StorageService,
-    private val storageCredentialsClient: StorageCredentialsClient,
+    private val storageCredentialService: StorageCredentialService,
     private val storageProperties: StorageProperties,
     private val cnsProperties: CnsProperties,
     private val serviceAuthManager: ServiceAuthManager
@@ -80,7 +81,7 @@ class CnsServiceImpl(
     private val restTemplate = RestTemplate()
 
     override fun exist(key: String?, sha256: String): Boolean {
-        val storageCredentials = storageCredentialsClient.findByKey(key).data
+        val storageCredentials = storageCredentialService.findByKey(key)
             ?: storageProperties.defaultStorageCredentials()
         return storageService.exist(sha256, storageCredentials)
     }
@@ -162,7 +163,7 @@ class CnsServiceImpl(
             }
 
             else -> {
-                serviceIds.add(formatServiceId(type.name.toLowerCase()))
+                serviceIds.add(formatServiceId(type.name.lowercase(getDefault())))
             }
         }
         return serviceIds

@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2024 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2024 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -36,7 +36,8 @@ import com.tencent.bkrepo.common.artifact.cache.service.PreloadListener
 import com.tencent.bkrepo.common.artifact.cache.service.PreloadPlanExecutor
 import com.tencent.bkrepo.common.artifact.stream.ArtifactInputStream
 import com.tencent.bkrepo.common.artifact.stream.Range
-import com.tencent.bkrepo.common.storage.core.StorageProperties
+import com.tencent.bkrepo.common.metadata.service.repo.StorageCredentialService
+import com.tencent.bkrepo.common.storage.config.StorageProperties
 import com.tencent.bkrepo.common.storage.core.StorageService
 import com.tencent.bkrepo.common.storage.core.cache.CacheStorageService
 import com.tencent.bkrepo.common.storage.core.locator.FileLocator
@@ -44,10 +45,10 @@ import com.tencent.bkrepo.common.storage.credentials.StorageCredentials
 import com.tencent.bkrepo.common.storage.monitor.Throughput
 import com.tencent.bkrepo.common.storage.monitor.measureThroughput
 import com.tencent.bkrepo.common.storage.util.existReal
-import com.tencent.bkrepo.repository.api.StorageCredentialsClient
 import org.slf4j.LoggerFactory
-import org.springframework.stereotype.Component
+import java.nio.file.Files
 import java.nio.file.Paths
+import java.nio.file.attribute.FileTime
 import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.SynchronousQueue
 import java.util.concurrent.ThreadPoolExecutor
@@ -56,11 +57,10 @@ import java.util.concurrent.TimeUnit
 /**
  * 制品加载器，负责将制品加载到存储缓存中
  */
-@Component
 class DefaultPreloadPlanExecutor(
     private val preloadProperties: ArtifactPreloadProperties,
     private val cacheStorageService: StorageService,
-    private val storageCredentialsClient: StorageCredentialsClient,
+    private val storageCredentialService: StorageCredentialService,
     private val fileLocator: FileLocator,
     private val storageProperties: StorageProperties,
 ) : PreloadPlanExecutor {
@@ -75,7 +75,7 @@ class DefaultPreloadPlanExecutor(
         require(cacheStorageService is CacheStorageService)
         updateExecutor()
         val credentials = if (plan.credentialsKey != null) {
-            storageCredentialsClient.findByKey(plan.credentialsKey).data!!
+            storageCredentialService.findByKey(plan.credentialsKey)!!
         } else {
             storageProperties.defaultStorageCredentials()
         }
@@ -97,26 +97,40 @@ class DefaultPreloadPlanExecutor(
 
     fun load(plan: ArtifactPreloadPlan, credentials: StorageCredentials, listener: PreloadListener?) {
         try {
+            logger.info("preload start, ${plan.artifactInfo()}")
+            listener?.onPreloadStart(plan)
             if (System.currentTimeMillis() - plan.executeTime > preloadProperties.planTimeout.toMillis()) {
                 throw RuntimeException("plan timeout[${plan.executeTime}], ${plan.artifactInfo()}")
             }
-            logger.info("preload start, ${plan.artifactInfo()}")
-            listener?.onPreloadStart(plan)
-            val throughput = if (existsOrCaching(credentials, plan.sha256)) {
-                // 正在缓存或缓存已存在的情况不执行加载
-                logger.info("cache exists or caching, ${plan.artifactInfo()}")
-                null
-            } else {
-                // 执行预加载
-                doLoad(plan.sha256, plan.size, credentials)
-            }
+            val throughput = load(plan, credentials)
             logger.info("preload success, ${plan.artifactInfo()}, throughput[$throughput]")
-            listener?.onPreloadSuccess(plan)
+            listener?.onPreloadSuccess(plan, throughput)
         } catch (e: Exception) {
             listener?.onPreloadFailed(plan)
             logger.warn("preload failed, ${plan.artifactInfo()}", e)
         } finally {
             listener?.onPreloadFinished(plan)
+        }
+    }
+
+    private fun load(plan: ArtifactPreloadPlan, credentials: StorageCredentials): Throughput? {
+        if (preloadProperties.mock) {
+            logger.info("mock load cache, ${plan.artifactInfo()}")
+            return null
+        }
+
+        val cacheFile = Paths.get(credentials.cache.path, fileLocator.locate(plan.sha256), plan.sha256)
+        val cacheFileLock = Paths.get(credentials.cache.path, StringPool.TEMP, "${plan.sha256}.locked")
+        return if (cacheFile.existReal()) {
+            Files.setLastModifiedTime(cacheFile, FileTime.fromMillis(System.currentTimeMillis()))
+            logger.info("cache already exists, update LastModifiedTime, ${plan.artifactInfo()}")
+            null
+        } else if (cacheFileLock.existReal()) {
+            logger.info("cache file is loading, skip preload, ${plan.artifactInfo()}")
+            null
+        } else {
+            // 执行预加载
+            doLoad(plan.sha256, plan.size, credentials)
         }
     }
 
@@ -131,18 +145,18 @@ class DefaultPreloadPlanExecutor(
         } ?: throw RuntimeException("artifact not exists")
     }
 
-    private fun existsOrCaching(credentials: StorageCredentials, sha256: String): Boolean {
-        val cacheFile = Paths.get(credentials.cache.path, fileLocator.locate(sha256), sha256)
-        val cacheFileLock = Paths.get(credentials.cache.path, StringPool.TEMP, "$sha256.locked")
-        return cacheFile.existReal() || cacheFileLock.existReal()
-    }
-
     private fun updateExecutor() {
-        if (preloadProperties.preloadConcurrency != executor.corePoolSize) {
+        if (preloadProperties.preloadConcurrency == executor.corePoolSize) {
+            return
+        }
+        if (preloadProperties.preloadConcurrency > executor.corePoolSize) {
+            executor.maximumPoolSize = preloadProperties.preloadConcurrency
+            executor.corePoolSize = preloadProperties.preloadConcurrency
+        } else {
             executor.corePoolSize = preloadProperties.preloadConcurrency
             executor.maximumPoolSize = preloadProperties.preloadConcurrency
-            logger.info("update executor pool size to ${preloadProperties.preloadConcurrency} success")
         }
+        logger.info("update executor pool size to ${preloadProperties.preloadConcurrency} success")
     }
 
     companion object {

@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -31,10 +31,11 @@ import com.tencent.bkrepo.auth.constant.CUSTOM
 import com.tencent.bkrepo.auth.constant.LOG
 import com.tencent.bkrepo.auth.constant.PIPELINE
 import com.tencent.bkrepo.auth.constant.REPORT
+import com.tencent.bkrepo.auth.dao.AccountDao
 import com.tencent.bkrepo.auth.dao.PermissionDao
 import com.tencent.bkrepo.auth.dao.PersonalPathDao
+import com.tencent.bkrepo.auth.dao.RepoAuthConfigDao
 import com.tencent.bkrepo.auth.dao.UserDao
-import com.tencent.bkrepo.auth.dao.repository.AccountRepository
 import com.tencent.bkrepo.auth.dao.repository.RoleRepository
 import com.tencent.bkrepo.auth.pojo.enums.ActionTypeMapping
 import com.tencent.bkrepo.auth.pojo.enums.ResourceType
@@ -42,9 +43,10 @@ import com.tencent.bkrepo.auth.pojo.permission.CheckPermissionRequest
 import com.tencent.bkrepo.auth.service.local.PermissionServiceImpl
 import com.tencent.bkrepo.auth.util.BkIamV3Utils.convertActionType
 import com.tencent.bkrepo.common.api.constant.StringPool
-import com.tencent.bkrepo.repository.api.ProjectClient
-import com.tencent.bkrepo.repository.api.RepositoryClient
+import com.tencent.bkrepo.common.metadata.service.project.ProjectService
+import com.tencent.bkrepo.common.metadata.service.repo.RepositoryService
 import org.slf4j.LoggerFactory
+import java.util.Locale
 
 /**
  * 对接蓝鲸权限中心V3 RBAC
@@ -53,19 +55,21 @@ open class BkIamV3PermissionServiceImpl(
     private val bkiamV3Service: BkIamV3Service,
     userDao: UserDao,
     roleRepository: RoleRepository,
-    accountRepository: AccountRepository,
+    accountDao: AccountDao,
     permissionDao: PermissionDao,
     personalPathDao: PersonalPathDao,
-    repoClient: RepositoryClient,
-    projectClient: ProjectClient
+    repoAuthConfigDao: RepoAuthConfigDao,
+    repositoryService: RepositoryService,
+    projectService: ProjectService
 ) : PermissionServiceImpl(
     roleRepository,
-    accountRepository,
+    accountDao,
     permissionDao,
     userDao,
     personalPathDao,
-    repoClient,
-    projectClient
+    repoAuthConfigDao,
+    repositoryService,
+    projectService
 ) {
     override fun checkPermission(request: CheckPermissionRequest): Boolean {
         logger.debug("v3 checkPermission, request: $request")
@@ -111,7 +115,7 @@ open class BkIamV3PermissionServiceImpl(
                     userId = uid,
                     projectId = projectId!!,
                     repoName = repoName,
-                    resourceType = resourceType.toLowerCase(),
+                    resourceType = resourceType.lowercase(Locale.getDefault()),
                     action = convertActionType(resourceType, action),
                     resourceId = resourceId,
                     appId = appId
@@ -162,7 +166,7 @@ open class BkIamV3PermissionServiceImpl(
             action = ActionTypeMapping.REPO_VIEW.id()
         )
         return if (pList.contains(StringPool.POUND)) {
-            repoClient.listRepo(projectId).data?.map { it.name } ?: emptyList()
+            repositoryService.listRepo(projectId).map { it.name }
         } else {
             pList
         }
@@ -175,7 +179,7 @@ open class BkIamV3PermissionServiceImpl(
             action = ActionTypeMapping.PROJECT_VIEW.id()
         )
         return if (pList.contains(StringPool.POUND)) {
-            projectClient.listProject().data?.map { it.name } ?: emptyList()
+            projectService.listProject().map { it.name }
         } else {
             pList
         }

@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -28,14 +28,16 @@
 package com.tencent.bkrepo.job.config.properties
 
 import org.springframework.boot.context.properties.ConfigurationProperties
+import org.springframework.stereotype.Component
 
+@Component
 @ConfigurationProperties("job.artifact-push")
-class ArtifactPushJobProperties(
-    override var enabled: Boolean = true,
+class ArtifactPushJobProperties : MongodbJobProperties() {
+    override var enabled: Boolean = true
     /**
      * 需要进行远端分发集群推送的仓库类型
      * */
-    var repositoryTypes: List<String> = listOf("HELM", "OCI", "DOCKER"),
-    override var fixedDelay: Long = 60 * 1000L,
+    var repositoryTypes: List<String> = listOf("HELM", "OCI", "DOCKER")
+    override var fixedDelay: Long = 60 * 1000L
     override var initialDelay: Long = 60 * 1000L
-) : MongodbJobProperties()
+}

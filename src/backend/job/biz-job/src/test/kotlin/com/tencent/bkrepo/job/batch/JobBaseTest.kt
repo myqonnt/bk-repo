@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2019 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2019 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -27,16 +27,36 @@
 
 package com.tencent.bkrepo.job.batch
 
+import com.tencent.bkrepo.archive.repository.ArchiveFileDao
+import com.tencent.bkrepo.archive.repository.CompressFileDao
+import com.tencent.bkrepo.common.artifact.event.base.ArtifactEvent
+import com.tencent.bkrepo.common.artifact.properties.EnableMultiTenantProperties
+import com.tencent.bkrepo.common.artifact.properties.RouterControllerProperties
 import com.tencent.bkrepo.common.job.JobAutoConfiguration
-import com.tencent.bkrepo.common.service.cluster.ClusterProperties
+import com.tencent.bkrepo.common.metadata.properties.ProjectUsageStatisticsProperties
+import com.tencent.bkrepo.common.service.cluster.properties.ClusterProperties
+import com.tencent.bkrepo.common.service.util.SpringContextUtils
 import com.tencent.bkrepo.common.storage.StorageAutoConfiguration
+import com.tencent.bkrepo.common.stream.event.supplier.MessageSupplier
+import com.tencent.bkrepo.job.batch.file.ExpireFileResolverConfig
 import com.tencent.bkrepo.job.config.JobConfig
+import com.tencent.bkrepo.job.service.impl.MigrateArchivedFileServiceImpl
+import io.micrometer.observation.ObservationRegistry
+import io.micrometer.tracing.Tracer
+import io.micrometer.tracing.otel.bridge.OtelTracer
+import io.mockk.every
+import io.mockk.mockk
+import io.mockk.mockkObject
+import org.junit.jupiter.api.BeforeAll
+import org.junit.jupiter.api.TestInstance
+import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.SpringBootConfiguration
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration
 import org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
 import org.springframework.boot.autoconfigure.task.TaskExecutionAutoConfiguration
 import org.springframework.boot.autoconfigure.task.TaskSchedulingAutoConfiguration
 import org.springframework.context.annotation.ComponentScan
+import org.springframework.context.annotation.FilterType
 import org.springframework.context.annotation.Import
 import org.springframework.test.context.TestPropertySource
 
@@ -48,14 +68,45 @@ import org.springframework.test.context.TestPropertySource
     ClusterProperties::class,
     RedisAutoConfiguration::class,
     StorageAutoConfiguration::class,
+    RouterControllerProperties::class,
+    ProjectUsageStatisticsProperties::class,
+    EnableMultiTenantProperties::class,
+    ArchiveFileDao::class,
+    MigrateArchivedFileServiceImpl::class,
+    CompressFileDao::class,
 )
 @TestPropertySource(
     locations = [
         "classpath:bootstrap-ut.properties",
-        "classpath:job-ut.properties"
-    ]
+        "classpath:job-ut.properties",
+    ],
 )
-@ComponentScan(basePackages = ["com.tencent.bkrepo.job"])
+@ComponentScan(
+    basePackages = ["com.tencent.bkrepo.job", "com.tencent.bkrepo.common.metadata", "com.tencent.bkrepo.common.lock"],
+    excludeFilters = [
+        ComponentScan.Filter(
+            type = FilterType.ASSIGNABLE_TYPE,
+            value = [ExpireFileResolverConfig::class],
+        ),
+    ],
+)
 @SpringBootConfiguration
 @EnableAutoConfiguration
-open class JobBaseTest
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
+class JobBaseTest {
+
+    @Autowired
+    lateinit var registry: ObservationRegistry
+
+    @BeforeAll
+    fun commonMock() {
+        val tracer = mockk<OtelTracer>()
+        mockkObject(SpringContextUtils.Companion)
+        every { SpringContextUtils.getBean<Tracer>() } returns tracer
+        every { tracer.currentSpan() } returns null
+        every { SpringContextUtils.publishEvent(any()) } returns Unit
+
+        val messageSupplier = mockk<MessageSupplier>()
+        every { messageSupplier.delegateToSupplier<ArtifactEvent>(any(), any(), any(), any(), any()) }.returns(Unit)
+    }
+}

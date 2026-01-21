@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="manifest" href="__BK_REPO_SUBPATH__ui/CPack.webmanifest" />
+    <script src="__BK_REPO_SUBPATH__ui/libs/vue.min.js"></script>
+    <script src="__BK_REPO_SUBPATH__ui/libs/vuex.min.js"></script>
+    <script src="__BK_REPO_SUBPATH__ui/libs/vue-router.min.js"></script>
+    <script src="__BK_REPO_SUBPATH__ui/libs/jsencrypt.min.js"></script>
+    <script src="__BK_REPO_SUBPATH__ui/watermark.js"></script>
+    <link rel='preload' as='script' href="__BK_REPO_SUBPATH__ui/libs/bk-magic-vue/bk-magic-vue.min.js" />
+    <link href="__BK_REPO_SUBPATH__ui/libs/bk-magic-vue/bk-magic-vue.min.css" rel="stylesheet">
+    <link href="__BK_REPO_SUBPATH__ui/iconfont.css" rel="stylesheet">
+    <title><%= htmlWebpackPlugin.options.title %></title>
+</head>
+<body>
+    <script>
+        // 子路径
+        var BK_SUBPATH = '__BK_REPO_SUBPATH__' || '/'
+        window.BK_SUBPATH = BK_SUBPATH === '/' ? '/' : BK_SUBPATH
+        window.BK_STATIC_URL = BK_SUBPATH === '/' ? '/ui/' : BK_SUBPATH + 'ui/'
+
+        // 请求svg图标
+        const ajax = new XMLHttpRequest()
+        const url = window.BK_STATIC_URL + 'sprite.svg'
+        ajax.open('GET', url, true)
+        ajax.onload = function (e) {
+            const div = document.createElement('div')
+            div.setAttribute('style', 'position: absolute; width: 0; height: 0; overflow: hidden;')
+            div.innerHTML = e.target.responseText
+            document.body.prepend(div)
+        }
+        ajax.send()
+
+        // 创建 style 元素
+        const style = document.createElement('style')
+        style.type = 'text/css';
+
+        // 设置 CSS 内容
+        style.textContent = `
+                @font-face {
+        font-family: 'bk-icons-linear';
+        src: url('__BK_REPO_SUBPATH__ui/fonts/bk_icons_linear.eot');
+        src: url('__BK_REPO_SUBPATH__ui/fonts/bk_icons_linear.eot?#iefix') format('embedded-opentype'),
+        url('__BK_REPO_SUBPATH__ui/fonts/bk_icons_linear.ttf') format('truetype'),
+        url('__BK_REPO_SUBPATH__ui/fonts/bk_icons_linear.woff') format('woff');
+        font-weight: normal;
+        font-style: normal;
+        }`
+        // 添加到 head
+        document.head.appendChild(style);
+
+    </script>
+    <script>
+        async function registerServiceWorker() {
+            if ('serviceWorker' in navigator) {
+                try {
+                    const swUrl = window.BK_STATIC_URL + 'sw.js'
+                    const registration = await navigator.serviceWorker.register(swUrl);
+                    console.log('Service Worker 注册成功:', registration);
+
+                    // 2. 重要：立即检查是否已激活，然后发送配置
+                    // 如果还在 installing 状态，可以直接发送，worker 中的 message 监听器已就绪
+                    if (registration.active) {
+                        // 如果已经激活，直接发送
+                        registration.active.postMessage({
+                            type: 'SET_CONFIG',
+                            config: {
+                                // 这里替换为你的实际配置获取方式
+                                BK_STATIC_URL: window.BK_STATIC_URL || '/ui/'
+                            }
+                        });
+                    } else if (registration.installing) {
+                        // 如果还在安装，发给 installing 状态的worker
+                        registration.installing.postMessage({
+                            type: 'SET_CONFIG',
+                            config: {
+                                BK_STATIC_URL: window.BK_STATIC_URL || '/ui/'
+                            }
+                        });
+                    } else if (registration.waiting) {
+                        // 如果存在等待激活的worker
+                        registration.waiting.postMessage({
+                            type: 'SET_CONFIG',
+                            config: {
+                                BK_STATIC_URL: window.BK_STATIC_URL || '/ui/'
+                            }
+                        });
+                    }
+
+                } catch (error) {
+                    console.error('Service Worker 注册失败:', error);
+                }
+            }
+        }
+        function isPWA() {
+            return ["fullscreen", "standalone", "minimal-ui"].some(
+                (displayMode) => window.matchMedia('(display-mode: ' + displayMode + ')').matches
+            )
+        }
+        function loadLibScript (src) {
+            return new Promise((resolve, reject) => {
+                const script = document.createElement('script')
+                script.setAttribute('type', 'text/javascript')
+                script.setAttribute('src', src)
+                document.head.append(script)
+                script.onload = () => resolve()
+                script.onerror = () => reject()
+            })
+        }
+    </script>
+    <script>
+        window.addEventListener('DOMContentLoaded', registerServiceWorker)
+        var PAAS_SERVICE_URL = '__BK_HTTP_SCHEMA__://__BK_REPO_PAAS_FQDN__'
+        var DEVOPS_SITE_URL = '__BK_HTTP_SCHEMA__://__BK_CI_FQDN__'
+        var LOGIN_SERVICE_URL = /^https?/.test(PAAS_SERVICE_URL)
+            ? PAAS_SERVICE_URL + '/login/'
+            : '__BK_REPO_PAAS_LOGIN_URL__'
+        // standalone: 独立部署模式
+        // ci: ci模式接入devops平台
+        // saas: saas模式接入蓝鲸底座
+        var MODE_CONFIG = '__BK_REPO_DEPLOY_MODE__' || 'standalone'
+        // 是否显示项目设置菜单
+        var SHOW_PROJECT_CONFIG_MENU = MODE_CONFIG !== 'ci'
+        // 是否显示制品分析菜单
+        var SHOW_ANALYST_MENU = '__BK_REPO_SHOW_ANALYST_MENU__' || 'false'
+        SHOW_ANALYST_MENU = SHOW_ANALYST_MENU === 'true'
+        var ADD_FROM_LOGOUT = '__IS_FROM_LOGOUT__' || 'not'
+        // 区分社区版与内部版  community -> 社区   tencent -> 内部
+        var RELEASE_MODE = '__BK_REPO_RELEASE_MODE__' || 'community'
+        // 存放文档中心的url
+        var DOC_URL = '__BK_REPO_DOCS_FQDN__'|| 'https://bk.tencent.com/docs'
+        // displayName的网关URL
+        var API_BASE_URL =  (/^https?/.test('__BK_REPO_PAAS_FQDN__') ? 'https://bkapi.' : 'http://bkapi.')
+                            + ('__BK_REPO_PAAS_FQDN__').split("://")[1] + '/api/bk-user-web/prod'
+        // 是否开启多租户模式
+        var BK_REPO_ENABLE_MULTI_TENANT_MODE = '__BK_REPO_ENABLE_MULTI_TENANT_MODE__' || 'false'
+    </script>
+    <script>
+        const inIframe = self !== top
+        // iframe内使用ci模式
+        if (MODE_CONFIG === 'saas' && inIframe) {
+            MODE_CONFIG = 'ci'
+        }
+
+        window.getLoginUrl = function (cUrl = location.href) {
+            if (/\{+curl\}+/i.test(LOGIN_SERVICE_URL)) {
+                return LOGIN_SERVICE_URL.replace(/\{+curl\}+/i, encodeURIComponent(cUrl))
+            } else if (/=%s/.test(LOGIN_SERVICE_URL)) {
+                return LOGIN_SERVICE_URL.replace(/%s/, cUrl)
+            } else {
+                const loginUrl = new URL(LOGIN_SERVICE_URL)
+                if (/=$/.test(loginUrl.search)) {
+                    return LOGIN_SERVICE_URL + cUrl
+                } else {
+                    loginUrl.searchParams.set('c_url', cUrl)
+                    return loginUrl.href
+                }
+            }
+        }
+
+        const search = new URL(location.href).searchParams // redirect/token/download/?preview
+        const redirect = search.get('redirect')
+        if (redirect) {
+            search.delete('redirect')
+
+            const redirectUrl = new URL(/^https?/.test(redirect) ? redirect : location.origin + redirect)
+            if (!search.toString()) {
+                // 兼容之前的预览链接格式
+                redirectUrl.searchParams.set('preview', true)
+            } else {
+                search.forEach((val, key) => {
+                    redirectUrl.searchParams.set(key, val)
+                })
+            }
+
+            const xhr = new XMLHttpRequest()
+            xhr.onreadystatechange = function (e) {
+                const { readyState, status } = e.currentTarget
+                // 已登录
+                if (readyState === 4) {
+                    if (status === 200) {
+                        window.open(redirectUrl.href, '_self')
+                        mountApp()
+                    } else if (status === 401) {
+                        if (MODE_CONFIG === 'ci' || MODE_CONFIG === 'saas') {
+                            // ci登录逻辑
+                            location.href = window.getLoginUrl()
+                        } else {
+                            // 保存操作链接，登陆后调用
+                            sessionStorage.setItem('afterLogin', redirectUrl.href)
+                            window.login = true
+                            mountApp()
+                        }
+                    } else {
+                        let message
+                        switch (status) {
+                            case 403:
+                                message = '未获得文件访问权限或链接已失效'
+                                break
+                            case 404:
+                                message = '文件不存在'
+                                break
+                            default:
+                                message = '服务异常，请稍后重试'
+                        }
+                        printError(status, message)
+                    }
+                }
+            }
+            xhr.withCredentials = true
+            xhr.open('HEAD', redirectUrl.href)
+            xhr.send()
+        } else {
+            mountApp()
+        }
+
+        function  mountApp () {
+            const app = document.createElement('div')
+            app.setAttribute('id', 'app')
+            document.body.append(app)
+            if (window.repositoryVue) window.repositoryVue.$mount('#app')
+        }
+
+        function printError (status, message) {
+            document.writeln(
+                '<div style="height: 100%; width: 100%; display: flex; align-items: center; justify-content: center; flex-direction: column;">'
+                + '<img src="/ui/'
+                + status
+                + '.png" />'
+                + '<p style="font-size: 20px; color: #979797; margin: 32px 0;">'
+                + message
+                + '</p>'
+                + '</div>'
+            )
+        }
+
+        function initWaterMark (param) {
+            watermark.init({
+                watermark_txt: param.watermarkTxt,
+                watermark_x: 0,
+                watermark_y: 0,
+                watermark_rows: 0,
+                watermark_cols: 0,
+                watermark_x_space: Number(param.watermarkXSpace),
+                watermark_y_space: Number(param.watermarkYSpace),
+                watermark_font: param.watermarkFont,
+                watermark_fontsize: param.watermarkFontsize,
+                watermark_color: param.watermarkColor,
+                watermark_alpha: param.watermarkAlpha,
+                watermark_width: Number(param.watermarkWidth),
+                watermark_height: Number(param.watermarkHeight),
+                watermark_angle: Number(param.watermarkAngle)
+            })
+        }
+
+        function resetWaterMark() {
+            watermark.init({
+                watermark_txt: '  '
+            })
+        }
+
+        window.__loadAssetsUrl__ = function(src){
+            function joinPath(...paths) {
+                // 过滤 null/undefined
+                const validPaths = paths.filter(p => p != null).map(String);
+
+                if (validPaths.length === 0) return '';
+
+                // 检查是否以根路径开头
+                const startsWithRoot = validPaths[0].startsWith('/');
+
+                // 标准化每个路径片段：移除首尾多余斜杠
+                const normalized = validPaths.map((p, i) => {
+                    if (i === 0) {
+                        // 第一个路径：只移除尾部斜杠（保留开头的 /）
+                        return p.replace(/[\/]+$/, '');
+                    } else {
+                        // 其他路径：移除首尾斜杠
+                        return p.replace(/^[\/]+|[\/]+$/g, '');
+                    }
+                }).filter(p => p !== '');
+
+                // 拼接
+                let result = normalized.join('/');
+
+                // 如果原始第一个路径是根路径，确保结果以 / 开头
+                if (startsWithRoot && result !== '') {
+                    result = '/' + result.replace(/^\/+/, '');
+                }
+
+                return result || (startsWithRoot ? '/' : '');
+            }
+            return joinPath(window.BK_STATIC_URL, src);
+        }
+        function loadScript (src) {
+            const script = document.createElement('script');
+            script.src = window.__loadAssetsUrl__(src);
+            document.body.appendChild(script);
+        }
+        function loadStyle (href) {
+            const link = document.createElement('link');
+            link.type = "text/css";
+            link.rel = "stylesheet";
+            link.href = window.__loadAssetsUrl__(href);
+            document.head.appendChild(link);
+        }
+
+    </script>
+    <script src="__BK_REPO_SUBPATH__ui/libs/bk-magic-vue/bk-magic-vue.min.js"></script>
+    <script>
+        <% for (var chunk of htmlWebpackPlugin.files.js) { %>
+            loadScript("<%= chunk %>");
+            <% } %>
+        <% for (var chunk of htmlWebpackPlugin.files.css) { %>
+            loadStyle("<%= chunk %>");
+            <% } %>
+    </script>
+</body>
+</html>

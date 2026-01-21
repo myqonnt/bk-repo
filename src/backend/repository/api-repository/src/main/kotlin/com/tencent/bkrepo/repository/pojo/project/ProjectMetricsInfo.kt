@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -28,18 +28,18 @@
 package com.tencent.bkrepo.repository.pojo.project
 
 import com.tencent.bkrepo.repository.pojo.repo.RepoMetricsInfo
-import io.swagger.annotations.ApiModelProperty
+import io.swagger.v3.oas.annotations.media.Schema
 import java.time.LocalDateTime
 
 data class ProjectMetricsInfo(
-    @ApiModelProperty("projectId")
+    @get:Schema(title = "projectId")
     var projectId: String,
-    @ApiModelProperty("nodeNum")
+    @get:Schema(title = "nodeNum")
     var nodeNum: Long,
-    @ApiModelProperty("capSize")
+    @get:Schema(title = "capSize")
     var capSize: Long,
-    @ApiModelProperty("repoMetrics")
+    @get:Schema(title = "repoMetrics")
     val repoMetrics: List<RepoMetricsInfo>,
-    @ApiModelProperty("createdDate")
+    @get:Schema(title = "createdDate")
     val createdDate: LocalDateTime? = LocalDateTime.now()
 )

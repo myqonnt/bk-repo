@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -27,21 +27,21 @@
 
 package com.tencent.bkrepo.common.notify.api.weworkbot
 
+import com.tencent.bkrepo.common.metadata.annotation.Sensitive
+import com.tencent.bkrepo.common.metadata.handler.MaskPartString
 import com.tencent.bkrepo.common.notify.api.NotifyChannelCredential
-import com.tencent.bkrepo.common.operate.api.annotation.Sensitive
-import com.tencent.bkrepo.common.operate.api.handler.MaskPartString
-import io.swagger.annotations.ApiModel
-import io.swagger.annotations.ApiModelProperty
+import io.swagger.v3.oas.annotations.media.Schema
 
-@ApiModel("企业微信机器人")
+
+@Schema(title = "企业微信机器人")
 data class WeworkBotChannelCredential(
     override var name: String = "",
     override var default: Boolean = false,
-    @ApiModelProperty("企业微信机器人Key，可以从企业微信机器人的Webhook中获取")
-    @Sensitive(handler = MaskPartString::class)
+    @get:Schema(title = "企业微信机器人Key，可以从企业微信机器人的Webhook中获取")
+    @field:Sensitive(handler = MaskPartString::class)
     var key: String
-) : NotifyChannelCredential(name, type, default) {
+) : NotifyChannelCredential(name, TYPE, default) {
     companion object {
-        const val type = "wework-bot"
+        const val TYPE = "wework-bot"
     }
 }

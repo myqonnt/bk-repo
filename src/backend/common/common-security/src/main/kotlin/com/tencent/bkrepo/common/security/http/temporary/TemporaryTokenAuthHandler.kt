@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -32,7 +32,6 @@
 package com.tencent.bkrepo.common.security.http.temporary
 
 import com.tencent.bkrepo.common.api.constant.ANONYMOUS_USER
-import com.tencent.bkrepo.common.api.constant.AUTH_HEADER_UID
 import com.tencent.bkrepo.common.api.constant.HttpHeaders
 import com.tencent.bkrepo.common.api.constant.TEMPORARY_TOKEN_AUTH_PREFIX
 import com.tencent.bkrepo.common.api.constant.USER_KEY
@@ -41,8 +40,8 @@ import com.tencent.bkrepo.common.security.http.core.HttpAuthHandler
 import com.tencent.bkrepo.common.security.http.credentials.AnonymousCredentials
 import com.tencent.bkrepo.common.security.http.credentials.HttpAuthCredentials
 import com.tencent.bkrepo.common.security.manager.AuthenticationManager
+import jakarta.servlet.http.HttpServletRequest
 import org.slf4j.LoggerFactory
-import javax.servlet.http.HttpServletRequest
 
 /**
  * 临时token账号认证
@@ -68,11 +67,8 @@ open class TemporaryTokenAuthHandler(
         require(authCredentials is TemporaryTokenAuthCredentials)
         val token = authCredentials.token
         val tokenInfo = authenticationManager.getTokenInfo(token) ?: return ANONYMOUS_USER
-        val userId = request.getHeader(AUTH_HEADER_UID).orEmpty().trim()
-            .takeIf { it.isNotEmpty() }?.apply { checkUserId(this) } ?: ANONYMOUS_USER
-        if (!tokenInfo.authorizedUserList.contains(userId)) {
-            return ANONYMOUS_USER
-        }
+        val userId = tokenInfo.createdBy
+        checkUserId(userId)
         request.setAttribute(USER_KEY, userId)
         return userId
     }

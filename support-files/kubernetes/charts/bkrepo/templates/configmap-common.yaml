@@ -13,16 +13,46 @@ metadata:
 data:
   application.yml: |-
     logging:
-      config: classpath:logback-config.xml
+      config: classpath:logback-spring.xml
       path: /data/workspace/logs
     spring:
-      sleuth:
-        enabled: true
       data:
         mongodb:
           uri: {{ include "bkrepo.mongodbUri" . }}
           transaction:
             enabled: false
+      cloud:
+        stream:
+          binders:
+            noop:
+              type: noop
+            file:
+              type: file
+            {{- if .Values.kafka.provider }}
+            kafka:
+              type: kafka
+              environment:
+                spring:
+                  cloud:
+                    stream:
+                      kafka:
+                        binder:
+                          brokers: {{ .Values.kafka.url }}
+                          configuration:
+                            allow.auto.create.topics: true
+                            security.protocol: SASL_PLAINTEXT
+                            sasl.mechanism: SCRAM-SHA-512
+                            sasl.jaas.config: {{ include "bkrepo.kafka.jaasConfig" . | quote }} 
+                management.health.binders.enabled: false
+            {{- end }}
+          default-binder: noop
+          {{- $binder := ternary "kafka" "noop" .Values.kafka.provider }}
+          bindings:
+            artifactEvent-out-0:
+              destination: artifactEvent
+              binder: {{ $binder }}
+          function:
+            autodetect: false
     service.prefix: {{ include "common.names.fullname" . }}-
     {{- if or .Values.ingress.tls .Values.forceHttps }}
     oci.authUrl: https://{{ include "bkrepo.oci.authUrl" . }}
@@ -45,6 +75,8 @@ data:
     router.controller.enabled: true
     router.controller.supportServices: generic
     {{- end }}
+    multitenant.enabled: {{ .Values.gateway.enableMultiTenantMode }}
+    multitenant.oPTenantId: {{ .Values.gateway.oPTenantId }}
     cluster:
       region: {{ .Values.common.region }}
       architecture: {{ .Values.cluster.architecture }}
@@ -65,3 +97,18 @@ data:
         username: {{ .Values.common.username }}
         password: {{ .Values.common.password }}
     {{- toYaml .Values.common.config | nindent 4 }}
+    {{- if .Values.tls.mongodb.enabled }}
+    tls:
+      # 依赖组件使用ssl的配置
+      mongodb:
+        enabled: true
+        trustStore: /data/certs/mongodb/{{ .Values.tls.mongodb.certJksFilename }}
+        trustStorePassword: {{ .Values.tls.mongodb.trustStorePassword }}
+        trustStoreType: JKS
+        {{- if .Values.tls.mongodb.keyStoreFilename }}
+        keyStore: /data/certs/mongodb/{{ .Values.tls.mongodb.keyStoreFilename }}
+        keyStorePassword: {{ .Values.tls.mongodb.keyStorePassword }}
+        keyStoreType: {{ .Values.tls.mongodb.keyStoreType }}
+        {{- end }}
+        verifyHostname: {{ .Values.tls.mongodb.verifyHostname }}
+    {{- end }}

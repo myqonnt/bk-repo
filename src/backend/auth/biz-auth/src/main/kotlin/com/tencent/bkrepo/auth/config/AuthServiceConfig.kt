@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -31,30 +31,31 @@
 
 package com.tencent.bkrepo.auth.config
 
+import com.tencent.bkrepo.auth.condition.BkV3RbacAuthCondition
+import com.tencent.bkrepo.auth.condition.DevopsAuthCondition
+import com.tencent.bkrepo.auth.condition.LocalAuthCondition
+import com.tencent.bkrepo.auth.dao.AccountDao
 import com.tencent.bkrepo.auth.dao.PermissionDao
+import com.tencent.bkrepo.auth.dao.PersonalPathDao
+import com.tencent.bkrepo.auth.dao.RepoAuthConfigDao
 import com.tencent.bkrepo.auth.dao.UserDao
-import com.tencent.bkrepo.auth.dao.repository.AccountRepository
 import com.tencent.bkrepo.auth.dao.repository.OauthTokenRepository
 import com.tencent.bkrepo.auth.dao.repository.RoleRepository
-import com.tencent.bkrepo.auth.condition.DevopsAuthCondition
-import com.tencent.bkrepo.auth.condition.BkV3RbacAuthCondition
-import com.tencent.bkrepo.auth.condition.LocalAuthCondition
-import com.tencent.bkrepo.auth.dao.PersonalPathDao
 import com.tencent.bkrepo.auth.service.AccountService
 import com.tencent.bkrepo.auth.service.PermissionService
 import com.tencent.bkrepo.auth.service.RoleService
 import com.tencent.bkrepo.auth.service.UserService
-import com.tencent.bkrepo.auth.service.bkauth.DevopsPermissionServiceImpl
-import com.tencent.bkrepo.auth.service.bkauth.DevopsPipelineService
-import com.tencent.bkrepo.auth.service.bkauth.DevopsProjectService
+import com.tencent.bkrepo.auth.service.bkdevops.DevopsPermissionServiceImpl
+import com.tencent.bkrepo.auth.service.bkdevops.DevopsPipelineService
+import com.tencent.bkrepo.auth.service.bkdevops.DevopsProjectService
 import com.tencent.bkrepo.auth.service.bkiamv3.BkIamV3PermissionServiceImpl
 import com.tencent.bkrepo.auth.service.bkiamv3.BkIamV3Service
 import com.tencent.bkrepo.auth.service.local.AccountServiceImpl
 import com.tencent.bkrepo.auth.service.local.PermissionServiceImpl
 import com.tencent.bkrepo.auth.service.local.RoleServiceImpl
 import com.tencent.bkrepo.auth.service.local.UserServiceImpl
-import com.tencent.bkrepo.repository.api.ProjectClient
-import com.tencent.bkrepo.repository.api.RepositoryClient
+import com.tencent.bkrepo.common.metadata.service.project.ProjectService
+import com.tencent.bkrepo.common.metadata.service.repo.RepositoryService
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.autoconfigure.AutoConfigureOrder
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
@@ -63,7 +64,6 @@ import org.springframework.context.annotation.Conditional
 import org.springframework.context.annotation.Configuration
 import org.springframework.context.annotation.Lazy
 import org.springframework.core.Ordered
-import org.springframework.data.mongodb.core.MongoTemplate
 
 @Configuration
 @AutoConfigureOrder(Ordered.LOWEST_PRECEDENCE)
@@ -71,38 +71,39 @@ class AuthServiceConfig {
 
     @Autowired
     @Lazy
-    private lateinit var repositoryClient: RepositoryClient
+    private lateinit var repositoryService: RepositoryService
 
     @Autowired
     @Lazy
-    private lateinit var projectClient: ProjectClient
+    private lateinit var projectService: ProjectService
 
     @Bean
     @ConditionalOnMissingBean(AccountService::class)
     fun accountService(
-        accountRepository: AccountRepository,
+        accountDao: AccountDao,
         oauthTokenRepository: OauthTokenRepository,
-        userService: UserService,
-        mongoTemplate: MongoTemplate
-    ) = AccountServiceImpl(accountRepository, oauthTokenRepository, userService, mongoTemplate)
+        userDao: UserDao
+    ) = AccountServiceImpl(accountDao, oauthTokenRepository, userDao)
 
     @Bean
     @Conditional(LocalAuthCondition::class)
     fun permissionService(
         roleRepository: RoleRepository,
-        accountRepository: AccountRepository,
+        accountDao: AccountDao,
         permissionDao: PermissionDao,
         userDao: UserDao,
-        personalPathDao: PersonalPathDao
+        personalPathDao: PersonalPathDao,
+        repoAuthConfigDao: RepoAuthConfigDao
     ): PermissionService {
         return PermissionServiceImpl(
             roleRepository,
-            accountRepository,
+            accountDao,
             permissionDao,
             userDao,
             personalPathDao,
-            repositoryClient,
-            projectClient
+            repoAuthConfigDao,
+            repositoryService,
+            projectService
         )
     }
 
@@ -111,20 +112,21 @@ class AuthServiceConfig {
         bkiamV3Service: BkIamV3Service,
         userDao: UserDao,
         personalPathDao: PersonalPathDao,
+        repoAuthConfigDao: RepoAuthConfigDao,
         roleRepository: RoleRepository,
-        accountRepository: AccountRepository,
+        accountDao: AccountDao,
         permissionDao: PermissionDao,
-        repoClient: RepositoryClient
     ): PermissionService {
         return BkIamV3PermissionServiceImpl(
             bkiamV3Service,
             userDao,
             roleRepository,
-            accountRepository,
+            accountDao,
             permissionDao,
             personalPathDao,
-            repoClient,
-            projectClient
+            repoAuthConfigDao,
+            repositoryService,
+            projectService
         )
     }
 
@@ -132,10 +134,11 @@ class AuthServiceConfig {
     @Conditional(DevopsAuthCondition::class)
     fun bkAuthPermissionService(
         roleRepository: RoleRepository,
-        accountRepository: AccountRepository,
+        accountDao: AccountDao,
         permissionDao: PermissionDao,
         userDao: UserDao,
         personalPathDao: PersonalPathDao,
+        repoAuthConfigDao: RepoAuthConfigDao,
         bkAuthConfig: DevopsAuthConfig,
         bkAuthPipelineService: DevopsPipelineService,
         bkAuthProjectService: DevopsProjectService,
@@ -143,15 +146,16 @@ class AuthServiceConfig {
     ): PermissionService {
         return DevopsPermissionServiceImpl(
             roleRepository,
-            accountRepository,
+            accountDao,
             permissionDao,
             userDao,
             personalPathDao,
+            repoAuthConfigDao,
             bkAuthConfig,
             bkAuthPipelineService,
             bkAuthProjectService,
-            repositoryClient,
-            projectClient,
+            repositoryService,
+            projectService,
             bkiamV3Service
         )
     }

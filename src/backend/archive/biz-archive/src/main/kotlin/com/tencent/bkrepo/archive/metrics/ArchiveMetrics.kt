@@ -2,8 +2,8 @@ package com.tencent.bkrepo.archive.metrics
 
 import com.tencent.bkrepo.archive.ArchiveStatus
 import com.tencent.bkrepo.archive.CompressStatus
-import com.tencent.bkrepo.archive.core.FileProvider
-import com.tencent.bkrepo.archive.core.FileStorageFileProvider
+import com.tencent.bkrepo.archive.core.provider.FileStorageFileProvider
+import com.tencent.bkrepo.archive.core.provider.PriorityFileProvider
 import com.tencent.bkrepo.archive.core.archive.ArchiveManager
 import com.tencent.bkrepo.archive.core.compress.BDZipManager
 import com.tencent.bkrepo.archive.model.TArchiveFile
@@ -12,11 +12,65 @@ import com.tencent.bkrepo.archive.repository.ArchiveFileDao
 import com.tencent.bkrepo.archive.repository.ArchiveFileRepository
 import com.tencent.bkrepo.archive.repository.CompressFileDao
 import com.tencent.bkrepo.archive.repository.CompressFileRepository
+import com.tencent.bkrepo.common.metrics.constant.ARCHIVE_FILE_STATUS_COUNTER
+import com.tencent.bkrepo.common.metrics.constant.ARCHIVE_FILE_STATUS_COUNTER_DESC
+import com.tencent.bkrepo.common.metrics.constant.COMPRESS_FILE_STATUS_COUNTER
+import com.tencent.bkrepo.common.metrics.constant.COMPRESS_FILE_STATUS_COUNTER_DESC
+import com.tencent.bkrepo.common.metrics.constant.FILE_ARCHIVE_ACTIVE_COUNTER
+import com.tencent.bkrepo.common.metrics.constant.FILE_ARCHIVE_ACTIVE_COUNTER_DESC
+import com.tencent.bkrepo.common.metrics.constant.FILE_ARCHIVE_COUNTER
+import com.tencent.bkrepo.common.metrics.constant.FILE_ARCHIVE_COUNTER_DESC
+import com.tencent.bkrepo.common.metrics.constant.FILE_ARCHIVE_QUEUE_SIZE
+import com.tencent.bkrepo.common.metrics.constant.FILE_ARCHIVE_QUEUE_SIZE_DESC
+import com.tencent.bkrepo.common.metrics.constant.FILE_ARCHIVE_SIZE_COUNTER
+import com.tencent.bkrepo.common.metrics.constant.FILE_ARCHIVE_SIZE_COUNTER_DESC
+import com.tencent.bkrepo.common.metrics.constant.FILE_ARCHIVE_SIZE_TOTAL_COUNTER
+import com.tencent.bkrepo.common.metrics.constant.FILE_ARCHIVE_SIZE_TOTAL_COUNTER_DESC
+import com.tencent.bkrepo.common.metrics.constant.FILE_ARCHIVE_TIME
+import com.tencent.bkrepo.common.metrics.constant.FILE_ARCHIVE_TIME_DESC
+import com.tencent.bkrepo.common.metrics.constant.FILE_COMPRESS_ACTIVE_COUNT
+import com.tencent.bkrepo.common.metrics.constant.FILE_COMPRESS_ACTIVE_COUNT_DESC
+import com.tencent.bkrepo.common.metrics.constant.FILE_COMPRESS_COUNTER
+import com.tencent.bkrepo.common.metrics.constant.FILE_COMPRESS_COUNTER_DESC
+import com.tencent.bkrepo.common.metrics.constant.FILE_COMPRESS_QUEUE_SIZE
+import com.tencent.bkrepo.common.metrics.constant.FILE_COMPRESS_QUEUE_SIZE_DESC
+import com.tencent.bkrepo.common.metrics.constant.FILE_COMPRESS_SIZE_COUNTER
+import com.tencent.bkrepo.common.metrics.constant.FILE_COMPRESS_SIZE_COUNTER_DESC
+import com.tencent.bkrepo.common.metrics.constant.FILE_COMPRESS_SIZE_TOTAL_COUNTER
+import com.tencent.bkrepo.common.metrics.constant.FILE_COMPRESS_SIZE_TOTAL_COUNTER_DESC
+import com.tencent.bkrepo.common.metrics.constant.FILE_COMPRESS_TIME
+import com.tencent.bkrepo.common.metrics.constant.FILE_COMPRESS_TIME_DESC
+import com.tencent.bkrepo.common.metrics.constant.FILE_DOWNLOAD_ACTIVE_COUNT
+import com.tencent.bkrepo.common.metrics.constant.FILE_DOWNLOAD_ACTIVE_COUNT_DESC
+import com.tencent.bkrepo.common.metrics.constant.FILE_DOWNLOAD_QUEUE_SIZE
+import com.tencent.bkrepo.common.metrics.constant.FILE_DOWNLOAD_QUEUE_SIZE_DESC
+import com.tencent.bkrepo.common.metrics.constant.FILE_RESTORE_COUNTER
+import com.tencent.bkrepo.common.metrics.constant.FILE_RESTORE_COUNTER_DESC
+import com.tencent.bkrepo.common.metrics.constant.FILE_RESTORE_SIZE_COUNTER
+import com.tencent.bkrepo.common.metrics.constant.FILE_RESTORE_SIZE_COUNTER_DESC
+import com.tencent.bkrepo.common.metrics.constant.FILE_RESTORE_TIME
+import com.tencent.bkrepo.common.metrics.constant.FILE_RESTORE_TIME_DESC
+import com.tencent.bkrepo.common.metrics.constant.FILE_UNCOMPRESS_COUNTER
+import com.tencent.bkrepo.common.metrics.constant.FILE_UNCOMPRESS_COUNTER_DESC
+import com.tencent.bkrepo.common.metrics.constant.FILE_UNCOMPRESS_SIZE_COUNTER
+import com.tencent.bkrepo.common.metrics.constant.FILE_UNCOMPRESS_SIZE_COUNTER_DESC
+import com.tencent.bkrepo.common.metrics.constant.FILE_UNCOMPRESS_TIME
+import com.tencent.bkrepo.common.metrics.constant.FILE_UNCOMPRESS_TIME_DESC
+import com.tencent.bkrepo.common.metrics.constant.STORAGE_ALLOCATE_COUNTER
+import com.tencent.bkrepo.common.metrics.constant.STORAGE_ALLOCATE_COUNTER_DESC
+import com.tencent.bkrepo.common.metrics.constant.STORAGE_ALLOCATE_SIZE_COUNTER
+import com.tencent.bkrepo.common.metrics.constant.STORAGE_ALLOCATE_SIZE_COUNTER_DESC
+import com.tencent.bkrepo.common.metrics.constant.STORAGE_FREE_COUNTER
+import com.tencent.bkrepo.common.metrics.constant.STORAGE_FREE_COUNTER_DESC
+import com.tencent.bkrepo.common.metrics.constant.STORAGE_FREE_SIZE_COUNTER
+import com.tencent.bkrepo.common.metrics.constant.STORAGE_FREE_SIZE_COUNTER_DESC
 import io.micrometer.core.instrument.Counter
 import io.micrometer.core.instrument.Gauge
 import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.core.instrument.Timer
 import io.micrometer.core.instrument.binder.MeterBinder
+import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.context.annotation.Lazy
 import org.springframework.data.mongodb.core.aggregation.Aggregation
 import org.springframework.data.mongodb.core.query.isEqualTo
 import org.springframework.data.mongodb.core.query.where
@@ -29,15 +83,33 @@ import java.util.concurrent.TimeUnit
  * */
 @Component
 class ArchiveMetrics(
-    val archiveFileRepository: ArchiveFileRepository,
-    val compressFileRepository: CompressFileRepository,
-    val bdZipManager: BDZipManager,
-    val fileProvider: FileProvider,
-    val archiveManager: ArchiveManager,
-    private val archiveFileDao: ArchiveFileDao,
-    private val compressFileDao: CompressFileDao,
+    val fileProvider: PriorityFileProvider,
 ) : MeterBinder {
     lateinit var registry: MeterRegistry
+
+    @Autowired
+    @Lazy
+    private lateinit var archiveFileRepository: ArchiveFileRepository
+
+    @Autowired
+    @Lazy
+    private lateinit var compressFileRepository: CompressFileRepository
+
+    @Autowired
+    @Lazy
+    private lateinit var archiveManager: ArchiveManager
+
+    @Autowired
+    @Lazy
+    private lateinit var bdZipManager: BDZipManager
+
+    @Autowired
+    @Lazy
+    private lateinit var archiveFileDao: ArchiveFileDao
+
+    @Autowired
+    @Lazy
+    private lateinit var compressFileDao: CompressFileDao
 
     private var fileArchiveSizeTotal = 0L
     private var fileCompressSizeTotal = 0L
@@ -216,58 +288,6 @@ class ArchiveMetrics(
     )
 
     companion object {
-        private const val FILE_ARCHIVE_COUNTER = "file.archive.count"
-        private const val FILE_ARCHIVE_COUNTER_DESC = "文件归档数量"
-        private const val FILE_RESTORE_COUNTER = "file.restore.count"
-        private const val FILE_RESTORE_COUNTER_DESC = "文件恢复数量"
-        private const val FILE_ARCHIVE_SIZE_COUNTER = "file.archive.size.count"
-        private const val FILE_ARCHIVE_SIZE_COUNTER_DESC = "文件归档大小"
-        private const val FILE_RESTORE_SIZE_COUNTER = "file.restore.size.count"
-        private const val FILE_RESTORE_SIZE_COUNTER_DESC = "文件恢复大小"
-        private const val FILE_ARCHIVE_ACTIVE_COUNTER = "file.archive.active.count"
-        private const val FILE_ARCHIVE_ACTIVE_COUNTER_DESC = "文件实时归档数量"
-        private const val FILE_ARCHIVE_QUEUE_SIZE = "file.archive.queue.count"
-        private const val FILE_ARCHIVE_QUEUE_SIZE_DESC = "文件归档队列大小"
-        private const val FILE_ARCHIVE_TIME = "file.archive.time"
-        private const val FILE_ARCHIVE_TIME_DESC = "文件归档耗时"
-        private const val FILE_RESTORE_TIME = "file.restore.time"
-        private const val FILE_RESTORE_TIME_DESC = "文件恢复耗时"
-        private const val FILE_DOWNLOAD_ACTIVE_COUNT = "file.download.active.count"
-        private const val FILE_DOWNLOAD_ACTIVE_COUNT_DESC = "文件下载实时数量"
-        private const val FILE_DOWNLOAD_QUEUE_SIZE = "file.download.queue.size"
-        private const val FILE_DOWNLOAD_QUEUE_SIZE_DESC = "文件下载队列大小"
-        private const val FILE_COMPRESS_ACTIVE_COUNT = "file.compress.active.count"
-        private const val FILE_COMPRESS_ACTIVE_COUNT_DESC = "文件压缩实时数量"
-        private const val FILE_COMPRESS_QUEUE_SIZE = "file.compress.queue.size"
-        private const val FILE_COMPRESS_QUEUE_SIZE_DESC = "文件压缩队列大小"
-        private const val ARCHIVE_FILE_STATUS_COUNTER = "file.archive.status.count"
-        private const val ARCHIVE_FILE_STATUS_COUNTER_DESC = "归档文件状态统计"
-        private const val COMPRESS_FILE_STATUS_COUNTER = "file.compress.status.count"
-        private const val COMPRESS_FILE_STATUS_COUNTER_DESC = "压缩文件状态统计"
-        private const val FILE_COMPRESS_COUNTER = "file.compress.count"
-        private const val FILE_COMPRESS_COUNTER_DESC = "文件压缩数量"
-        private const val FILE_COMPRESS_SIZE_COUNTER = "file.compress.size.count"
-        private const val FILE_COMPRESS_SIZE_COUNTER_DESC = "文件压缩大小"
-        private const val FILE_COMPRESS_TIME = "file.compress.time"
-        private const val FILE_COMPRESS_TIME_DESC = "文件压缩耗时"
-        private const val FILE_UNCOMPRESS_COUNTER = "file.uncompress.count"
-        private const val FILE_UNCOMPRESS_COUNTER_DESC = "文件压缩数量"
-        private const val FILE_UNCOMPRESS_SIZE_COUNTER = "file.uncompress.size.count"
-        private const val FILE_UNCOMPRESS_SIZE_COUNTER_DESC = "文件解压大小"
-        private const val FILE_UNCOMPRESS_TIME = "file.uncompress.time"
-        private const val FILE_UNCOMPRESS_TIME_DESC = "文件解压耗时"
-        private const val STORAGE_FREE_SIZE_COUNTER = "storage.free.size.count"
-        private const val STORAGE_FREE_SIZE_COUNTER_DESC = "存储释放大小"
-        private const val STORAGE_FREE_COUNTER = "storage.free.count"
-        private const val STORAGE_FREE_COUNTER_DESC = "存储释放文件个数"
-        private const val STORAGE_ALLOCATE_SIZE_COUNTER = "storage.allocate.size.count"
-        private const val STORAGE_ALLOCATE_SIZE_COUNTER_DESC = "存储新增大小"
-        private const val STORAGE_ALLOCATE_COUNTER = "storage.allocate.count"
-        private const val STORAGE_ALLOCATE_COUNTER_DESC = "存储新增文件个数"
-        private const val FILE_ARCHIVE_SIZE_TOTAL_COUNTER = "file.archive.size.total.count"
-        private const val FILE_ARCHIVE_SIZE_TOTAL_COUNTER_DESC = "文件归档总大小"
-        private const val FILE_COMPRESS_SIZE_TOTAL_COUNTER = "file.compress.size.total.count"
-        private const val FILE_COMPRESS_SIZE_TOTAL_COUNTER_DESC = "文件压缩总大小"
         private const val TAG_CREDENTIALS_KEY = "credentialsKey"
         private const val TAG_STATUS = "status"
     }

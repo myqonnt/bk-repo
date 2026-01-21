@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -31,18 +31,17 @@
 
 package com.tencent.bkrepo.auth.pojo.token
 
-import io.swagger.annotations.ApiModel
-import io.swagger.annotations.ApiModelProperty
+import io.swagger.v3.oas.annotations.media.Schema
 import java.time.LocalDateTime
 
-@ApiModel("token信息")
+@Schema(title = "token信息")
 data class Token(
-    @ApiModelProperty("tokenName")
+    @get:Schema(title = "tokenName")
     val name: String?,
-    @ApiModelProperty("tokenID")
+    @get:Schema(title = "tokenID")
     val id: String,
-    @ApiModelProperty("创建时间")
+    @get:Schema(title = "创建时间")
     val createdAt: LocalDateTime,
-    @ApiModelProperty("过期时间")
+    @get:Schema(title = "过期时间")
     val expiredAt: LocalDateTime?
 )

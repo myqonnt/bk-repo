@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2019 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2019 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -27,13 +27,15 @@
 
 package com.tencent.bkrepo.interceptor
 
+import com.tencent.bkrepo.common.api.exception.ErrorCodeException
 import com.tencent.bkrepo.common.artifact.constant.DownloadInterceptorType.PACKAGE_FORBID
 import com.tencent.bkrepo.common.artifact.constant.FORBID_STATUS
 import com.tencent.bkrepo.common.artifact.exception.ArtifactDownloadForbiddenException
-import com.tencent.bkrepo.common.artifact.interceptor.DownloadInterceptorFactory
-import com.tencent.bkrepo.common.artifact.interceptor.impl.FilenameInterceptor
-import com.tencent.bkrepo.common.artifact.interceptor.impl.NodeMetadataInterceptor
-import com.tencent.bkrepo.common.artifact.interceptor.impl.WebInterceptor
+import com.tencent.bkrepo.common.metadata.interceptor.DownloadInterceptorFactory
+import com.tencent.bkrepo.common.metadata.interceptor.impl.FilenameInterceptor
+import com.tencent.bkrepo.common.metadata.interceptor.impl.NodeForbiddenStatusInterceptor
+import com.tencent.bkrepo.common.metadata.interceptor.impl.NodeMetadataInterceptor
+import com.tencent.bkrepo.common.metadata.interceptor.impl.WebInterceptor
 import com.tencent.bkrepo.repository.pojo.metadata.MetadataModel
 import com.tencent.bkrepo.repository.pojo.node.NodeDetail
 import com.tencent.bkrepo.repository.pojo.node.NodeInfo
@@ -93,12 +95,12 @@ class DownloadInterceptorTest {
     @Test
     @DisplayName("制品禁用下载拦截器测试")
     fun forbidTest() {
-        val forbidInterceptor = DownloadInterceptorFactory.buildNodeForbidInterceptor()
+        val forbidInterceptor = NodeForbiddenStatusInterceptor()
 
         var node = nodeDetail("test", emptyMap())
         assertDoesNotThrow { forbidInterceptor.intercept(node.projectId, node) }
         node = node.copy(metadata = mapOf(FORBID_STATUS to true))
-        assertThrows<ArtifactDownloadForbiddenException> { forbidInterceptor.intercept(node.projectId, node) }
+        assertThrows<ErrorCodeException> { forbidInterceptor.intercept(node.projectId, node) }
     }
 
     @Test
@@ -197,7 +199,7 @@ class DownloadInterceptorTest {
             emptyList(),
             emptyMap(),
             "/test",
-            "/test"
+            setOf("/test")
         )
     }
 

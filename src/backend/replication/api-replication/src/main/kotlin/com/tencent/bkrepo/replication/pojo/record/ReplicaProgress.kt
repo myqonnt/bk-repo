@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2021 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2021 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -50,7 +50,15 @@ data class ReplicaProgress(
     /**
      * 冲突数量
      */
-    var conflict: Long = 0
+    var conflict: Long = 0,
+    /**
+     * 文件成功数量
+     */
+    var fileSuccess: Long = 0,
+    /**
+     * 文件失败数量
+     */
+    var fileFailed: Long = 0,
 ) {
 
     operator fun plus(replicaProgress: ReplicaProgress): ReplicaProgress {
@@ -59,7 +67,9 @@ data class ReplicaProgress(
             skip = this.skip + replicaProgress.skip,
             failed = this.failed + replicaProgress.failed,
             totalSize = this.totalSize + replicaProgress.totalSize,
-            conflict = this.conflict + replicaProgress.conflict
+            conflict = this.conflict + replicaProgress.conflict,
+            fileSuccess = this.fileSuccess + replicaProgress.fileSuccess,
+            fileFailed = this.fileFailed + replicaProgress.fileFailed
         )
     }
 }

@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2021 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2021 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -224,7 +224,8 @@ class ReplicaTaskServiceImpl(
                     remoteRepoName = it.remoteRepoName,
                     repoType = it.repoType,
                     packageConstraints = it.packageConstraints,
-                    pathConstraints = it.pathConstraints
+                    pathConstraints = it.pathConstraints,
+                    sourceFilter = it.sourceFilter
                 )
             }
             return try {
@@ -286,19 +287,38 @@ class ReplicaTaskServiceImpl(
     }
 
     private fun computeNodeSize(localProjectId: String, replicaTaskObjects: List<ReplicaObjectInfo>): Long {
+        require(replicaTaskObjects.isNotEmpty()) { "replicaTaskObjects cannot be empty" }
+        
         val taskObject = replicaTaskObjects.first()
-        return taskObject.pathConstraints!!.sumOf {
-            val node = localDataManager.findNodeDetail(localProjectId, taskObject.localRepoName, it.path!!)
-            if (node.folder && node.size == 0L) {
-                try {
-                    localDataManager.listNode(localProjectId, taskObject.localRepoName, it.path!!).sumOf { n -> n.size }
-                } catch (e: Exception) {
-                    logger.warn("compute node[$localProjectId/${taskObject.localRepoName}${it.path}] size error: ", e)
-                    0
+        val pathConstraints = taskObject.pathConstraints
+            ?: return 0L // 如果没有路径约束，返回0
+        
+        return pathConstraints.sumOf { pathConstraint ->
+            computePathSize(localProjectId, taskObject.localRepoName, pathConstraint.path!!)
+        }
+    }
+
+
+    private fun computePathSize(projectId: String, repoName: String, path: String): Long {
+        return try {
+            val node = localDataManager.findNode(projectId, repoName, path)
+            when {
+                node == null -> {
+                    // 节点不存在，传递的path可能是正则匹配，使用正则路径匹配计算大小
+                    localDataManager.computeRegexPathNodesSize(projectId, repoName, path)
                 }
-            } else {
-                node.size
+                node.folder && node.size == 0L -> {
+                    // 文件夹且大小为0，需要计算子节点大小
+                    localDataManager.listNode(projectId, repoName, path).sumOf { it.size }
+                }
+                else -> {
+                    // 直接返回节点大小
+                    node.size
+                }
             }
+        } catch (e: Exception) {
+            logger.warn("Failed to compute node size for [$projectId/$repoName$path]: ${e.message}", e)
+            0L
         }
     }
 
@@ -340,6 +360,7 @@ class ReplicaTaskServiceImpl(
                 ExecutionStrategy.IMMEDIATELY -> {
                     Preconditions.checkArgument(setting.executionPlan.executeImmediately, "executeImmediately")
                 }
+
                 ExecutionStrategy.SPECIFIED_TIME -> {
                     val executeTime = setting.executionPlan.executeTime
                     Preconditions.checkNotBlank(executeTime, "executeTime")
@@ -347,6 +368,7 @@ class ReplicaTaskServiceImpl(
                         Preconditions.checkArgument(it.isAfter(LocalDateTime.now()), "executeTime")
                     }
                 }
+
                 ExecutionStrategy.CRON_EXPRESSION -> {
                     val cronExpression = setting.executionPlan.cronExpression
                     Preconditions.checkNotBlank(cronExpression, "cronExpression")
@@ -365,6 +387,7 @@ class ReplicaTaskServiceImpl(
                     }
                 }
             }
+
             ReplicaObjectType.PACKAGE -> {
                 if (request.replicaTaskObjects.size != 1) {
                     throw ErrorCodeException(CommonMessageCode.REQUEST_CONTENT_INVALID)
@@ -376,6 +399,7 @@ class ReplicaTaskServiceImpl(
                     pkg.versions?.forEach { version -> Preconditions.checkNotBlank(version, "versions") }
                 }
             }
+
             ReplicaObjectType.PATH -> {
                 if (request.replicaTaskObjects.size != 1) {
                     throw ErrorCodeException(CommonMessageCode.REQUEST_CONTENT_INVALID)
@@ -455,7 +479,10 @@ class ReplicaTaskServiceImpl(
                 ?: throw ErrorCodeException(ReplicationMessageCode.REPLICA_TASK_NOT_FOUND, key)
             // 针对ClusterNodeType 为THIRD_PARTY的更新，可以绕过下面那个任务状态限制
             val remoteNode = clusterNodeService.getByClusterId(remoteClusterIds.first())
-            if (remoteNode!!.type != ClusterNodeType.REMOTE && tReplicaTask.replicaType != ReplicaType.RUN_ONCE) {
+            if (remoteNode!!.type != ClusterNodeType.REMOTE
+                && tReplicaTask.replicaType != ReplicaType.RUN_ONCE
+                && tReplicaTask.replicaType != ReplicaType.FEDERATION
+            ) {
                 // 检查任务状态，执行过的任务不让修改
                 if (tReplicaTask.status != ReplicaStatus.WAITING ||
                     tReplicaTask.lastExecutionStatus != null
@@ -509,7 +536,8 @@ class ReplicaTaskServiceImpl(
                     remoteRepoName = it.remoteRepoName,
                     repoType = it.repoType,
                     packageConstraints = it.packageConstraints,
-                    pathConstraints = it.pathConstraints
+                    pathConstraints = it.pathConstraints,
+                    sourceFilter = it.sourceFilter
                 )
             }
             return try {
@@ -569,6 +597,10 @@ class ReplicaTaskServiceImpl(
         }
     }
 
+    override fun listFederationTasks(projectId: String, repoName: String): List<ReplicaTaskDetail> {
+        return listTasks(projectId, repoName, ReplicaType.FEDERATION, true)
+    }
+
     companion object {
         private val logger = LoggerFactory.getLogger(ReplicaTaskServiceImpl::class.java)
         private const val TASK_NAME_LENGTH_MIN = 2
@@ -614,7 +646,8 @@ class ReplicaTaskServiceImpl(
                     remoteRepoName = it.remoteRepoName,
                     repoType = it.repoType,
                     packageConstraints = it.packageConstraints,
-                    pathConstraints = it.pathConstraints
+                    pathConstraints = it.pathConstraints,
+                    sourceFilter = it.sourceFilter
                 )
             }
         }

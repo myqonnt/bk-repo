@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2019 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2019 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -27,10 +27,13 @@
 
 package com.tencent.bkrepo.repository.service.file.impl.center
 
-import com.tencent.bkrepo.common.service.cluster.CommitEdgeCenterCondition
+import com.tencent.bkrepo.auth.api.ServiceTemporaryTokenClient
+import com.tencent.bkrepo.common.artifact.api.ArtifactInfo
+import com.tencent.bkrepo.common.metadata.util.ClusterUtils.isEdgeRequest
+import com.tencent.bkrepo.common.service.cluster.condition.CommitEdgeCenterCondition
 import com.tencent.bkrepo.repository.service.file.impl.ShareServiceImpl
-import com.tencent.bkrepo.repository.service.node.NodeService
-import com.tencent.bkrepo.repository.service.repo.RepositoryService
+import com.tencent.bkrepo.common.metadata.service.node.NodeService
+import com.tencent.bkrepo.common.metadata.service.repo.RepositoryService
 import org.springframework.context.annotation.Conditional
 import org.springframework.data.mongodb.core.MongoTemplate
 import org.springframework.stereotype.Service
@@ -40,9 +43,18 @@ import org.springframework.stereotype.Service
 class CommitEdgeCenterShareServiceImpl(
     repositoryService: RepositoryService,
     nodeService: NodeService,
-    mongoTemplate: MongoTemplate
+    mongoTemplate: MongoTemplate,
+    temporaryTokenClient: ServiceTemporaryTokenClient,
 ) : ShareServiceImpl(
     repositoryService,
     nodeService,
-    mongoTemplate
-)
+    mongoTemplate,
+    temporaryTokenClient
+) {
+    override fun checkNode(artifactInfo: ArtifactInfo) {
+        if (isEdgeRequest()) {
+            return
+        }
+        super.checkNode(artifactInfo)
+    }
+}

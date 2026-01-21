@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2019 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2019 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -28,17 +28,16 @@
 package com.tencent.bkrepo.repository.controller.user
 
 import com.tencent.bkrepo.auth.pojo.enums.PermissionAction
-import com.tencent.bkrepo.auth.pojo.enums.ResourceType
 import com.tencent.bkrepo.common.api.pojo.Response
-import com.tencent.bkrepo.common.security.permission.Permission
+import com.tencent.bkrepo.common.metadata.permission.PermissionManager
+import com.tencent.bkrepo.common.metadata.service.metadata.MetadataLabelService
 import com.tencent.bkrepo.common.service.util.ResponseBuilder
 import com.tencent.bkrepo.repository.pojo.metadata.label.MetadataLabelDetail
 import com.tencent.bkrepo.repository.pojo.metadata.label.MetadataLabelRequest
 import com.tencent.bkrepo.repository.pojo.metadata.label.UserLabelCreateRequest
 import com.tencent.bkrepo.repository.pojo.metadata.label.UserLabelUpdateRequest
-import com.tencent.bkrepo.repository.service.metadata.MetadataLabelService
-import io.swagger.annotations.Api
-import io.swagger.annotations.ApiOperation
+import io.swagger.v3.oas.annotations.Operation
+import io.swagger.v3.oas.annotations.tags.Tag
 import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
@@ -48,74 +47,106 @@ import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
 
-@Api("元数据标签管理接口")
+@Tag(name = "元数据标签管理接口")
 @RestController
 @RequestMapping("/api/metadata/label")
 class UserMetadataLabelController(
-    private val metadataLabelService: MetadataLabelService
+    private val metadataLabelService: MetadataLabelService,
+    private val permissionManager: PermissionManager
 ) {
 
-    @ApiOperation("创建标签")
+    @Operation(summary = "创建标签")
     @PostMapping("/{projectId}")
-    @Permission(type = ResourceType.PROJECT, action = PermissionAction.MANAGE)
     fun create(
         @PathVariable projectId: String,
         @RequestBody userLabelCreateRequest: UserLabelCreateRequest
     ): Response<Void> {
+        permissionManager.checkProjectPermission(PermissionAction.MANAGE, projectId)
         val request = MetadataLabelRequest(
             projectId = projectId,
             labelKey = userLabelCreateRequest.labelKey,
             labelColorMap = userLabelCreateRequest.labelColorMap,
-            display = userLabelCreateRequest.display
+            display = userLabelCreateRequest.display,
+            enumType = userLabelCreateRequest.enumType,
+            enableColorConfig = userLabelCreateRequest.enableColorConfig,
+            category = userLabelCreateRequest.category,
+            description = userLabelCreateRequest.description,
         )
         metadataLabelService.create(request)
         return ResponseBuilder.success()
     }
 
-    @ApiOperation("更新标签")
+    @Operation(summary = "更新标签")
     @PutMapping("/{projectId}/{labelKey}")
-    @Permission(type = ResourceType.PROJECT, action = PermissionAction.MANAGE)
     fun update(
         @PathVariable projectId: String,
         @PathVariable labelKey: String,
         @RequestBody userLabelUpdateRequest: UserLabelUpdateRequest
     ): Response<Void> {
+        permissionManager.checkProjectPermission(PermissionAction.MANAGE, projectId)
         val request = MetadataLabelRequest(
             projectId = projectId,
             labelKey = labelKey,
             labelColorMap = userLabelUpdateRequest.labelColorMap,
-            display = userLabelUpdateRequest.display
+            display = userLabelUpdateRequest.display,
+            enumType = userLabelUpdateRequest.enumType,
+            enableColorConfig = userLabelUpdateRequest.enableColorConfig,
+            category = userLabelUpdateRequest.category,
+            description = userLabelUpdateRequest.description,
         )
         metadataLabelService.update(request)
         return ResponseBuilder.success()
     }
 
-    @ApiOperation("查询项目下所有标签")
+    @Operation(summary = "批量保存")
+    @PostMapping("/batch/{projectId}")
+    fun batchSave(
+        @PathVariable projectId: String,
+        @RequestBody userRequests: List<UserLabelCreateRequest>
+    ): Response<Void> {
+        permissionManager.checkProjectPermission(PermissionAction.MANAGE, projectId)
+        val requests = userRequests.map {
+            MetadataLabelRequest(
+                projectId = projectId,
+                labelKey = it.labelKey,
+                labelColorMap = it.labelColorMap,
+                display = it.display,
+                enumType = it.enumType,
+                enableColorConfig = it.enableColorConfig,
+                category = it.category,
+                description = it.description,
+            )
+        }
+        metadataLabelService.batchSave(projectId, requests)
+        return ResponseBuilder.success()
+    }
+
+    @Operation(summary = "查询项目下所有标签")
     @GetMapping("/{projectId}")
-    @Permission(type = ResourceType.PROJECT, action = PermissionAction.READ)
     fun list(
         @PathVariable projectId: String
     ): Response<List<MetadataLabelDetail>> {
+        permissionManager.checkProjectPermission(PermissionAction.READ, projectId)
         return ResponseBuilder.success(metadataLabelService.listAll(projectId))
     }
 
-    @ApiOperation("查询标签详情")
+    @Operation(summary = "查询标签详情")
     @GetMapping("/{projectId}/{labelKey}")
-    @Permission(type = ResourceType.PROJECT, action = PermissionAction.READ)
     fun detail(
         @PathVariable projectId: String,
         @PathVariable labelKey: String,
     ): Response<MetadataLabelDetail> {
+        permissionManager.checkProjectPermission(PermissionAction.READ, projectId)
         return ResponseBuilder.success(metadataLabelService.detail(projectId, labelKey))
     }
 
-    @ApiOperation("删除标签")
+    @Operation(summary = "删除标签")
     @DeleteMapping("/{projectId}/{labelKey}")
-    @Permission(type = ResourceType.PROJECT, action = PermissionAction.MANAGE)
     fun delete(
         @PathVariable projectId: String,
         @PathVariable labelKey: String
     ): Response<Void> {
+        permissionManager.checkProjectPermission(PermissionAction.MANAGE, projectId)
         metadataLabelService.delete(projectId, labelKey)
         return ResponseBuilder.success()
     }

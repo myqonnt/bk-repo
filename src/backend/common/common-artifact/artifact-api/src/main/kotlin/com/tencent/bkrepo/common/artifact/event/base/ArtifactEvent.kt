@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2021 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2021 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -28,6 +28,7 @@
 package com.tencent.bkrepo.common.artifact.event.base
 
 import com.fasterxml.jackson.annotation.JsonIgnore
+import java.util.UUID
 
 /**
  * artifact抽象事件
@@ -60,10 +61,19 @@ open class ArtifactEvent(
     /**
      * 附属数据
      */
-    open val data: Map<String, Any> = mapOf()
+    open val data: Map<String, Any> = mapOf(),
+    /**
+     * 来源， 正常上传或者是联邦同步
+     */
+    open val source: String? = null,
+    /**
+     * 事件唯一标识
+     * 用于消息幂等检查
+     */
+    open val eventId: String? = null,
 ) {
     override fun toString(): String {
-        return "ArtifactEvent(type=$type, projectId='$projectId', repoName='$repoName', " +
+        return "ArtifactEvent(type=$type, projectId='$projectId', repoName='$repoName', source='$source' " +
             "resourceKey='$resourceKey', userId='$userId', data=$data)"
     }
 
@@ -78,5 +88,13 @@ open class ArtifactEvent(
     @JsonIgnore
     fun getFullResourceKey(): String {
         return "$projectId/$repoName/$resourceKey"
+    }
+
+    companion object {
+        /**
+         * 生成事件唯一标识
+         * 用于消息幂等检查
+         */
+        fun generateEventId(): String = UUID.randomUUID().toString().replace("-", "")
     }
 }

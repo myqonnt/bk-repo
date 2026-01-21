@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -41,7 +41,7 @@ import com.tencent.bkrepo.auth.service.UserService
 import com.tencent.bkrepo.auth.util.RequestUtil
 import com.tencent.bkrepo.common.api.pojo.Response
 import com.tencent.bkrepo.common.service.util.ResponseBuilder
-import io.swagger.annotations.ApiOperation
+import io.swagger.v3.oas.annotations.Operation
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RestController
@@ -57,7 +57,7 @@ class ServiceUserController @Autowired constructor(
         return ResponseBuilder.success(true)
     }
 
-    @ApiOperation("创建项目用户")
+    @Operation(summary = "创建项目用户")
     @PostMapping("/create/project")
     override fun createUserToProject(request: CreateUserToProjectRequest): Response<Boolean> {
         userService.createUserToProject(request)
@@ -82,6 +82,10 @@ class ServiceUserController @Autowired constructor(
         return ResponseBuilder.success(true)
     }
 
+    override fun userInfoByToken(token: String): Response<UserInfo?> {
+        return ResponseBuilder.success(userService.getUserInfoByToken(token))
+    }
+
     override fun userInfoById(uid: String): Response<UserInfo?> {
         return ResponseBuilder.success(userService.getUserInfoById(uid))
     }
@@ -92,5 +96,9 @@ class ServiceUserController @Autowired constructor(
 
     override fun userTokenById(uid: String): Response<List<String>> {
         return ResponseBuilder.success(userService.listValidToken(uid).map { it.id })
+    }
+
+    override fun listAdminUsers(): Response<List<String>> {
+        return ResponseBuilder.success(userService.listAdminUsers())
     }
 }

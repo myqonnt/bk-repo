@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -30,19 +30,19 @@ package com.tencent.bkrepo.job.batch.task.archive
 import com.tencent.bkrepo.archive.ArchiveStatus
 import com.tencent.bkrepo.archive.api.ArchiveClient
 import com.tencent.bkrepo.archive.request.ArchiveFileRequest
+import com.tencent.bkrepo.common.metadata.service.node.NodeService
+import com.tencent.bkrepo.job.ARCHIVE_FILE_COLLECTION
 import com.tencent.bkrepo.job.batch.base.MongoDbBatchJob
 import com.tencent.bkrepo.job.batch.context.NodeContext
 import com.tencent.bkrepo.job.batch.utils.NodeCommonUtils
 import com.tencent.bkrepo.job.config.properties.ArchivedNodeRestoreJobProperties
-import com.tencent.bkrepo.repository.api.NodeClient
 import com.tencent.bkrepo.repository.pojo.node.service.NodeArchiveRequest
-import java.time.Duration
 import org.slf4j.LoggerFactory
-import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.data.mongodb.core.query.Criteria
 import org.springframework.data.mongodb.core.query.Query
 import org.springframework.data.mongodb.core.query.isEqualTo
 import org.springframework.stereotype.Component
+import java.time.Duration
 import kotlin.reflect.KClass
 
 /**
@@ -53,11 +53,10 @@ import kotlin.reflect.KClass
  * 3. 删除归档数据
  * */
 @Component
-@EnableConfigurationProperties(ArchivedNodeRestoreJobProperties::class)
 class ArchivedNodeRestoreJob(
     private val properties: ArchivedNodeRestoreJobProperties,
     private val archiveClient: ArchiveClient,
-    private val nodeClient: NodeClient,
+    private val nodeService: NodeService
 ) : MongoDbBatchJob<ArchivedNodeRestoreJob.ArchiveFile, NodeContext>(properties) {
 
     override fun createJobContext(): NodeContext {
@@ -67,7 +66,7 @@ class ArchivedNodeRestoreJob(
     override fun getLockAtMostFor(): Duration = Duration.ofDays(7)
 
     override fun collectionNames(): List<String> {
-        return listOf("archive_file")
+        return listOf(ARCHIVE_FILE_COLLECTION)
     }
 
     override fun buildQuery(): Query {
@@ -87,7 +86,7 @@ class ArchivedNodeRestoreJob(
                     fullPath = fullPath,
                     operator = lastModifiedBy,
                 )
-                nodeClient.restoreNode(request)
+                nodeService.restoreNode(request)
                 context.count.incrementAndGet()
                 context.size.addAndGet(it.size)
                 logger.info("Success to restore node $projectId/$repoName/$fullPath.")
@@ -118,7 +117,7 @@ class ArchivedNodeRestoreJob(
                 .and("archived").isEqualTo(true)
                 .and("deleted").isEqualTo(null),
         )
-        return NodeCommonUtils.findNodes(query, storageCredentialsKey)
+        return NodeCommonUtils.findNodes(query, storageCredentialsKey, false)
     }
 
     data class ArchiveFile(

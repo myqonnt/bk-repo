@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2019 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2019 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -29,30 +29,36 @@ package com.tencent.bkrepo.repository.api.cluster
 
 import com.tencent.bkrepo.common.api.constant.REPOSITORY_SERVICE_NAME
 import com.tencent.bkrepo.common.api.pojo.Response
+import com.tencent.bkrepo.repository.pojo.metadata.DeletedNodeMetadataSaveRequest
 import com.tencent.bkrepo.repository.pojo.metadata.MetadataDeleteRequest
 import com.tencent.bkrepo.repository.pojo.metadata.MetadataSaveRequest
-import io.swagger.annotations.Api
-import io.swagger.annotations.ApiOperation
+import io.swagger.v3.oas.annotations.Operation
+import io.swagger.v3.oas.annotations.tags.Tag
 import org.springframework.cloud.openfeign.FeignClient
 import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 
-@Api("节点元数据集群接口")
+@Tag(name = "节点元数据集群接口")
 @FeignClient(REPOSITORY_SERVICE_NAME, contextId = "ClusterMetadataClient")
 @RequestMapping("/cluster/metadata")
 interface ClusterMetadataClient {
 
-    @ApiOperation("创建/更新元数据列表")
+    @Operation(summary = "创建/更新元数据列表")
     @PostMapping("/save")
     fun saveMetadata(@RequestBody request: MetadataSaveRequest): Response<Void>
 
-    @ApiOperation("删除元数据")
+    @Operation(summary = "删除元数据")
     @DeleteMapping("/delete")
     fun deleteMetadata(@RequestBody request: MetadataDeleteRequest): Response<Void>
 
-    @ApiOperation("添加禁用元数据")
+    @Operation(summary = "添加禁用元数据")
     @PostMapping("/forbid")
     fun addForbidMetadata(@RequestBody request: MetadataSaveRequest): Response<Void>
+
+
+    @Operation(summary = "创建/更新元数据列表")
+    @PostMapping("/save/deleted")
+    fun saveMetadataForDeletedNode(@RequestBody request: DeletedNodeMetadataSaveRequest): Response<Void>
 }

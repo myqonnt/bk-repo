@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2021 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2021 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -43,8 +43,7 @@ import com.tencent.bkrepo.common.storage.filesystem.check.SynchronizeResult
 import com.tencent.bkrepo.common.storage.filesystem.cleanup.BasedAtimeAndMTimeFileExpireResolver
 import com.tencent.bkrepo.common.storage.filesystem.cleanup.CleanupFileVisitor
 import com.tencent.bkrepo.common.storage.filesystem.cleanup.CleanupResult
-import com.tencent.bkrepo.common.storage.filesystem.cleanup.CompositeFileExpireResolver
-import com.tencent.bkrepo.common.storage.filesystem.cleanup.FileExpireResolver
+import com.tencent.bkrepo.common.storage.filesystem.cleanup.FileRetainResolver
 import com.tencent.bkrepo.common.storage.monitor.StorageHealthMonitor
 import org.slf4j.LoggerFactory
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor
@@ -52,14 +51,13 @@ import java.io.File
 import java.io.FileNotFoundException
 import java.nio.file.Path
 import java.nio.file.Paths
-import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * 支持缓存的存储服务
  */
 class CacheStorageService(
     private val threadPoolTaskExecutor: ThreadPoolTaskExecutor,
-    private val fileExpireResolver: FileExpireResolver? = null,
+    private val fileRetainResolver: FileRetainResolver? = null,
 ) : AbstractStorageService() {
 
     private val cacheFileEventPublisher by lazy { CacheFileEventPublisher(publisher) }
@@ -69,7 +67,6 @@ class CacheStorageService(
         filename: String,
         artifactFile: ArtifactFile,
         credentials: StorageCredentials,
-        cancel: AtomicBoolean?,
         storageClass: String?,
     ) {
         when {
@@ -84,19 +81,18 @@ class CacheStorageService(
             }
 
             artifactFile.isFallback() || artifactFile.isInLocalDisk() -> {
-                fileStorage.store(path, filename, artifactFile.flushToFile(), credentials, storageClass)
+                fileStorage.store(path, filename, artifactFile.traceableFlushToFile(), credentials, storageClass)
             }
 
             else -> {
-                val cacheFile = getCacheClient(credentials).move(path, filename, artifactFile.flushToFile())
+                val cacheFile = getCacheClient(credentials).move(path, filename, artifactFile.traceableFlushToFile())
                 cacheFileEventPublisher.publishCacheFileLoadedEvent(credentials, cacheFile)
-                async2Store(cancel, filename, credentials, path, cacheFile, storageClass)
+                async2Store(filename, credentials, path, cacheFile, storageClass)
             }
         }
     }
 
     private fun async2Store(
-        cancel: AtomicBoolean?,
         filename: String,
         credentials: StorageCredentials,
         path: String,
@@ -105,16 +101,8 @@ class CacheStorageService(
     ) {
         threadPoolTaskExecutor.execute {
             try {
-                if (cancel?.get() == true) {
-                    logger.info("Cancel store fle [$filename] on [${credentials.key}]")
-                    return@execute
-                }
                 fileStorage.store(path, filename, cacheFile, credentials, storageClass)
             } catch (ignored: Exception) {
-                if (cancel?.get() == true) {
-                    logger.info("Cancel store fle [$filename] on [${credentials.key}]")
-                    return@execute
-                }
                 // 此处为异步上传，失败后异常不会被外层捕获，所以单独捕获打印error日志
                 logger.error("Failed to async store file [$filename] on [${credentials.key}]", ignored)
                 // 失败时把文件放入暂存区，后台任务会进行补偿。
@@ -181,12 +169,7 @@ class CacheStorageService(
         val rootPath = Paths.get(credentials.cache.path)
         val tempPath = getTempPath(credentials)
         val stagingPath = getStagingPath(credentials)
-        val resolver = if (fileExpireResolver != null) {
-            val baseFileExpireResolver = BasedAtimeAndMTimeFileExpireResolver(credentials.cache.expireDuration)
-            CompositeFileExpireResolver(listOf(baseFileExpireResolver, fileExpireResolver))
-        } else {
-            BasedAtimeAndMTimeFileExpireResolver(credentials.cache.expireDuration)
-        }
+        val resolver = BasedAtimeAndMTimeFileExpireResolver(credentials.cache.expireDuration)
         val visitor = CleanupFileVisitor(
             rootPath,
             tempPath,
@@ -196,6 +179,7 @@ class CacheStorageService(
             credentials,
             resolver,
             publisher,
+            fileRetainResolver
         )
         getCacheClient(credentials).walk(visitor)
         val result = mutableMapOf<Path, CleanupResult>()
@@ -244,16 +228,29 @@ class CacheStorageService(
         path: String,
         filename: String,
         credentials: StorageCredentials,
-    ) {
-        if (doExist(path, filename, credentials)) {
-            val cacheFilePath = "${credentials.cache.path}$path$filename"
+    ): Boolean {
+        val cacheFilePath = "${credentials.cache.path}$path$filename"
+        return if (doExist(path, filename, credentials)) {
             val size = File(cacheFilePath).length()
             getCacheClient(credentials).delete(path, filename)
             cacheFileEventPublisher.publishCacheFileDeletedEvent(path, filename, size, credentials)
-            logger.info("Cache [${credentials.cache.path}/$path/$filename] was deleted")
+            logger.info("Cache [$cacheFilePath] was deleted")
+            true
         } else {
-            logger.info("Cache file[${credentials.cache.path}/$path/$filename] was not in storage")
+            logger.info("Cache file[$cacheFilePath] was not in storage")
+            false
         }
+    }
+
+    /**
+     * 判断缓存文件是否存在
+     */
+    fun cacheExists(
+        path: String,
+        filename: String,
+        credentials: StorageCredentials,
+    ): Boolean {
+        return getCacheClient(credentials).exist(path, filename)
     }
 
     /**

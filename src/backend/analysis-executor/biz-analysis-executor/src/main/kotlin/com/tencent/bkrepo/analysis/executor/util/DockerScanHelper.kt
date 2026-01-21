@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -61,7 +61,7 @@ class DockerScanHelper(
         val maxScanDuration = task.scanner.maxScanDuration(scannerInputFile.length())
         // 创建容器
         val maxFileSize = maxFileSize(scannerInputFile.length())
-        val hostConfig = DockerUtils.dockerHostConfig(binds, maxFileSize, task.scanner.memory)
+        val hostConfig = DockerUtils.dockerHostConfig(binds, maxFileSize, task.scanner.limitMem)
         val containerId = dockerClient.createContainer(
             image = image,
             hostConfig = hostConfig,

@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -33,6 +33,7 @@ import com.tencent.bkrepo.replication.pojo.record.ExecutionStatus
 import com.tencent.bkrepo.replication.pojo.record.ReplicaOverview
 import com.tencent.bkrepo.replication.pojo.task.ReplicaTaskInfo
 import com.tencent.bkrepo.replication.replica.executor.AbstractReplicaJobExecutor
+import com.tencent.bkrepo.replication.dao.ReplicaFailureRecordDao
 import com.tencent.bkrepo.replication.service.ClusterNodeService
 import com.tencent.bkrepo.replication.service.ReplicaRecordService
 import com.tencent.bkrepo.replication.service.ReplicaTaskService
@@ -50,10 +51,13 @@ class ScheduledReplicaJobExecutor(
     localDataManager: LocalDataManager,
     replicaService: ScheduledReplicaService,
     replicationProperties: ReplicationProperties,
+    replicaFailureRecordDao: ReplicaFailureRecordDao,
     private val replicaTaskService: ReplicaTaskService,
     private val replicaRecordService: ReplicaRecordService,
     private val replicaTaskScheduler: ReplicaTaskScheduler
-) : AbstractReplicaJobExecutor(clusterNodeService, localDataManager, replicaService, replicationProperties) {
+) : AbstractReplicaJobExecutor(
+    clusterNodeService, localDataManager, replicaService, replicationProperties, replicaFailureRecordDao
+) {
 
     /**
      * 执行同步任务

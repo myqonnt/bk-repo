@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2021 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2021 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -31,8 +31,8 @@ import com.tencent.bkrepo.common.api.exception.ErrorCodeException
 import com.tencent.bkrepo.common.api.pojo.Page
 import com.tencent.bkrepo.common.mongo.constant.ID
 import com.tencent.bkrepo.common.mongo.dao.util.Pages
-import com.tencent.bkrepo.common.service.cluster.ClusterProperties
-import com.tencent.bkrepo.common.service.cluster.DefaultCondition
+import com.tencent.bkrepo.common.service.cluster.properties.ClusterProperties
+import com.tencent.bkrepo.common.service.cluster.condition.DefaultCondition
 import com.tencent.bkrepo.replication.dao.ReplicaRecordDao
 import com.tencent.bkrepo.replication.dao.ReplicaRecordDetailDao
 import com.tencent.bkrepo.replication.dao.ReplicaTaskDao
@@ -154,7 +154,8 @@ class ReplicaRecordServiceImpl(
                 sha256 = sha256,
                 status = ExecutionStatus.RUNNING,
                 progress = ReplicaProgress(),
-                startTime = LocalDateTime.now()
+                startTime = LocalDateTime.now(),
+                executeType = executeType
             )
             return try {
                 replicaRecordDetailDao.insert(recordDetail).let { convert(it)!! }
@@ -174,6 +175,17 @@ class ReplicaRecordServiceImpl(
         replicaRecordDetail.progress.totalSize = progress.totalSize
         replicaRecordDetailDao.save(replicaRecordDetail)
         logger.info("Update record detail [$detailId] success.")
+    }
+
+    override fun updateRecordDetailProgress(detailId: String, fileSuccess: Boolean) {
+        val replicaRecordDetail = findRecordDetailById(detailId)
+            ?: throw ErrorCodeException(ReplicationMessageCode.REPLICA_TASK_NOT_FOUND, detailId)
+        if (fileSuccess) {
+            replicaRecordDetail.progress.fileSuccess += 1
+        } else {
+            replicaRecordDetail.progress.fileFailed += 1
+        }
+        replicaRecordDetailDao.save(replicaRecordDetail)
     }
 
     override fun completeRecordDetail(detailId: String, result: ExecutionResult) {
@@ -314,7 +326,8 @@ class ReplicaRecordServiceImpl(
                     progress = it.progress,
                     startTime = it.startTime,
                     endTime = it.endTime,
-                    errorReason = it.errorReason
+                    errorReason = it.errorReason,
+                    executeType = it.executeType
                 )
             }
         }

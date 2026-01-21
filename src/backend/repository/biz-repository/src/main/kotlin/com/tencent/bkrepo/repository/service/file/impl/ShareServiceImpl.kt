@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2021 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2021 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -31,8 +31,14 @@
 
 package com.tencent.bkrepo.repository.service.file.impl
 
+import com.tencent.bk.audit.context.ActionAuditContext
+import com.tencent.bkrepo.auth.api.ServiceTemporaryTokenClient
+import com.tencent.bkrepo.auth.pojo.token.TemporaryTokenCreateRequest
+import com.tencent.bkrepo.auth.pojo.token.TokenType
 import com.tencent.bkrepo.common.api.constant.ANONYMOUS_USER
-import com.tencent.bkrepo.common.api.constant.StringPool
+import com.tencent.bkrepo.common.api.constant.AUDITED_UID
+import com.tencent.bkrepo.common.api.constant.AUDIT_REQUEST_URI
+import com.tencent.bkrepo.common.api.constant.AUDIT_SHARE_USER_ID
 import com.tencent.bkrepo.common.api.constant.USER_KEY
 import com.tencent.bkrepo.common.api.exception.ErrorCodeException
 import com.tencent.bkrepo.common.artifact.api.ArtifactInfo
@@ -40,16 +46,17 @@ import com.tencent.bkrepo.common.artifact.exception.NodeNotFoundException
 import com.tencent.bkrepo.common.artifact.message.ArtifactMessageCode
 import com.tencent.bkrepo.common.artifact.repository.context.ArtifactContextHolder
 import com.tencent.bkrepo.common.artifact.repository.context.ArtifactDownloadContext
+import com.tencent.bkrepo.common.metadata.service.node.NodeService
+import com.tencent.bkrepo.common.metadata.service.repo.RepositoryService
 import com.tencent.bkrepo.common.security.exception.PermissionException
-import com.tencent.bkrepo.common.service.cluster.DefaultCondition
+import com.tencent.bkrepo.common.service.cluster.condition.DefaultCondition
 import com.tencent.bkrepo.common.service.util.HttpContextHolder
 import com.tencent.bkrepo.repository.model.TShareRecord
 import com.tencent.bkrepo.repository.pojo.share.ShareRecordCreateRequest
 import com.tencent.bkrepo.repository.pojo.share.ShareRecordInfo
 import com.tencent.bkrepo.repository.service.file.ShareService
-import com.tencent.bkrepo.repository.service.node.NodeService
-import com.tencent.bkrepo.repository.service.repo.RepositoryService
 import org.slf4j.LoggerFactory
+import com.tencent.bkrepo.common.metadata.util.DesensitizedUtils
 import org.springframework.context.annotation.Conditional
 import org.springframework.data.mongodb.core.MongoTemplate
 import org.springframework.data.mongodb.core.query.Criteria
@@ -60,7 +67,6 @@ import org.springframework.data.mongodb.core.query.where
 import org.springframework.stereotype.Service
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
-import java.util.UUID
 
 /**
  * 文件分享服务实现类
@@ -71,6 +77,7 @@ class ShareServiceImpl(
     private val repositoryService: RepositoryService,
     private val nodeService: NodeService,
     private val mongoTemplate: MongoTemplate,
+    private val temporaryTokenClient: ServiceTemporaryTokenClient,
 ) : ShareService {
 
     override fun create(
@@ -79,10 +86,19 @@ class ShareServiceImpl(
         request: ShareRecordCreateRequest,
     ): ShareRecordInfo {
         with(artifactInfo) {
-            val node = nodeService.getNodeDetail(artifactInfo)
-            if (node == null || node.folder) {
-                throw NodeNotFoundException(artifactInfo.getArtifactFullPath())
-            }
+            checkNode(artifactInfo)
+            // 兼容性代码，把token的创建统一迁移到temporary_token 表
+            val tmpToken = TemporaryTokenCreateRequest(
+                projectId = projectId,
+                repoName = repoName,
+                fullPathSet = setOf(getArtifactFullPath()),
+                authorizedUserSet = request.authorizedUserList.toSet(),
+                authorizedIpSet = request.authorizedIpList.toSet(),
+                createdBy = userId,
+                type = TokenType.DOWNLOAD,
+                expireSeconds = request.expireSeconds,
+            )
+            val token = temporaryTokenClient.createToken(tmpToken).data!!.first().token
             val shareRecord = TShareRecord(
                 projectId = projectId,
                 repoName = repoName,
@@ -90,7 +106,7 @@ class ShareServiceImpl(
                 expireDate = computeExpireDate(request.expireSeconds),
                 authorizedUserList = request.authorizedUserList,
                 authorizedIpList = request.authorizedIpList,
-                token = generateToken(),
+                token = token,
                 createdBy = userId,
                 createdDate = LocalDateTime.now(),
                 lastModifiedBy = userId,
@@ -98,7 +114,7 @@ class ShareServiceImpl(
             )
             mongoTemplate.save(shareRecord)
             val shareRecordInfo = convert(shareRecord)
-            logger.info("$userId create share record[$shareRecordInfo] success.")
+            logger.info("$userId create share record ${DesensitizedUtils.toString(shareRecordInfo)} success.")
             return shareRecordInfo
         }
     }
@@ -133,6 +149,11 @@ class ShareServiceImpl(
                 ?: throw ErrorCodeException(ArtifactMessageCode.REPOSITORY_NOT_FOUND, repoName)
             val context = ArtifactDownloadContext(repo = repo, userId = userId)
             HttpContextHolder.getRequest().setAttribute(USER_KEY, downloadUser)
+            ActionAuditContext.current().addExtendData(AUDITED_UID, downloadUser)
+            ActionAuditContext.current().addExtendData(
+                AUDIT_REQUEST_URI, "{${HttpContextHolder.getRequestOrNull()?.requestURI}}"
+            )
+            ActionAuditContext.current().addExtendData(AUDIT_SHARE_USER_ID, shareRecord.createdBy)
             context.shareUserId = shareRecord.createdBy
             val repository = ArtifactContextHolder.getRepository(context.repositoryDetail.category)
             repository.download(context)
@@ -146,6 +167,13 @@ class ShareServiceImpl(
                 .and(TShareRecord::fullPath.name).`is`(fullPath),
         )
         return mongoTemplate.find(query, TShareRecord::class.java).map { convert(it) }
+    }
+
+    fun checkNode(artifactInfo: ArtifactInfo) {
+        val node = nodeService.getNodeDetail(artifactInfo)
+        if (node == null || node.folder) {
+            throw NodeNotFoundException(artifactInfo.getArtifactFullPath())
+        }
     }
 
     /**
@@ -166,10 +194,6 @@ class ShareServiceImpl(
         private val logger = LoggerFactory.getLogger(ShareServiceImpl::class.java)
         private const val BK_CI_APP_STAGE_KEY = "BK-CI-APP-STAGE"
         private const val ALPHA = "Alpha"
-
-        private fun generateToken(): String {
-            return UUID.randomUUID().toString().replace(StringPool.DASH, StringPool.EMPTY).toLowerCase()
-        }
 
         private fun generateShareUrl(shareRecord: TShareRecord): String {
             with(shareRecord) {

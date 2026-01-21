@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -47,7 +47,7 @@ import com.tencent.bkrepo.common.notify.pojo.WechatNotifyMessage
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import okhttp3.RequestBody
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import java.util.concurrent.TimeUnit
@@ -118,7 +118,7 @@ class DevopsNotify constructor(
 
     private fun postMessage(url: String, message: BaseMessage) {
         val requestContent = JsonUtils.objectMapper.writeValueAsString(message)
-        val requestBody = RequestBody.create("application/json; charset=utf-8".toMediaTypeOrNull(), requestContent)
+        val requestBody = requestContent.toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull())
         val request = Request.Builder().url(url).post(requestBody).build()
         okHttpClient.newCall(request).execute().use { response ->
             val responseContent = response.body!!.string()

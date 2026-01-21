@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2024 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2024 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -28,10 +28,11 @@
 package com.tencent.bkrepo.job.migrate
 
 import com.tencent.bkrepo.common.api.exception.ErrorCodeException
-import com.tencent.bkrepo.common.api.pojo.Response
+import com.tencent.bkrepo.common.metadata.service.repo.RepositoryService
+import com.tencent.bkrepo.common.metadata.service.repo.StorageCredentialService
 import com.tencent.bkrepo.common.mongo.constant.ID
 import com.tencent.bkrepo.common.service.actuator.ActuatorConfiguration
-import com.tencent.bkrepo.common.storage.core.StorageProperties
+import com.tencent.bkrepo.common.storage.config.StorageProperties
 import com.tencent.bkrepo.common.storage.credentials.FileSystemCredentials
 import com.tencent.bkrepo.job.UT_PROJECT_ID
 import com.tencent.bkrepo.job.UT_REPO_NAME
@@ -50,8 +51,6 @@ import com.tencent.bkrepo.job.migrate.pojo.MigrationContext
 import com.tencent.bkrepo.job.migrate.utils.ExecutingTaskRecorder
 import com.tencent.bkrepo.job.migrate.utils.MigrateTestUtils.buildRepo
 import com.tencent.bkrepo.job.migrate.utils.MigrateTestUtils.buildTask
-import com.tencent.bkrepo.repository.api.RepositoryClient
-import com.tencent.bkrepo.repository.api.StorageCredentialsClient
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
@@ -69,12 +68,13 @@ import org.mockito.kotlin.whenever
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.test.autoconfigure.data.mongo.DataMongoTest
-import org.springframework.boot.test.mock.mockito.MockBean
 import org.springframework.context.annotation.Import
 import org.springframework.data.mongodb.core.query.Criteria
 import org.springframework.data.mongodb.core.query.Query
 import org.springframework.data.mongodb.core.query.Update
 import org.springframework.data.mongodb.core.query.isEqualTo
+import org.springframework.test.context.TestPropertySource
+import org.springframework.test.context.bean.override.mockito.MockitoBean
 import java.time.LocalDateTime
 
 @DisplayName("迁移服务测试")
@@ -88,6 +88,7 @@ import java.time.LocalDateTime
     ExecutingTaskRecorder::class,
     StorageProperties::class,
 )
+@TestPropertySource(locations = ["classpath:bootstrap-ut.properties"])
 class MigrateRepoStorageServiceTest @Autowired constructor(
     private val migrateRepoStorageTaskDao: MigrateRepoStorageTaskDao,
     private val migrateRepoStorageService: MigrateRepoStorageService,
@@ -97,17 +98,20 @@ class MigrateRepoStorageServiceTest @Autowired constructor(
     @Value(ActuatorConfiguration.SERVICE_INSTANCE_ID)
     private lateinit var instanceId: String
 
-    @MockBean
-    private lateinit var repositoryClient: RepositoryClient
+    @MockitoBean
+    private lateinit var repositoryService: RepositoryService
 
-    @MockBean
-    private lateinit var storageCredentialsClient: StorageCredentialsClient
+    @MockitoBean
+    private lateinit var storageCredentialService: StorageCredentialService
 
-    @MockBean(name = "migrateExecutor")
+    @MockitoBean(name = "migrateExecutor")
     private lateinit var mockMigrateExecutor: TaskExecutor
 
-    @MockBean(name = "correctExecutor")
+    @MockitoBean(name = "correctExecutor")
     private lateinit var mockCorrectExecutor: TaskExecutor
+
+    @Autowired
+    private lateinit var repositoryCommonUtils: RepositoryCommonUtils
 
     @BeforeEach
     fun beforeEach() {
@@ -148,7 +152,8 @@ class MigrateRepoStorageServiceTest @Autowired constructor(
 
         // 修改任务时间使其超时
         val update = Update().set(
-            TMigrateRepoStorageTask::lastModifiedDate.name, LocalDateTime.now().minus(properties.timeout)
+            TMigrateRepoStorageTask::lastModifiedDate.name,
+            LocalDateTime.now().minus(properties.timeout),
         )
         migrateRepoStorageTaskDao.updateFirst(Query(Criteria.where(ID).isEqualTo(task.id!!)), update)
 
@@ -179,7 +184,7 @@ class MigrateRepoStorageServiceTest @Autowired constructor(
         migrateRepoStorageTaskDao.updateFirst(
             Query(Criteria.where(ID).isEqualTo(taskId)),
             Update().set(TMigrateRepoStorageTask::state.name, MIGRATE_FINISHED.name)
-                .set(TMigrateRepoStorageTask::startDate.name, LocalDateTime.now())
+                .set(TMigrateRepoStorageTask::startDate.name, LocalDateTime.now()),
         )
         task = migrateRepoStorageService.tryExecuteTask()
         assertNull(task)
@@ -188,7 +193,10 @@ class MigrateRepoStorageServiceTest @Autowired constructor(
         // 达到时间间隔
         migrateRepoStorageTaskDao.updateFirst(
             Query(Criteria.where(ID).isEqualTo(taskId)),
-            Update().set(TMigrateRepoStorageTask::startDate.name, LocalDateTime.now().minus(properties.correctInterval))
+            Update().set(
+                TMigrateRepoStorageTask::startDate.name,
+                LocalDateTime.now().minus(properties.correctInterval),
+            ),
         )
         task = migrateRepoStorageService.tryExecuteTask()
         assertNotNull(task)
@@ -207,15 +215,15 @@ class MigrateRepoStorageServiceTest @Autowired constructor(
     private fun buildCreateRequest(dstKey: String? = UT_STORAGE_CREDENTIALS_KEY) = CreateMigrateRepoStorageTaskRequest(
         projectId = UT_PROJECT_ID,
         repoName = UT_REPO_NAME,
-        dstCredentialsKey = dstKey
+        dstCredentialsKey = dstKey,
     )
 
     private fun initMock() {
-        whenever(repositoryClient.getRepoDetail(anyString(), anyString(), anyOrNull())).thenReturn(
-            Response(0, "", buildRepo())
+        whenever(repositoryService.getRepoDetail(anyString(), anyString(), anyOrNull())).thenReturn(
+            buildRepo()
         )
-        whenever(storageCredentialsClient.findByKey(anyString()))
-            .thenReturn(Response(0, data = FileSystemCredentials()))
+        whenever(storageCredentialService.findByKey(anyString()))
+            .thenReturn(FileSystemCredentials())
         whenever(mockMigrateExecutor.execute(any())).thenReturn(MigrationContext(buildTask(), null, null))
         whenever(mockCorrectExecutor.execute(any())).thenReturn(MigrationContext(buildTask(), null, null))
     }

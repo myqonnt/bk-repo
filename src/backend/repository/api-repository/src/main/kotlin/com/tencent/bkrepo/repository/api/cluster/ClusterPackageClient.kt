@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -36,7 +36,7 @@ import com.tencent.bkrepo.common.api.pojo.Response
 import com.tencent.bkrepo.repository.pojo.packages.request.PackageUpdateRequest
 import com.tencent.bkrepo.repository.pojo.packages.request.PackageVersionCreateRequest
 import com.tencent.bkrepo.repository.pojo.packages.request.PackageVersionUpdateRequest
-import io.swagger.annotations.ApiOperation
+import io.swagger.v3.oas.annotations.Operation
 import org.springframework.cloud.openfeign.FeignClient
 import org.springframework.context.annotation.Primary
 import org.springframework.web.bind.annotation.DeleteMapping
@@ -51,14 +51,14 @@ import org.springframework.web.bind.annotation.RequestParam
 @RequestMapping("/cluster")
 interface ClusterPackageClient {
 
-    @ApiOperation("创建包版本")
+    @Operation(summary = "创建包版本")
     @PostMapping("/version/create")
     fun createVersion(
         @RequestBody request: PackageVersionCreateRequest,
         @RequestParam realIpAddress: String? = null
     ): Response<Void>
 
-    @ApiOperation("删除包")
+    @Operation(summary = "删除包")
     @DeleteMapping("/package/delete/{projectId}/{repoName}")
     fun deletePackage(
         @PathVariable projectId: String,
@@ -67,24 +67,25 @@ interface ClusterPackageClient {
         @RequestParam realIpAddress: String? = null
     ): Response<Void>
 
-    @ApiOperation("删除版本")
+    @Operation(summary = "删除版本")
     @DeleteMapping("/version/delete/{projectId}/{repoName}")
     fun deleteVersion(
         @PathVariable projectId: String,
         @PathVariable repoName: String,
         @RequestParam packageKey: String,
         @RequestParam version: String,
-        @RequestParam realIpAddress: String? = null
+        @RequestParam realIpAddress: String? = null,
+        @RequestParam contentPath: String? = null,
     ): Response<Void>
 
-    @ApiOperation("更新包")
+    @Operation(summary = "更新包")
     @PostMapping("/package/update")
     fun updatePackage(
         @RequestBody request: PackageUpdateRequest,
         @RequestParam realIpAddress: String? = null
     ): Response<Void>
 
-    @ApiOperation("更新版本")
+    @Operation(summary = "更新版本")
     @PostMapping("/version/update")
     fun updateVersion(
         @RequestBody request: PackageVersionUpdateRequest,

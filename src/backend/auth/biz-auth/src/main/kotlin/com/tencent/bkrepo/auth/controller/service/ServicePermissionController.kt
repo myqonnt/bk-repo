@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -38,6 +38,7 @@ import com.tencent.bkrepo.auth.pojo.permission.ListPathResult
 import com.tencent.bkrepo.auth.service.PermissionService
 import com.tencent.bkrepo.common.api.pojo.Response
 import com.tencent.bkrepo.common.query.enums.OperationType
+import com.tencent.bkrepo.common.security.util.SecurityUtils
 import com.tencent.bkrepo.common.service.util.ResponseBuilder
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.web.bind.annotation.RestController
@@ -49,15 +50,40 @@ class ServicePermissionController @Autowired constructor(
 
 
     /**
-     * 本接口不做权限校验，返回空列表时可能表示所有路径均有权限，也可能为无项目仓库权限，因此需要单独做仓库权限校验
+     * 本接口不做权限校验，status表明是否需要做校验
+     * OperationType IN  表示有权限的路径列表，需要做交集
+     * OperationType NIN 表示有无权限的路径列表，需要做差集
      */
     override fun listPermissionPath(userId: String, projectId: String, repoName: String): Response<ListPathResult> {
-        val permissionPath = permissionService.listNoPermissionPath(userId, projectId, repoName)
-        val status = permissionPath.isNotEmpty()
-        val result = ListPathResult(status = status, path = mapOf(OperationType.NIN to permissionPath))
-        return ResponseBuilder.success(result)
+        val repoAccessControl = permissionService.checkRepoAccessControl(projectId, repoName)
+        if (repoAccessControl) {
+            val permissionPath = permissionService.listPermissionPath(userId, null, projectId, repoName)
+            if (permissionPath == null) {
+                val result = ListPathResult(status = false, path = mapOf(OperationType.IN to emptyList()))
+                return ResponseBuilder.success(result)
+            }
+            val result = ListPathResult(status = true, path = mapOf(OperationType.IN to permissionPath))
+            return ResponseBuilder.success(result)
+        } else {
+            val permissionPath = permissionService.listNoPermissionPath(userId, null, projectId, repoName)
+            if (permissionPath == null) {
+                // 针对用户不存在的情况的特殊处理，后续可能会调整
+                val result = ListPathResult(status = false, path = mapOf(OperationType.IN to emptyList()))
+                return ResponseBuilder.success(result)
+            }
+            val status = permissionPath.isNotEmpty()
+            val result = ListPathResult(status = status, path = mapOf(OperationType.NIN to permissionPath))
+            return ResponseBuilder.success(result)
+        }
     }
 
+    override fun getOrCreatePersonalPath(
+        projectId: String,
+        repoName: String
+    ): Response<String> {
+        val userId = SecurityUtils.getUserId()
+        return ResponseBuilder.success(permissionService.getOrCreatePersonalPath(projectId, repoName, userId))
+    }
 
     override fun checkPermission(request: CheckPermissionRequest): Response<Boolean> {
         checkRequest(request)

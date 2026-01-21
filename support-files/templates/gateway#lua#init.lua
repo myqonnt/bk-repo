@@ -1,7 +1,7 @@
 --[[
 Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
 
-Copyright (C) 2019 THL A29 Limited, a Tencent company.  All rights reserved.
+Copyright (C) 2019 Tencent.  All rights reserved.
 
 BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
 
@@ -55,8 +55,27 @@ config = {
   bkci = {
     host = "__BK_CI_HOST__",
     port = "__BK_CI_PORT__"
-  }
+  },
+  mobileSiteToken = "__BK_CI_MOBILE_SITE_TOKEN__",
+  security_paths = {
+  },
+  redis = {
+    host = "__BK_REPO_REDIS_HOST__",
+    port = "__BK_REPO_REDIS_PORT__",
+    pass = "__BK_REPO_REDIS_ADMIN_PASSWORD__", -- redis 密码，没有密码的话，把这行注释掉
+    database = "__BK_REPO_REDIS_DATABASE__",
+    pool_size = 5,                     -- 连接池的大小
+    max_idle_time = 600000,            -- 保留在连接池的时间
+    backlog = 100                     -- 连接等待队列
+  },
+  service_in_container = "__BK_REPO_SERVICE_IN_CONTAINER__",
+  service_in_local = "__BK_REPO_SERVICE_IN_LOCAL__",
+  service_with_bandwidth_check = "__BK_REPO_SERVICE_WITH_BANDWIDTH_CHECK__",
+  container_url = "__BK_REPO_URL_CONTAINER__",
+  enable_multi_tenant_mode = "__BK_REPO_ENABLE_MULTI_TENANT_MODE__",
+  op_tenant_id = "__BK_REPO_OP_TENANT_ID__"
 }
   
 require("init_common")
 require("ip_whitelist")
+require("project_router")

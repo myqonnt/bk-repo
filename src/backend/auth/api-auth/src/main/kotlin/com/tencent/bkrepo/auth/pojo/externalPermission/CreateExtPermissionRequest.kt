@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2019 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2019 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -27,26 +27,26 @@
 
 package com.tencent.bkrepo.auth.pojo.externalPermission
 
-import com.tencent.bkrepo.common.operate.api.annotation.Sensitive
-import com.tencent.bkrepo.common.operate.api.handler.MaskPartMapValue
-import io.swagger.annotations.ApiModel
-import io.swagger.annotations.ApiModelProperty
+import com.tencent.bkrepo.common.metadata.annotation.Sensitive
+import com.tencent.bkrepo.common.metadata.handler.MaskPartMapValue
+import io.swagger.v3.oas.annotations.media.Schema
 
-@ApiModel("创建外部权限请求")
+
+@Schema(title = "创建外部权限请求")
 data class CreateExtPermissionRequest(
-    @ApiModelProperty("外部权限回调地址")
+    @get:Schema(title = "外部权限回调地址")
     val url: String,
-    @ApiModelProperty("请求头")
+    @get:Schema(title = "请求头")
     @Sensitive(handler = MaskPartMapValue::class)
     val headers: Map<String, String>? = emptyMap(),
-    @ApiModelProperty("项目id")
+    @get:Schema(title = "项目id")
     val projectId: String,
-    @ApiModelProperty("仓库名")
+    @get:Schema(title = "仓库名")
     val repoName: String,
-    @ApiModelProperty("生效接口")
+    @get:Schema(title = "生效接口")
     val scope: String,
-    @ApiModelProperty("平台账号白名单，白名单内不会校验外部权限")
+    @get:Schema(title = "平台账号白名单，白名单内不会校验外部权限")
     val platformWhiteList: List<String>? = emptyList(),
-    @ApiModelProperty("是否启用")
+    @get:Schema(title = "是否启用")
     val enabled: Boolean = false
 )

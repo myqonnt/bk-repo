@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -46,6 +46,14 @@ data class ScannerProperties(
      */
     var baseUrl: String = "http://localhost",
     /**
+     * 后端服务认证用户名，后端服务使用mirrors认证方式时必填，仅需要一个非匿名的用户身份，无需任何权限
+     */
+    var username: String? = null,
+    /**
+     * 后端服务认证密码
+     */
+    var password: String? = null,
+    /**
      * 前端baseUrl
      */
     var frontEndBaseUrl: String = "http://localhost/ui",
@@ -87,12 +95,31 @@ data class ScannerProperties(
      * 最大全局扫描任务数量
      */
     var maxGlobalTaskCount: Int = 1,
+    /**
+     * 扫描结果报告保留时间，为0时表示不清理
+     */
+    var reportKeepDuration: Duration = Duration.ofDays(0L),
+    /**
+     * 扫描结果中来源于不同组件的相同漏洞ID和许可证ID是否仅计数1次
+     */
+    var uniqueCounting: Boolean = false,
+
+    /**
+     * 清理批大小
+     */
+    var cleanBatchSize: Int = 1000,
+
+    /**
+     * 每秒清理批次限制
+     */
+    var cleanBatchPerSeconds: Double = 10.0,
 ) {
     companion object {
         /**
          * 默认任务最长执行时间，超过后会触发重试
          */
         const val DEFAULT_TASK_EXECUTE_TIMEOUT_SECONDS = 1200L
+
         /**
          * 任务过期时间
          */

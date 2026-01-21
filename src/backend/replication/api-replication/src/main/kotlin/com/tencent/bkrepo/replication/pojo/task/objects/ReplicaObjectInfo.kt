@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2021 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2021 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -28,21 +28,23 @@
 package com.tencent.bkrepo.replication.pojo.task.objects
 
 import com.tencent.bkrepo.common.artifact.pojo.RepositoryType
-import io.swagger.annotations.ApiModel
-import io.swagger.annotations.ApiModelProperty
+import io.swagger.v3.oas.annotations.media.Schema
 
-@ApiModel("同步对象信息")
+
+@Schema(title = "同步对象信息")
 data class ReplicaObjectInfo(
-    @ApiModelProperty("本地仓库")
+    @get:Schema(title = "本地仓库")
     val localRepoName: String,
-    @ApiModelProperty("远程项目")
+    @get:Schema(title = "远程项目")
     val remoteProjectId: String?,
-    @ApiModelProperty("远程仓库")
+    @get:Schema(title = "远程仓库")
     val remoteRepoName: String?,
-    @ApiModelProperty("仓库类型")
+    @get:Schema(title = "仓库类型")
     val repoType: RepositoryType,
-    @ApiModelProperty("包限制条件")
+    @get:Schema(title = "包限制条件")
     val packageConstraints: List<PackageConstraint>?,
-    @ApiModelProperty("路径限制条件")
-    val pathConstraints: List<PathConstraint>?
+    @get:Schema(title = "路径限制条件")
+    val pathConstraints: List<PathConstraint>?,
+    @get:Schema(title = "当来源不为空的场景下仅限制来源是列表中的数据进行同步")
+    val sourceFilter: List<String>? = null
 )

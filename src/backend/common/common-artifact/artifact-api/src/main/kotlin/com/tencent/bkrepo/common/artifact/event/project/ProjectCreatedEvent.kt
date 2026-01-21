@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2021 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2021 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -37,11 +37,13 @@ import com.tencent.bkrepo.common.artifact.event.base.EventType
 data class ProjectCreatedEvent(
     override val projectId: String,
     override val userId: String,
-    val createPermission: Boolean
+    val createPermission: Boolean,
+    override val eventId: String? = generateEventId(),
 ) : ArtifactEvent(
     type = EventType.PROJECT_CREATED,
     projectId = projectId,
     repoName = StringPool.EMPTY,
     resourceKey = projectId,
-    userId = userId
+    userId = userId,
+    eventId = eventId
 )

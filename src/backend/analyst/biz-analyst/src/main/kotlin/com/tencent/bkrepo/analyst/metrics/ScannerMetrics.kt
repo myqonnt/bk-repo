@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -33,6 +33,10 @@ import com.tencent.bkrepo.analyst.distribution.DistributedCountFactory
 import com.tencent.bkrepo.analyst.pojo.ScanTaskStatus
 import com.tencent.bkrepo.analyst.statemachine.ScanTaskSchedulerConfiguration.Companion.SCAN_TASK_SCHEDULER_THREAD_POOL_BEAN_NAME
 import com.tencent.bkrepo.common.analysis.pojo.scanner.SubScanTaskStatus
+import com.tencent.bkrepo.common.metrics.constant.SCANNER_SUBTASK_COUNT
+import com.tencent.bkrepo.common.metrics.constant.SCANNER_SUBTASK_REUSE_RESULT_COUNT
+import com.tencent.bkrepo.common.metrics.constant.SCANNER_SUBTASK_SPEED
+import com.tencent.bkrepo.common.metrics.constant.SCANNER_TASK_COUNT
 import io.micrometer.core.instrument.DistributionSummary
 import io.micrometer.core.instrument.Gauge
 import io.micrometer.core.instrument.MeterRegistry
@@ -49,12 +53,13 @@ import java.util.concurrent.ConcurrentHashMap
 @Component
 @Suppress("TooManyFunctions")
 class ScannerMetrics(
-    private val meterRegistry: MeterRegistry,
     private val scannerProperties: ScannerProperties,
     @Qualifier(SCAN_TASK_SCHEDULER_THREAD_POOL_BEAN_NAME)
     private val scanTaskSchedulerThreadPool: ThreadPoolTaskExecutor,
     private val distributedCountFactory: DistributedCountFactory
 ) : MeterBinder {
+
+    private lateinit var meterRegistry: MeterRegistry
 
     /**
      * 记录各状态任务数量的Map，key为状态，value为任务数量
@@ -83,6 +88,7 @@ class ScannerMetrics(
     }
 
     override fun bindTo(registry: MeterRegistry) {
+        this.meterRegistry = registry
         taskGauge(
             scanTaskSchedulerThreadPool,
             { threadPoolExecutor.queue.size.toDouble() },
@@ -235,26 +241,6 @@ class ScannerMetrics(
     }
 
     companion object {
-        /**
-         * 扫描任务数量
-         */
-        private const val SCANNER_TASK_COUNT = "scanner.task.count"
-
-        /**
-         * 子扫描任务数量
-         */
-        private const val SCANNER_SUBTASK_COUNT = "scanner.subtask.count"
-
-        /**
-         * 重用扫描结果的子任务数量
-         */
-        private const val SCANNER_SUBTASK_REUSE_RESULT_COUNT = "scanner.subtask.reuse-result.count"
-
-        /**
-         * 子任务执行耗时
-         */
-        private const val SCANNER_SUBTASK_SPEED = "scanner.subtask.speed"
-
         /**
          * 未知扩展名
          */

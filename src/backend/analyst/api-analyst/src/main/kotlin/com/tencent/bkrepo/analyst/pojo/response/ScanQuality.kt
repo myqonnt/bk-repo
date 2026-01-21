@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -29,29 +29,31 @@ package com.tencent.bkrepo.analyst.pojo.response
 
 import com.fasterxml.jackson.annotation.JsonInclude
 import com.tencent.bkrepo.common.analysis.pojo.scanner.Level
-import io.swagger.annotations.ApiModel
-import io.swagger.annotations.ApiModelProperty
+import io.swagger.v3.oas.annotations.media.Schema
 
-@ApiModel("质量规则")
+
+@Schema(title = "质量规则")
 @JsonInclude(JsonInclude.Include.NON_NULL)
 data class ScanQuality(
-    @ApiModelProperty("严重漏洞数")
+    @get:Schema(title = "严重漏洞数")
     val critical: Long?,
-    @ApiModelProperty("高危漏洞数")
+    @get:Schema(title = "高危漏洞数")
     val high: Long?,
-    @ApiModelProperty("中危漏洞数")
+    @get:Schema(title = "中危漏洞数")
     val medium: Long?,
-    @ApiModelProperty("低危漏洞数")
+    @get:Schema(title = "低危漏洞数")
     val low: Long?,
-    @ApiModelProperty("扫描未完成是否禁用制品")
+    @get:Schema(title = "扫描未完成是否禁用制品")
     val forbidScanUnFinished: Boolean?,
-    @ApiModelProperty("质量规则未通过是否禁用制品")
+    @get:Schema(title = "质量规则未通过是否禁用制品")
     val forbidQualityUnPass: Boolean?,
-    @ApiModelProperty("许可是否推荐使用")
+    @get:Schema(title = "是否禁用未扫描的制品")
+    val forbidNotScanned: Boolean?,
+    @get:Schema(title = "许可是否推荐使用")
     val recommend: Boolean?,
-    @ApiModelProperty("许可是否合规")
+    @get:Schema(title = "许可是否合规")
     val compliance: Boolean?,
-    @ApiModelProperty("许可是否未知")
+    @get:Schema(title = "许可是否未知")
     val unknown: Boolean?
 ) {
 
@@ -63,6 +65,7 @@ data class ScanQuality(
             low = map[Level.LOW.levelName] as? Long,
             forbidScanUnFinished = map[ScanQuality::forbidScanUnFinished.name] as? Boolean,
             forbidQualityUnPass = map[ScanQuality::forbidQualityUnPass.name] as? Boolean,
+            forbidNotScanned = map[ScanQuality::forbidNotScanned.name] as? Boolean,
             recommend = map[ScanQuality::recommend.name] as? Boolean,
             compliance = map[ScanQuality::compliance.name] as? Boolean,
             unknown = map[ScanQuality::unknown.name] as? Boolean

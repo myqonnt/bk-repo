@@ -61,10 +61,15 @@ warning () {
     EXITCODE=$((EXITCODE + 1))
 }
 
+core_service=("helm" "oci" "rpm" "npm" "maven" "pypi" "conan" "nuget" "generic" "cargo" "s3" "huggingface" "lfs"
+             "git" "svn" "composer" "ddc")
+
 build_backend () {
     log "构建${SERVICE}镜像..."
     if [[ $SERVICE == "fs-server" ]];then
         $BACKEND_DIR/gradlew -p $BACKEND_DIR :fs:boot-$SERVICE:build -P'devops.assemblyMode'=k8s -x test
+    elif [[ " ${core_service[@]} " == *" $SERVICE "* ]];then
+        $BACKEND_DIR/gradlew -p $BACKEND_DIR :core:$SERVICE:boot-$SERVICE:build -P'devops.assemblyMode'=k8s -x test
     else
         $BACKEND_DIR/gradlew -p $BACKEND_DIR :$SERVICE:boot-$SERVICE:build -P'devops.assemblyMode'=k8s -x test
     fi
@@ -149,6 +154,7 @@ if [[ $ALL -eq 1 || $INIT -eq 1 ]] ; then
     rm -rf $tmp_dir/*
     cp -rf init/init-mongodb.sh $tmp_dir/
     cp -rf $ROOT_DIR/support-files/sql/init-data.js $tmp_dir/
+    cp -rf $ROOT_DIR/support-files/sql/init-data-tenant.js $tmp_dir/
     cp -rf $ROOT_DIR/support-files/sql/init-data-ext.js $tmp_dir/
 fi
 

@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -27,24 +27,32 @@
 
 package com.tencent.bkrepo.analyst.configuration
 
+import com.mongodb.ConnectionString
+import com.mongodb.MongoClientSettings
+import com.mongodb.client.MongoClients
 import com.tencent.bkrepo.analysis.executor.api.ExecutorClient
 import com.tencent.bkrepo.analyst.dispatcher.SubtaskDispatcherFactory
 import com.tencent.bkrepo.analyst.dispatcher.SubtaskPoller
+import com.tencent.bkrepo.analyst.event.AnalystScanEventConsumer
 import com.tencent.bkrepo.analyst.service.ExecutionClusterService
 import com.tencent.bkrepo.analyst.service.ScannerService
-import com.tencent.bkrepo.analyst.service.impl.OperateLogServiceImpl
-import com.tencent.bkrepo.analyst.service.impl.ProjectUsageStatisticsServiceImpl
-import com.tencent.bkrepo.common.operate.api.OperateLogService
-import com.tencent.bkrepo.common.operate.api.ProjectUsageStatisticsService
-import com.tencent.bkrepo.common.service.condition.ConditionalOnNotAssembly
-import com.tencent.bkrepo.repository.api.OperateLogClient
-import com.tencent.bkrepo.repository.api.ProjectUsageStatisticsClient
+import com.tencent.bkrepo.common.artifact.event.base.ArtifactEvent
 import org.springframework.beans.factory.ObjectProvider
+import org.springframework.beans.factory.annotation.Qualifier
+import org.springframework.boot.autoconfigure.mongo.MongoProperties
+import org.springframework.boot.context.properties.ConfigurationProperties
 import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.cloud.loadbalancer.annotation.LoadBalancerClients
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
+import org.springframework.context.annotation.DependsOn
+import org.springframework.data.mongodb.MongoDatabaseFactory
+import org.springframework.data.mongodb.SpringDataMongoDB
+import org.springframework.data.mongodb.core.MongoTemplate
+import org.springframework.data.mongodb.core.SimpleMongoClientDatabaseFactory
+import org.springframework.data.mongodb.core.convert.MappingMongoConverter
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor
+import java.util.function.Consumer
 
 @Configuration(proxyBeanMethods = false)
 @EnableConfigurationProperties(
@@ -71,17 +79,61 @@ class ScannerConfiguration {
         )
     }
 
-    @Bean
-    @ConditionalOnNotAssembly // 仅在非单体包部署时创建，避免循环依赖问题
-    fun operateLogService(operateLogClient: OperateLogClient): OperateLogService {
-        return OperateLogServiceImpl(operateLogClient)
+//    @Bean
+//    @ConditionalOnNotAssembly // 仅在非单体包部署时创建，避免循环依赖问题
+//    fun operateLogService(operateLogClient: OperateLogClient): OperateLogService {
+//        return OperateLogServiceImpl(operateLogClient)
+//    }
+//
+//    @Bean
+//    @ConditionalOnNotAssembly // 仅在非单体包部署时创建，避免循环依赖问题
+//    fun projectUsageStatisticsService(
+//        client: ObjectProvider<ProjectUsageStatisticsClient>
+//    ): ProjectUsageStatisticsService {
+//        return ProjectUsageStatisticsServiceImpl(client)
+//    }
+
+
+    @Bean("scanEventConsumer")
+    fun scanEventConsumer(
+        analystScanEventConsumer: AnalystScanEventConsumer
+    ): Consumer<ArtifactEvent> {
+        return Consumer {
+            analystScanEventConsumer.accept(it)
+        }
     }
 
     @Bean
-    @ConditionalOnNotAssembly // 仅在非单体包部署时创建，避免循环依赖问题
-    fun projectUsageStatisticsService(
-        client: ObjectProvider<ProjectUsageStatisticsClient>
-    ): ProjectUsageStatisticsService {
-        return ProjectUsageStatisticsServiceImpl(client)
+    @ConfigurationProperties("spring.data.mongodb.analyst")
+    fun analystMongoProperties(): MongoProperties {
+        return MongoProperties()
+    }
+
+    @Bean
+    @DependsOn("mongoTemplate")
+    fun analystMongoTemplate(
+        mongoTemplate: MongoTemplate,
+        @Qualifier("analystMongoProperties") analystMongoProperties: MongoProperties,
+        converter: MappingMongoConverter?
+    ): MongoTemplate {
+        // 没有设置独立数据库时，使用统一的数据库
+        return if (analystMongoProperties.determineUri() == MongoProperties.DEFAULT_URI) {
+            mongoTemplate
+        } else {
+            val connectionString = ConnectionString(analystMongoProperties.determineUri())
+            val settings =
+                MongoClientSettings.builder()
+                    .applyConnectionString(connectionString)
+                    .uuidRepresentation(analystMongoProperties.uuidRepresentation)
+                    .build()
+
+            val databaseFactory: MongoDatabaseFactory =
+                SimpleMongoClientDatabaseFactory(
+                    MongoClients.create(settings, SpringDataMongoDB.driverInformation()),
+                    analystMongoProperties.database ?: connectionString.database.orEmpty()
+                )
+
+            MongoTemplate(databaseFactory, converter)
+        }
     }
 }

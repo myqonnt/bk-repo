@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -36,49 +36,60 @@ import com.tencent.bkrepo.auth.constant.AUTH_BUILTIN_USER
 import com.tencent.bkrepo.auth.constant.AUTH_BUILTIN_VIEWER
 import com.tencent.bkrepo.auth.constant.PROJECT_MANAGE_ID
 import com.tencent.bkrepo.auth.constant.PROJECT_VIEWER_ID
+import com.tencent.bkrepo.auth.constant.REPLICATION_MANAGE_ID
+import com.tencent.bkrepo.auth.dao.AccountDao
 import com.tencent.bkrepo.auth.dao.PermissionDao
 import com.tencent.bkrepo.auth.dao.PersonalPathDao
+import com.tencent.bkrepo.auth.dao.RepoAuthConfigDao
 import com.tencent.bkrepo.auth.dao.UserDao
-import com.tencent.bkrepo.auth.message.AuthMessageCode
-import com.tencent.bkrepo.auth.model.TPermission
-import com.tencent.bkrepo.auth.pojo.enums.PermissionAction.READ
-import com.tencent.bkrepo.auth.pojo.enums.ResourceType.NODE
-import com.tencent.bkrepo.auth.pojo.enums.ResourceType.PROJECT
-import com.tencent.bkrepo.auth.pojo.enums.ResourceType.SYSTEM
-import com.tencent.bkrepo.auth.pojo.enums.RoleType
-import com.tencent.bkrepo.auth.dao.repository.AccountRepository
 import com.tencent.bkrepo.auth.dao.repository.RoleRepository
 import com.tencent.bkrepo.auth.helper.PermissionHelper
 import com.tencent.bkrepo.auth.helper.UserHelper
+import com.tencent.bkrepo.auth.message.AuthMessageCode
+import com.tencent.bkrepo.auth.model.TPermission
 import com.tencent.bkrepo.auth.model.TPersonalPath
-import com.tencent.bkrepo.auth.pojo.enums.PermissionAction.WRITE
+import com.tencent.bkrepo.auth.model.TRole
+import com.tencent.bkrepo.auth.model.TUser
+import com.tencent.bkrepo.auth.pojo.enums.AccessControlMode.DEFAULT
+import com.tencent.bkrepo.auth.pojo.enums.AccessControlMode.STRICT
 import com.tencent.bkrepo.auth.pojo.enums.PermissionAction.DELETE
 import com.tencent.bkrepo.auth.pojo.enums.PermissionAction.MANAGE
+import com.tencent.bkrepo.auth.pojo.enums.PermissionAction.READ
 import com.tencent.bkrepo.auth.pojo.enums.PermissionAction.UPDATE
-import com.tencent.bkrepo.auth.pojo.permission.Permission
-import com.tencent.bkrepo.auth.pojo.permission.CreatePermissionRequest
+import com.tencent.bkrepo.auth.pojo.enums.PermissionAction.WRITE
+import com.tencent.bkrepo.auth.pojo.enums.ResourceType
+import com.tencent.bkrepo.auth.pojo.enums.ResourceType.NODE
+import com.tencent.bkrepo.auth.pojo.enums.ResourceType.PROJECT
+import com.tencent.bkrepo.auth.pojo.enums.ResourceType.REPLICATION
+import com.tencent.bkrepo.auth.pojo.enums.RoleType
+import com.tencent.bkrepo.auth.pojo.permission.CheckPermissionContext
 import com.tencent.bkrepo.auth.pojo.permission.CheckPermissionRequest
-import com.tencent.bkrepo.auth.pojo.permission.UpdatePermissionRepoRequest
+import com.tencent.bkrepo.auth.pojo.permission.CreatePermissionRequest
+import com.tencent.bkrepo.auth.pojo.permission.Permission
 import com.tencent.bkrepo.auth.pojo.permission.UpdatePermissionDeployInRepoRequest
+import com.tencent.bkrepo.auth.pojo.permission.UpdatePermissionRepoRequest
 import com.tencent.bkrepo.auth.pojo.permission.UpdatePermissionUserRequest
+import com.tencent.bkrepo.auth.pojo.role.ExternalRoleResult
+import com.tencent.bkrepo.auth.pojo.role.RoleSource
 import com.tencent.bkrepo.auth.service.PermissionService
 import com.tencent.bkrepo.auth.util.RequestUtil
 import com.tencent.bkrepo.auth.util.request.PermRequestUtil
 import com.tencent.bkrepo.common.api.constant.ANONYMOUS_USER
+import com.tencent.bkrepo.common.api.constant.DEVX_ACCESS_FROM_OFFICE
 import com.tencent.bkrepo.common.api.exception.ErrorCodeException
-import com.tencent.bkrepo.common.security.util.SecurityUtils
-import com.tencent.bkrepo.repository.api.ProjectClient
-import com.tencent.bkrepo.repository.api.RepositoryClient
+import com.tencent.bkrepo.common.metadata.service.project.ProjectService
+import com.tencent.bkrepo.common.metadata.service.repo.RepositoryService
 import org.slf4j.LoggerFactory
 
 open class PermissionServiceImpl constructor(
     private val roleRepository: RoleRepository,
-    private val account: AccountRepository,
+    private val accountDao: AccountDao,
     private val permissionDao: PermissionDao,
     private val userDao: UserDao,
     private val personalPathDao: PersonalPathDao,
-    val repoClient: RepositoryClient,
-    val projectClient: ProjectClient
+    private val repoAuthConfigDao: RepoAuthConfigDao,
+    val repositoryService: RepositoryService,
+    val projectService: ProjectService
 ) : PermissionService {
 
     private val permHelper by lazy { PermissionHelper(userDao, roleRepository, permissionDao, personalPathDao) }
@@ -160,6 +171,7 @@ open class PermissionServiceImpl constructor(
                     permHelper.removeUserFromRoleBatchCommon(addRoleUserList, commonRoleId!!)
                     return true
                 }
+
                 PROJECT_VIEWER_ID -> {
                     val createUserRequest = RequestUtil.buildProjectViewerRequest(projectId!!)
                     val createAdminRequest = RequestUtil.buildProjectAdminRequest(projectId)
@@ -174,6 +186,21 @@ open class PermissionServiceImpl constructor(
                     permHelper.removeUserFromRoleBatchCommon(addRoleUserList, adminRoleId!!)
                     return true
                 }
+
+                REPLICATION_MANAGE_ID -> {
+                    if (!projectId.isNullOrEmpty()) {
+                        throw ErrorCodeException(AuthMessageCode.AUTH_CREATE_ROLE_INVALID_WITHOUT_PROJECT)
+                    }
+                    val replicationAdminRequest = RequestUtil.buildReplicationAdminRequest()
+                    val replicationRoleId = userHelper.createRoleCommon(replicationAdminRequest)
+                    val serviceUsers = permHelper.getServiceUser(REPLICATION_MANAGE_ID)
+                    val addRoleUserList = userId.filter { !serviceUsers.contains(it) }
+                    val removeRoleUserList = serviceUsers.filter { !userId.contains(it) }
+                    userHelper.addUserToRoleBatchCommon(addRoleUserList, replicationRoleId!!)
+                    permHelper.removeUserFromRoleBatchCommon(removeRoleUserList, replicationRoleId)
+                    return true
+                }
+
                 else -> {
                     permHelper.checkPermissionExist(permissionId)
                     return permHelper.updatePermissionById(permissionId, TPermission::users.name, userId)
@@ -186,30 +213,48 @@ open class PermissionServiceImpl constructor(
         logger.debug("check permission request : [$request] ")
         with(request) {
             if (uid == ANONYMOUS_USER) return false
-            val user = userDao.findFirstByUserId(uid) ?: run {
-                throw ErrorCodeException(AuthMessageCode.AUTH_USER_NOT_EXIST)
-            }
+            val user = getUserInfo(uid) ?: return false
             // check user locked
             if (user.locked) return false
             // check user admin permission
-            if (user.admin || isUserLocalProjectAdmin(uid, projectId)) return true
-            val roles = user.roles
+            if (user.admin) return true
+            if (projectId == null) {
+                return checkReplicationPermission(uid, user.roles, resourceType, action)
+            }
+
+            if (isUserLocalProjectAdmin(uid, projectId!!)) return true
+            val context = CheckPermissionContext(
+                userId = uid,
+                roles = user.roles,
+                resourceType = resourceType,
+                action = action,
+                projectId = projectId!!,
+                repoName = repoName,
+                path = path,
+            )
+
             if (permHelper.isRepoOrNodePermission(resourceType)) {
-                // check role repo admin
-                if (permHelper.checkRepoAdmin(request, roles)) return true
-                // check repo read action
-                if (permHelper.checkRepoReadAction(request, roles)) return true
-                //  check project user
-                val isProjectUser = isUserLocalProjectUser(uid, projectId!!)
-                if (permHelper.checkProjectReadAction(request, isProjectUser)) return true
-                // check node action
-                if (needNodeCheck(projectId!!, repoName!!) && checkNodeAction(request, roles, isProjectUser)) {
-                    return true
-                }
+                return checkLocalRepoOrNodePermission(context)
             }
         }
         return false
     }
+
+    fun checkLocalRepoOrNodePermission(context: CheckPermissionContext): Boolean {
+        // check role repo admin
+        if (permHelper.checkRepoAdmin(context)) return true
+        // check repo read action
+        if (permHelper.checkRepoReadAction(context)) return true
+        //  check project user
+        val isProjectUser = isUserLocalProjectUser(context.userId, context.projectId)
+        if (permHelper.checkProjectReadAction(context, isProjectUser)) return true
+        // check node action
+        if (needNodeCheck(context.projectId, context.repoName!!) && checkNodeAction(context, isProjectUser)) {
+            return true
+        }
+        return false
+    }
+
 
     override fun listPermissionProject(userId: String): List<String> {
         logger.debug("list permission project request : $userId ")
@@ -218,7 +263,7 @@ open class PermissionServiceImpl constructor(
         }
         // 用户为系统管理员
         if (user.admin) {
-            return projectClient.listProject().data?.map { it.name } ?: emptyList()
+            return projectService.listProject().map { it.name }
         }
 
         val projectList = mutableListOf<String>()
@@ -239,7 +284,9 @@ open class PermissionServiceImpl constructor(
         val roleList = roleRepository.findByIdIn(user.roles)
         roleList.forEach {
             if (it.admin) {
-                projectList.add(it.projectId)
+                if (it.projectId != null) {
+                    projectList.add(it.projectId)
+                }
             } else {
                 noAdminRole.add(it.id!!)
             }
@@ -296,37 +343,64 @@ open class PermissionServiceImpl constructor(
         return repoList.distinct()
     }
 
-    override fun listNoPermissionPath(userId: String, projectId: String, repoName: String): List<String> {
-        val user = userDao.findFirstByUserId(userId) ?: return emptyList()
-        if (user.admin || isUserLocalProjectAdmin(userId, projectId)) {
-            return emptyList()
-        }
+    override fun listNoPermissionPath(
+        userId: String,
+        roles: List<String>?,
+        projectId: String,
+        repoName: String
+    ): List<String>? {
+        val user = userDao.findFirstByUserId(userId) ?: return null
+        if (user.admin || isUserLocalProjectAdmin(userId, projectId)) return emptyList()
+        var userRoles = roles
+        if (roles == null) userRoles = user.roles
         val projectPermission = permissionDao.listByResourceAndRepo(NODE.name, projectId, repoName)
-        val configPath = permHelper.getNoPermissionPathFromConfig(userId, user.roles, projectPermission)
+        val configPath = permHelper.getPermissionPathFromConfig(userId, userRoles, projectPermission, false)
         val personalPath = personalPathDao.listByProjectAndRepoAndExcludeUser(userId, projectId, repoName)
             .map { it.fullPath }
         return (configPath + personalPath).distinct()
     }
 
+    override fun listPermissionPath(
+        userId: String,
+        roles: List<String>?,
+        projectId: String,
+        repoName: String
+    ): List<String>? {
+        val user = userDao.findFirstByUserId(userId) ?: return emptyList()
+        if (user.admin || isUserLocalProjectAdmin(userId, projectId)) {
+            return null
+        }
+        var userRoles = roles
+        if (roles == null) userRoles = user.roles
+        val permission = permissionDao.listByResourceAndRepo(NODE.name, projectId, repoName)
+        val configPath = permHelper.getPermissionPathFromConfig(userId, userRoles, permission, true).toMutableList()
+        val personalPath = personalPathDao.findOneByProjectAndRepo(userId, projectId, repoName)
+        if (personalPath != null) {
+            configPath.add(personalPath.fullPath)
+        }
+        return configPath.distinct()
+    }
+
     fun getAllRepoByProjectId(projectId: String): List<String> {
-        return repoClient.listRepo(projectId).data?.map { it.name } ?: emptyList()
+        return repositoryService.listRepo(projectId).map { it.name }
     }
 
     override fun checkPlatformPermission(request: CheckPermissionRequest): Boolean {
         with(request) {
-            if (appId == null) return true
-            val platform = account.findOneByAppId(appId!!) ?: run {
-                logger.info("can not find platform [$appId]")
-                return false
-            }
-
+            val platform = accountDao.findOneByAppId(appId!!) ?: return false
+            // 非平台账号
+            if (!permHelper.isPlatformApp(platform)) return false
+            // 不限制scope
             if (platform.scope == null) return true
+            // 平台账号，限制scope
+            if (!platform.scope!!.contains(ResourceType.lookup(resourceType))) return false
+            // 校验平台账号权限范围
             when (resourceType) {
-                SYSTEM.name -> return true
                 PROJECT.name -> {
                     return permHelper.checkPlatformProject(projectId, platform.scopeDesc)
                 }
-                else -> return false
+
+                else -> return true
             }
         }
     }
@@ -356,9 +430,8 @@ open class PermissionServiceImpl constructor(
                 && permHelper.updatePermissionById(request.permissionId, TPermission::roles.name, request.roles)
     }
 
-    override fun getOrCreatePersonalPath(projectId: String, repoName: String): String {
-        val userId = SecurityUtils.getUserId()
-        val personalPath = "$defaultPersonalPrefix/$userId"
+    override fun getOrCreatePersonalPath(projectId: String, repoName: String, userId: String): String {
+        val personalPath = "${permHelper.getDefaultPersonalPrefix()}/$userId"
         personalPathDao.findOneByProjectAndRepo(userId, projectId, repoName) ?: run {
             logger.info("personal path [$projectId, $repoName, $personalPath ] not exist , create")
             val personalPathData =
@@ -382,11 +455,15 @@ open class PermissionServiceImpl constructor(
         return true
     }
 
-    fun isUserLocalProjectAdmin(userId: String, projectId: String?): Boolean {
+    override fun listExternalRoleByProject(projectId: String, source: RoleSource): List<ExternalRoleResult> {
+        return emptyList()
+    }
+
+    fun isUserLocalProjectAdmin(userId: String, projectId: String): Boolean {
         return permHelper.isUserLocalProjectAdmin(userId, projectId)
     }
 
-    fun isUserLocalProjectUser(userId: String, projectId: String): Boolean {
+    private fun isUserLocalProjectUser(userId: String, projectId: String): Boolean {
         return permHelper.isUserLocalProjectUser(userId, projectId)
     }
 
@@ -395,17 +472,84 @@ open class PermissionServiceImpl constructor(
         return user.admin
     }
 
-    fun checkNodeAction(request: CheckPermissionRequest, userRoles: List<String>?, isProjectUser: Boolean): Boolean {
-        return permHelper.checkNodeAction(request, userRoles, isProjectUser)
+    fun getUserInfo(userId: String): TUser? {
+        return userDao.findFirstByUserId(userId)
+    }
+
+    fun getUserRole(projectId: String, source: RoleSource): List<TRole> {
+        return roleRepository.findByProjectIdAndSource(projectId, source).filter {
+            !it.deptInfoList.isNullOrEmpty()
+        }
+    }
+
+    fun checkNodeAction(request: CheckPermissionContext, isProjectUser: Boolean): Boolean {
+        with(request) {
+            if (checkRepoAccessControl(projectId, repoName!!)) {
+                return permHelper.checkNodeActionWithCtrl(request)
+            }
+            return permHelper.checkNodeActionWithOutCtrl(request, isProjectUser)
+        }
     }
 
     fun needNodeCheck(projectId: String, repoName: String): Boolean {
         val projectPermission = permissionDao.listByResourceAndRepo(NODE.name, projectId, repoName)
-        return projectPermission.isNotEmpty()
+        val repoCheckConfig = repoAuthConfigDao.findOneByProjectRepo(projectId, repoName) ?: return false
+        return projectPermission.isNotEmpty() && repoCheckConfig.accessControlMode != DEFAULT
+    }
+
+    override fun checkRepoAccessControl(projectId: String, repoName: String): Boolean {
+        val result = repoAuthConfigDao.findOneByProjectRepo(projectId, repoName) ?: return false
+        return result.accessControlMode != null && result.accessControlMode == STRICT
+    }
+
+    /**
+     * 校验是否在访问控制组
+     * true,代码需要拦截
+     */
+    fun checkRepoAccessDenyGroup(
+        userId: String,
+        projectId: String,
+        repoName: String?,
+        roles: Set<String>,
+        requestSource: String?
+    ): Boolean {
+        // 仅校验repo下的请求
+        if (repoName == null || requestSource == null) return false
+        logger.info("check user in access deny group [$userId, $projectId, $repoName, $requestSource]")
+        if (requestSource == DEVX_ACCESS_FROM_OFFICE) {
+            val result = repoAuthConfigDao.findOneByProjectRepo(projectId, repoName) ?: return false
+            if (result.officeDenyGroupSet == null) return false
+            if (result.officeDenyGroupSet!!.intersect(roles).isNotEmpty()) return true
+        }
+        return false
+    }
+
+    /**
+     * 校验用户是否有同步权限
+     * 当projectId为null时，针对REPLICATION类型的资源进行权限校验
+     */
+    fun checkReplicationPermission(
+        userId: String,
+        roles: List<String>,
+        resourceType: String,
+        action: String
+    ): Boolean {
+        if (REPLICATION.name != resourceType) {
+            return false
+        }
+
+        val replicationRole = roleRepository.findFirstByTypeAndRoleId(RoleType.SERVICE, REPLICATION_MANAGE_ID)
+            ?: return false
+
+        val hasPermission = roles.contains(replicationRole.id)
+        if (!hasPermission) {
+            return false
+        }
+        logger.debug("user has service role permission for resourceType [$userId, $resourceType, $action]")
+        return true
     }
 
     companion object {
         private val logger = LoggerFactory.getLogger(PermissionServiceImpl::class.java)
-        private const val defaultPersonalPrefix = "/Personal"
     }
 }

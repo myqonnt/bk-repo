@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -34,18 +34,18 @@ package com.tencent.bkrepo.common.query.model
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize
 import com.tencent.bkrepo.common.query.enums.OperationType
 import com.tencent.bkrepo.common.query.serializer.RuleDeserializer
-import io.swagger.annotations.ApiModel
-import io.swagger.annotations.ApiModelProperty
+import io.swagger.v3.oas.annotations.media.Schema
 
-@ApiModel("查询规则")
+
+@Schema(title = "查询规则")
 @JsonDeserialize(using = RuleDeserializer::class)
 sealed class Rule {
 
-    @ApiModel("嵌套查询规则")
+    @Schema(title = "嵌套查询规则")
     data class NestedRule(
-        @ApiModelProperty("规则集")
+        @get:Schema(title = "规则集")
         val rules: MutableList<Rule>,
-        @ApiModelProperty("组合条件类型")
+        @get:Schema(title = "组合条件类型")
         val relation: RelationType = RelationType.DEFAULT
     ) : Rule() {
 
@@ -65,13 +65,13 @@ sealed class Rule {
         }
     }
 
-    @ApiModel("条件查询规则")
+    @Schema(title = "条件查询规则")
     data class QueryRule(
-        @ApiModelProperty("字段")
+        @get:Schema(title = "字段")
         val field: String,
-        @ApiModelProperty("值")
+        @get:Schema(title = "值")
         val value: Any,
-        @ApiModelProperty("操作类型")
+        @get:Schema(title = "操作类型")
         val operation: OperationType = OperationType.DEFAULT
     ) : Rule() {
         fun toFixed(): FixedRule {
@@ -79,6 +79,6 @@ sealed class Rule {
         }
     }
 
-    @ApiModel("固定查询规则")
+    @Schema(title = "固定查询规则")
     data class FixedRule(val wrapperRule: QueryRule) : Rule()
 }

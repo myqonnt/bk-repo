@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -27,15 +27,16 @@
 
 package com.tencent.bkrepo.repository.pojo.repo
 
-import io.swagger.annotations.ApiModelProperty
+import io.swagger.v3.oas.annotations.media.Schema
+
 
 data class RepoMetricsInfo(
-    @ApiModelProperty("repoName")
+    @get:Schema(title = "repoName")
     val repoName: String,
-    @ApiModelProperty("credentialsKey")
+    @get:Schema(title = "credentialsKey")
     val credentialsKey: String? = "default",
-    @ApiModelProperty("size")
+    @get:Schema(title = "size")
     var size: Long,
-    @ApiModelProperty("num")
+    @get:Schema(title = "num")
     val num: Long
 )

@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -33,7 +33,13 @@ enum class RepositoryMessageCode(private val key: String, private val businessCo
     UNKNOWN_STORAGE_CREDENTIALS_TYPE("repository.storage.credentials.type.unknown", 1),
     STORAGE_CREDENTIALS_IN_USE("repository.storage.credentials.inuse", 2),
     STORAGE_CREDENTIALS_NOT_FOUND("repository.storage.credentials.not.found", 3),
-    METADATA_KEY_RESERVED("repository.metadata.key.reserved", 4);
+    METADATA_KEY_RESERVED("repository.metadata.key.reserved", 4),
+    PIPELINE_METADATA_UPDATE_NOT_ALLOWED("repository.pipleine.metadata.update.not-allowed", 5),
+    APP_EXPERIENCE_CONFIG_ERROR("repository.app.experience.config.error", 6),
+    BKDIRVE_CONFIG_ERROR("repository.bkdirve.config.error", 7),
+    DRIVE_API_NOT_ALLOWED("repository.drive.api.not.allowed", 8),
+    
+    ;
 
     override fun getBusinessCode() = businessCode
     override fun getKey() = key

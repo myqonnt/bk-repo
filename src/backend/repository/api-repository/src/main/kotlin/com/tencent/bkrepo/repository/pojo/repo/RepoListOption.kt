@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2021 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2021 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -27,17 +27,19 @@
 
 package com.tencent.bkrepo.repository.pojo.repo
 
-import io.swagger.annotations.ApiModel
-import io.swagger.annotations.ApiModelProperty
+import io.swagger.v3.oas.annotations.media.Schema
 
-@ApiModel("仓库列表选项")
+
+@Schema(title = "仓库列表选项")
 data class RepoListOption(
-    @ApiModelProperty("仓库名称(前缀匹配，忽略大小写)", required = false)
+    @get:Schema(title = "仓库名称(前缀匹配，忽略大小写)", required = false)
     val name: String? = null,
-    @ApiModelProperty("仓库类型", required = false)
+    @get:Schema(title = "仓库类型", required = false)
     val type: String? = null,
-    @ApiModelProperty("仓库类别", required = false)
+    @get:Schema(title = "仓库类别", required = false)
     val category: String? = null,
-    @ApiModelProperty("是否可展示的仓库", required = false)
+    @get:Schema(title = "是否可展示的仓库", required = false)
     val display: Boolean? = true,
+    @get:Schema(title = "包含的仓库列表，不受display限制", required = false)
+    val include: String? = null,
 )

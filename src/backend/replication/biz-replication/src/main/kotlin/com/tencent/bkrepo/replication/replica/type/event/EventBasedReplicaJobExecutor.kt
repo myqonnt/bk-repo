@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -28,11 +28,15 @@
 package com.tencent.bkrepo.replication.replica.type.event
 
 import com.tencent.bkrepo.common.artifact.event.base.ArtifactEvent
+import com.tencent.bkrepo.common.artifact.event.base.EventType
+import com.tencent.bkrepo.common.artifact.path.PathUtils
 import com.tencent.bkrepo.replication.config.ReplicationProperties
+import com.tencent.bkrepo.replication.dao.EventRecordDao
+import com.tencent.bkrepo.replication.dao.ReplicaFailureRecordDao
 import com.tencent.bkrepo.replication.manager.LocalDataManager
-import com.tencent.bkrepo.replication.pojo.record.ReplicaRecordInfo
+import com.tencent.bkrepo.replication.metrics.FederationMetricsCollector
+import com.tencent.bkrepo.replication.pojo.request.ReplicaObjectType
 import com.tencent.bkrepo.replication.pojo.task.ReplicaTaskDetail
-import com.tencent.bkrepo.replication.replica.executor.AbstractReplicaJobExecutor
 import com.tencent.bkrepo.replication.service.ClusterNodeService
 import com.tencent.bkrepo.replication.service.ReplicaRecordService
 import org.slf4j.LoggerFactory
@@ -48,28 +52,64 @@ class EventBasedReplicaJobExecutor(
     localDataManager: LocalDataManager,
     replicaService: EventBasedReplicaService,
     replicationProperties: ReplicationProperties,
-    private val replicaRecordService: ReplicaRecordService
-) : AbstractReplicaJobExecutor(clusterNodeService, localDataManager, replicaService, replicationProperties) {
+    replicaRecordService: ReplicaRecordService,
+    replicaFailureRecordDao: ReplicaFailureRecordDao,
+    eventRecordDao: EventRecordDao,
+    metricsCollector: FederationMetricsCollector
+) : CommonEventBasedReplicaJobExecutor(
+    clusterNodeService, localDataManager, replicaService,
+    replicationProperties, replicaRecordService, replicaFailureRecordDao, eventRecordDao, metricsCollector
+) {
+
 
     /**
-     * 执行同步
+     * 判断分发配置内容是否与待分发事件匹配
      */
-    fun execute(taskDetail: ReplicaTaskDetail, event: ArtifactEvent) {
-        val task = taskDetail.task
-        val taskRecord: ReplicaRecordInfo = replicaRecordService.findOrCreateLatestRecord(task.key)
-        try {
-            val results = task.remoteClusters.map { submit(taskDetail, taskRecord, it, event) }.map { it.get() }
-            val replicaOverview = getResultsSummary(results).replicaOverview
-            taskRecord.replicaOverview?.let { overview ->
-                replicaOverview.success += overview.success
-                replicaOverview.failed += overview.failed
-                replicaOverview.conflict += overview.conflict
+    override fun replicaObjectCheck(task: ReplicaTaskDetail, event: ArtifactEvent): Boolean {
+        if (!task.task.enabled) return false
+        return when (task.task.replicaObjectType) {
+            ReplicaObjectType.PATH -> {
+                pathCheck(event, task)
             }
-            replicaRecordService.updateRecordReplicaOverview(taskRecord.id, replicaOverview)
-            logger.info("Replica ${event.getFullResourceKey()} completed.")
-        } catch (exception: Exception) {
-            logger.error("Replica ${event.getFullResourceKey()}} failed: $exception", exception)
+
+            ReplicaObjectType.PACKAGE -> {
+                packageCheck(event, task)
+            }
+
+            else -> true
         }
+    }
+
+    private fun pathCheck(event: ArtifactEvent, task: ReplicaTaskDetail): Boolean {
+        if (event.type != EventType.NODE_CREATED) return false
+        task.objects.forEach {
+            it.pathConstraints?.forEach {
+                if (it.path.isNullOrEmpty()) {
+                    return false
+                }
+                val fullPath = PathUtils.toFullPath(it.path!!)
+                if (event.resourceKey == fullPath) return true
+                val ancestorFolder = PathUtils.resolveAncestor(event.resourceKey)
+                val existPath = ancestorFolder.firstOrNull { PathUtils.toFullPath(it) == fullPath }
+                if (existPath != null) return true
+            }
+        }
+        return false
+    }
+
+    private fun packageCheck(event: ArtifactEvent, task: ReplicaTaskDetail): Boolean {
+        if (event.type != EventType.VERSION_CREATED && event.type != EventType.VERSION_UPDATED) return false
+        val packageKey = event.data["packageKey"].toString()
+        val packageVersion = event.data["packageVersion"].toString()
+        task.objects.forEach {
+            it.packageConstraints?.forEach {
+                if (packageKey != it.packageKey) return false
+                if (it.versions.isNullOrEmpty() || it.versions!!.contains(packageVersion)) {
+                    return true
+                }
+            }
+        }
+        return false
     }
 
     companion object {

@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -128,6 +128,25 @@ enum class DefaultGroupTypeAndActions(val value: String, val actions: Map<String
                               ActionTypeMapping.NODE_DOWNLOAD.id()
                           ),
                       )
+    ),
+    REPLICATION_MANAGER(
+        DefaultGroupType.REPLICATION_MANAGER.value,
+        mapOf(
+            ResourceType.REPLICATION.id() to listOf(
+                ActionTypeMapping.REPLICATION_MANAGE.id(),
+                ActionTypeMapping.REPLICATION_EXECUTE.id(),
+                ActionTypeMapping.REPLICATION_VIEW.id()
+            )
+        )
+    ),
+    REPLICATION_OPERATOR(
+        DefaultGroupType.REPLICATION_OPERATOR.value,
+        mapOf(
+            ResourceType.REPLICATION.id() to listOf(
+                ActionTypeMapping.REPLICATION_EXECUTE.id(),
+                ActionTypeMapping.REPLICATION_VIEW.id()
+            )
+        )
     );
 
     companion object {

@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -33,22 +33,24 @@ package com.tencent.bkrepo.repository.pojo.node.service
 
 import com.tencent.bkrepo.repository.pojo.ServiceRequest
 import com.tencent.bkrepo.repository.pojo.node.NodeRequest
-import io.swagger.annotations.ApiModel
-import io.swagger.annotations.ApiModelProperty
+import io.swagger.v3.oas.annotations.media.Schema
+
 
 /**
  * 节点重命名请求
  */
-@ApiModel("节点重命名请求")
+@Schema(title = "节点重命名请求")
 data class NodeRenameRequest(
-    @ApiModelProperty("所属项目", required = true)
+    @get:Schema(title = "所属项目", required = true)
     override val projectId: String,
-    @ApiModelProperty("仓库名称", required = true)
+    @get:Schema(title = "仓库名称", required = true)
     override val repoName: String,
-    @ApiModelProperty("节点完整路径", required = true)
+    @get:Schema(title = "节点完整路径", required = true)
     override val fullPath: String,
-    @ApiModelProperty("节点新完整路径", required = true)
+    @get:Schema(title = "节点新完整路径", required = true)
     val newFullPath: String,
-    @ApiModelProperty("操作用户", required = true)
-    override val operator: String
+    @get:Schema(title = "操作用户", required = true)
+    override val operator: String,
+    @get:Schema(title = "操作来源,联邦仓库同步时源集群name", required = false)
+    val source: String? = null
 ) : NodeRequest, ServiceRequest

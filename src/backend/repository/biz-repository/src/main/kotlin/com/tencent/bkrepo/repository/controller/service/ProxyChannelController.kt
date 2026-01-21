@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2021 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2021 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -36,7 +36,7 @@ import com.tencent.bkrepo.common.artifact.pojo.RepositoryType
 import com.tencent.bkrepo.common.service.util.ResponseBuilder
 import com.tencent.bkrepo.repository.api.ProxyChannelClient
 import com.tencent.bkrepo.repository.pojo.proxy.ProxyChannelInfo
-import com.tencent.bkrepo.repository.service.repo.ProxyChannelService
+import com.tencent.bkrepo.common.metadata.service.repo.ProxyChannelService
 import org.springframework.web.bind.annotation.RestController
 
 @RestController

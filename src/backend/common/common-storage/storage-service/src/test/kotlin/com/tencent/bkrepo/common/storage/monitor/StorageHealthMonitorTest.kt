@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2021 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2021 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -27,8 +27,9 @@
 
 package com.tencent.bkrepo.common.storage.monitor
 
+import com.tencent.bkrepo.common.storage.config.MonitorProperties
 import com.tencent.bkrepo.common.storage.config.UploadProperties
-import com.tencent.bkrepo.common.storage.core.StorageProperties
+import com.tencent.bkrepo.common.storage.config.StorageProperties
 import com.tencent.bkrepo.common.storage.credentials.FileSystemCredentials
 import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.DisplayName
@@ -70,6 +71,7 @@ internal class StorageHealthMonitorTest {
             enabled = true,
             fallbackLocation = "temp-fallback",
             interval = Duration.ofSeconds(5),
+            failedInterval = Duration.ofSeconds(1),
             timeout = Duration.ofSeconds(10),
             timesToRestore = 5,
             timesToFallback = 2

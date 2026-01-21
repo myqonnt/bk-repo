@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2021 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2021 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -37,17 +37,20 @@ class VersionCreatedEvent(
     override val projectId: String,
     override val repoName: String,
     override val userId: String,
+    override val source: String?,
     val packageKey: String,
     val packageVersion: String,
     val packageName: String,
     val packageType: String,
-    val realIpAddress: String?
+    val realIpAddress: String?,
+    override val eventId: String? = generateEventId(),
 ) : ArtifactEvent(
     type = EventType.VERSION_CREATED,
     projectId = projectId,
     repoName = repoName,
     resourceKey = "$packageKey-$packageVersion",
     userId = userId,
+    source = source,
     data = mutableMapOf(
         "packageKey" to packageKey,
         "packageType" to packageType,
@@ -55,5 +58,6 @@ class VersionCreatedEvent(
         "packageVersion" to packageVersion
     ).apply {
         realIpAddress?.let { this["realIpAddress"] = realIpAddress }
-    }
+    },
+    eventId = eventId
 )

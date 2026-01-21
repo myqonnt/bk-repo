@@ -1,0 +1,155 @@
+<template>
+    <div class="bkrepo-main flex-column">
+        <notice-component v-if="!ciMode && !isSubSaas" :api-url="noticeUrl" />
+        <Header ref="head" v-if="!ciMode && !isSubSaas" />
+        <router-view class="bkrepo-main-container"></router-view>
+        <ConfirmDialog />
+        <GlobalUploadViewport />
+        <Login v-if="!ciMode && !isSubSaas" />
+    </div>
+</template>
+
+<script>
+    import NoticeComponent from '@blueking/notice-component-vue2'
+    import { subEnv } from '@blueking/sub-saas'
+    import mixin from '@repository/AppMixin'
+    import Header from '@repository/components/Header'
+    import Login from '@repository/components/Login'
+    import cookies from 'js-cookie'
+    import { mapActions } from 'vuex'
+    import { getTrueVersions } from '@repository/utils/versionLogs'
+    export default {
+        components: { NoticeComponent, Header, Login },
+        mixins: [mixin],
+        data () {
+            return {
+                ciMode: MODE_CONFIG === 'ci',
+                noticeUrl: window.BK_SUBPATH + 'web/repository/api/notice'
+            }
+        },
+        computed: {
+            isSubSaas () {
+                return subEnv
+            }
+        },
+        async created () {
+            const username = cookies.get('bk_uid')
+            username && this.SET_USER_INFO({ username })
+            this.getPermissionDialogConfig()
+            const hasShowLog = cookies.get('hasShowLog') || ''
+            const logs = await getTrueVersions()
+            this.$store.commit('SET_CREATING', true)
+            if (logs.length > 0 && !this.ciMode && !this.isSubSaas) {
+                this.$store.commit('SET_VERSION_LOGS', logs)
+                if (hasShowLog !== logs[0].version) {
+                    this.$refs.head.showVersionLogs()
+                }
+            }
+            if (!this.isSubSaas && this.ciMode) {
+                this.loadDevopsUtils(window.BK_STATIC_URL + '/devops-utils.js')
+                // 请求管理员信息
+                this.ajaxUserInfo().then((userInfo) => {
+                    this.$store.commit('SET_CREATING', false)
+                    userInfo.admin && this.getClusterList()
+                })
+            } else {
+                let urlProjectId = ''
+                if (window.BK_SUBPATH === '/') {
+                    urlProjectId = (location.pathname.match(/^\/[a-zA-Z0-9]+\/([^/]+)/) || [])[1]
+                } else {
+                    urlProjectId = location.pathname
+                        .split(window.BK_SUBPATH)[1]
+                        ?.match(/^[a-zA-Z0-9]+\/([^/]+)/)?.[1]
+                }
+                const localProjectId = localStorage.getItem('projectId')
+                // 查询路由,取项目名称后半截。
+                const target = location.pathname.split(urlProjectId)[1] || ''
+                const specTargetMatch = target !== '' ? ((target.match(/\/([^\/]+)\//)) || [])[1] : ''
+                Promise.all([this.ajaxUserInfo(), this.getProjectList(), this.getRepoUserList()]).then(([userInfo]) => {
+                    this.$store.commit('SET_CREATING', false)
+                    if (!this.ciMode && !this.projectList.length) {
+                        if (userInfo.admin) {
+                            // TODO: 管理员创建项目引导页
+                            this.$bkMessage({
+                                message: this.$t('noProjectData'),
+                                theme: 'error'
+                            })
+                            this.$router.replace({
+                                name: 'projectManage',
+                                params: {
+                                    projectId: urlProjectId || localProjectId || 'default'
+                                }
+                            })
+                        } else {
+                            // 预览链接需绕过去
+                            if (specTargetMatch !== 'filePreview' && specTargetMatch !== 'outsideFilePreview') {
+                                // TODO: 普通用户无项目提示页
+                                this.$bkMessage({
+                                    message: this.$t('noProjectData'),
+                                    theme: 'error'
+                                })
+                                this.$router.replace({
+                                    name: 'repoToken',
+                                    params: {
+                                        projectId: urlProjectId || localProjectId || 'default'
+                                    }
+                                })
+                            }
+                        }
+                    } else {
+                        // 预览链接需绕过去
+                        if (specTargetMatch === 'filePreview' || specTargetMatch === 'outsideFilePreview') return
+                        let projectId = ''
+                        const hasUrlProjectId = this.projectList.find(v => v.id === urlProjectId)
+                        if (!hasUrlProjectId && urlProjectId !== undefined) {
+                            this.$bkMessage({
+                                message: this.$t('projectNoPermissionTip', { 0: urlProjectId }),
+                                theme: 'error'
+                            })
+                        }
+                        if (hasUrlProjectId) {
+                            projectId = urlProjectId
+                        } else if (this.projectList.find(v => v.id === localProjectId)) {
+                            projectId = localProjectId
+                        } else {
+                            projectId = (this.projectList[0] || {}).id
+                        }
+                        localStorage.setItem('projectId', projectId)
+
+                        projectId && projectId !== urlProjectId && this.$router.replace({
+                            name: 'repositories',
+                            params: {
+                                projectId
+                            }
+                        })
+                    }
+                    userInfo.admin && this.getClusterList()
+                })
+            }
+        },
+        methods: {
+            ...mapActions([
+                'getProjectList',
+                'ajaxUserInfo',
+                'getRepoUserList',
+                'getClusterList',
+                'getPermissionDialogConfig'
+            ])
+        }
+    }
+</script>
+<style lang="scss">
+@import '@repository/scss/index';
+@import '@blueking/notice-component-vue2/dist/style.css';
+.navigation-message-theme{
+    padding: 0 !important;
+}
+.bkrepo-main {
+    height: 100%;
+    background-color: var(--bgWeightColor);
+    .bkrepo-main-container {
+        flex: 1;
+        overflow: hidden;
+    }
+}
+</style>

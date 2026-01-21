@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2021 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2021 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -31,11 +31,12 @@ import com.google.common.util.concurrent.RateLimiter
 import com.tencent.bkrepo.common.api.constant.JOB_LOGGER_NAME
 import com.tencent.bkrepo.common.artifact.constant.SHA256_STR_LENGTH
 import com.tencent.bkrepo.common.storage.core.FileStorage
+import com.tencent.bkrepo.common.storage.core.cache.event.CacheFileDeletedEvent
+import com.tencent.bkrepo.common.storage.core.cache.event.CacheFileEventData
+import com.tencent.bkrepo.common.storage.core.cache.event.CacheFileRetainedEvent
 import com.tencent.bkrepo.common.storage.core.locator.FileLocator
 import com.tencent.bkrepo.common.storage.credentials.StorageCredentials
 import com.tencent.bkrepo.common.storage.filesystem.ArtifactFileVisitor
-import com.tencent.bkrepo.common.storage.core.cache.event.CacheFileDeletedEvent
-import com.tencent.bkrepo.common.storage.core.cache.event.CacheFileEventData
 import com.tencent.bkrepo.common.storage.filesystem.cleanup.event.FileDeletedEvent
 import com.tencent.bkrepo.common.storage.filesystem.cleanup.event.FileSurvivedEvent
 import com.tencent.bkrepo.common.storage.util.toPath
@@ -62,6 +63,7 @@ class CleanupFileVisitor(
     private val credentials: StorageCredentials,
     private val fileExpireResolver: FileExpireResolver,
     private val publisher: ApplicationEventPublisher,
+    private val fileRetainResolver: FileRetainResolver? = null,
 ) : ArtifactFileVisitor() {
 
     val result = CleanupResult()
@@ -74,16 +76,33 @@ class CleanupFileVisitor(
         val isTempFile = isTempFile(filePath)
         var deleted = false
         try {
-            if (fileExpireResolver.isExpired(filePath.toFile()) && !isNFSTempFile(filePath)) {
-                if (isTempFile || existInStorage(filePath)) {
-                    rateLimiter.acquire()
-                    Files.delete(filePath)
-                    result.cleanupFile += 1
-                    result.cleanupSize += size
-                    deleted = true
-                    onFileCleaned(filePath, size)
-                    logger.info("Clean up file[$filePath], size[$size], summary: $result")
+            val file = filePath.toFile()
+            val expired = fileExpireResolver.isExpired(file)
+            val retain = fileRetainResolver?.retain(file.name) ?: false
+
+            var shouldDelete = expired && !isNFSTempFile(filePath)
+            if (shouldDelete && !isTempFile) {
+                val existInStorage = existInStorage(filePath)
+                if (!existInStorage) {
+                    logger.info("cache file[${filePath}] not exists in storage[${credentials.key}]")
                 }
+                shouldDelete = existInStorage
+            }
+
+            if (shouldDelete && !retain) {
+                rateLimiter.acquire()
+                Files.delete(filePath)
+                result.cleanupFile += 1
+                result.cleanupSize += size
+                deleted = true
+                onFileCleaned(filePath, size)
+                logger.info("Clean up file[$filePath], size[$size], summary: $result")
+            }
+            if (shouldDelete && retain) {
+                result.retainFile += 1
+                result.retainSize += size
+                result.retainSha256.add(file.name)
+                onFileRetained(filePath, size)
             }
         } catch (ignored: Exception) {
             logger.error("Clean file[${filePath.fileName}] error.", ignored)
@@ -184,18 +203,24 @@ class CleanupFileVisitor(
     }
 
     private fun onFileCleaned(filePath: Path, size: Long) {
-        val fileName = filePath.fileName.toString()
         val event = FileDeletedEvent(
             credentials = credentials,
             rootPath = rootPath.toString(),
             fullPath = filePath.toString(),
         )
-        if (rootPath == credentials.cache.path.toPath() && filePath.fileName.toString().length == SHA256_STR_LENGTH) {
-            val data = CacheFileEventData(credentials, fileName, filePath.toString(), size)
+        if (isCacheFile(filePath)) {
+            val data = buildCacheFileEventData(filePath, size)
             publisher.publishEvent(CacheFileDeletedEvent(data))
         }
 
         publisher.publishEvent(event)
+    }
+
+    private fun onFileRetained(filePath: Path, size: Long) {
+        if (isCacheFile(filePath)) {
+            val data = buildCacheFileEventData(filePath, size)
+            publisher.publishEvent(CacheFileRetainedEvent(data))
+        }
     }
 
     private fun onFileSurvived(filePath: Path) {
@@ -205,6 +230,15 @@ class CleanupFileVisitor(
             fullPath = filePath.toString(),
         )
         publisher.publishEvent(event)
+    }
+
+    private fun buildCacheFileEventData(filePath: Path, size: Long): CacheFileEventData {
+        val fileName = filePath.fileName.toString()
+        return CacheFileEventData(credentials, fileName, filePath.toString(), size)
+    }
+
+    private fun isCacheFile(filePath: Path): Boolean {
+        return rootPath == credentials.cache.path.toPath() && filePath.fileName.toString().length == SHA256_STR_LENGTH
     }
 
     companion object {

@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -31,17 +31,17 @@
 
 package com.tencent.bkrepo.repository.pojo.project
 
-import io.swagger.annotations.ApiModel
-import io.swagger.annotations.ApiModelProperty
+import io.swagger.v3.oas.annotations.media.Schema
 
-@ApiModel("创建项目请求")
+
+@Schema(title = "创建项目请求")
 data class RepoRangeQueryRequest(
-    @ApiModelProperty("仓库名称", required = true)
+    @get:Schema(title = "仓库名称", required = true)
     val repoNames: List<String>,
-    @ApiModelProperty("项目ID", required = true)
+    @get:Schema(title = "项目ID", required = true)
     val projectId: String,
-    @ApiModelProperty("分页偏移量", required = false)
+    @get:Schema(title = "分页偏移量", required = false)
     val offset: Long = 0L,
-    @ApiModelProperty("分页大小", required = false)
+    @get:Schema(title = "分页大小", required = false)
     val limit: Int = 20
 )

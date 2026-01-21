@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -33,10 +33,10 @@ import com.tencent.bkrepo.common.api.constant.HttpStatus.NOT_FOUND
 import com.tencent.bkrepo.common.api.constant.HttpStatus.UNAUTHORIZED
 import com.tencent.bkrepo.common.api.util.BasicAuthUtils
 import com.tencent.bkrepo.common.api.util.readJsonString
-import com.tencent.bkrepo.common.artifact.metrics.ARTIFACT_DOWNLOADING_COUNT
-import com.tencent.bkrepo.common.artifact.metrics.ARTIFACT_UPLOADING_COUNT
-import com.tencent.bkrepo.common.artifact.metrics.ASYNC_TASK_ACTIVE_COUNT
-import com.tencent.bkrepo.common.artifact.metrics.ASYNC_TASK_QUEUE_SIZE
+import com.tencent.bkrepo.common.metrics.constant.ARTIFACT_DOWNLOADING_COUNT
+import com.tencent.bkrepo.common.metrics.constant.ARTIFACT_UPLOADING_COUNT
+import com.tencent.bkrepo.common.metrics.constant.ASYNC_TASK_ACTIVE_COUNT
+import com.tencent.bkrepo.common.metrics.constant.ASYNC_TASK_QUEUE_SIZE
 import com.tencent.bkrepo.opdata.client.ArtifactMetricsClient
 import com.tencent.bkrepo.opdata.config.OkHttpConfiguration
 import com.tencent.bkrepo.opdata.config.OpProperties

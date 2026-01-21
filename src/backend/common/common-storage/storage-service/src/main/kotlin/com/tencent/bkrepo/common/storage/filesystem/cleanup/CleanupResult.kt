@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2021 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2021 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -45,23 +45,23 @@ data class CleanupResult(
      * 根目录下除了tempPath与stagingPath子目录外被访问的文件大小
      */
     var rootDirNotDeletedSize: Long = 0,
+    /**
+     * 根据保留策略保留的文件数量
+     */
+    var retainFile: Long = 0,
+    /**
+     * 根据保留策略保留的文件大小
+     */
+    var retainSize: Long = 0,
+    /**
+     * 保留的文件sha256
+     */
+    var retainSha256: MutableSet<String> = HashSet(),
 ) {
-
-    fun merge(vararg others: CleanupResult): CleanupResult {
-        others.forEach {
-            totalFile += it.totalFile
-            totalFolder += it.totalFolder
-            totalSize += it.totalSize
-            cleanupFile += it.cleanupFile
-            cleanupFolder += it.cleanupFolder
-            cleanupSize += it.cleanupSize
-            errorCount += it.errorCount
-        }
-        return this
-    }
 
     override fun toString(): String {
         return "$cleanupFile/$totalFile[${HumanReadable.size(cleanupSize)}/${HumanReadable.size(totalSize)}] " +
-            "files deleted,errorCount[$errorCount], $cleanupFolder/$totalFolder dirs deleted."
+            "files deleted, errorCount[$errorCount], $cleanupFolder/$totalFolder dirs deleted, " +
+                "retainCount[$retainFile], retainSize[${HumanReadable.size(retainSize)}]"
     }
 }

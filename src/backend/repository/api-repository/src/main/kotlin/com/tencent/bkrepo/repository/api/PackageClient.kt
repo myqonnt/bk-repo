@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -43,7 +43,7 @@ import com.tencent.bkrepo.repository.pojo.packages.request.PackagePopulateReques
 import com.tencent.bkrepo.repository.pojo.packages.request.PackageUpdateRequest
 import com.tencent.bkrepo.repository.pojo.packages.request.PackageVersionCreateRequest
 import com.tencent.bkrepo.repository.pojo.packages.request.PackageVersionUpdateRequest
-import io.swagger.annotations.ApiOperation
+import io.swagger.v3.oas.annotations.Operation
 import org.springframework.cloud.openfeign.FeignClient
 import org.springframework.context.annotation.Primary
 import org.springframework.web.bind.annotation.DeleteMapping
@@ -57,9 +57,10 @@ import org.springframework.web.bind.annotation.RequestParam
 @Primary
 @FeignClient(REPOSITORY_SERVICE_NAME, contextId = "PackageClient")
 @RequestMapping("/service")
+@Deprecated("replace with PackageService")
 interface PackageClient {
 
-    @ApiOperation("查询包信息")
+    @Operation(summary = "查询包信息")
     @GetMapping("/package/info/{projectId}/{repoName}")
     fun findPackageByKey(
         @PathVariable projectId: String,
@@ -67,7 +68,7 @@ interface PackageClient {
         @RequestParam packageKey: String
     ): Response<PackageSummary?>
 
-    @ApiOperation("根据版本名称查询版本信息")
+    @Operation(summary = "根据版本名称查询版本信息")
     @GetMapping("/version/info/{projectId}/{repoName}")
     fun findVersionByName(
         @PathVariable projectId: String,
@@ -76,7 +77,7 @@ interface PackageClient {
         @RequestParam version: String
     ): Response<PackageVersion?>
 
-    @ApiOperation("根据版本标签查询版本信息")
+    @Operation(summary = "根据版本标签查询版本信息")
     @GetMapping("/package/tag/{projectId}/{repoName}")
     fun findVersionNameByTag(
         @PathVariable projectId: String,
@@ -85,7 +86,7 @@ interface PackageClient {
         @RequestParam tag: String
     ): Response<String?>
 
-    @ApiOperation("根据语义化版本排序查找latest版本")
+    @Operation(summary = "根据语义化版本排序查找latest版本")
     @GetMapping("/version/semver/latest/{projectId}/{repoName}")
     fun findLatestBySemVer(
         @PathVariable projectId: String,
@@ -93,14 +94,14 @@ interface PackageClient {
         @RequestParam packageKey: String
     ): Response<PackageVersion?>
 
-    @ApiOperation("创建包版本")
+    @Operation(summary = "创建包版本")
     @PostMapping("/version/create")
     fun createVersion(
         @RequestBody request: PackageVersionCreateRequest,
         @RequestParam realIpAddress: String? = null
     ): Response<Void>
 
-    @ApiOperation("删除包")
+    @Operation(summary = "删除包")
     @DeleteMapping("/package/delete/{projectId}/{repoName}")
     fun deletePackage(
         @PathVariable projectId: String,
@@ -109,37 +110,38 @@ interface PackageClient {
         @RequestParam realIpAddress: String? = null
     ): Response<Void>
 
-    @ApiOperation("删除版本")
+    @Operation(summary = "删除版本")
     @DeleteMapping("/version/delete/{projectId}/{repoName}")
     fun deleteVersion(
         @PathVariable projectId: String,
         @PathVariable repoName: String,
         @RequestParam packageKey: String,
         @RequestParam version: String,
-        @RequestParam realIpAddress: String? = null
+        @RequestParam realIpAddress: String? = null,
+        @RequestParam contentPath: String? = null,
     ): Response<Void>
 
-    @ApiOperation("更新包")
+    @Operation(summary = "更新包")
     @PostMapping("/package/update")
     fun updatePackage(
         @RequestBody request: PackageUpdateRequest,
         @RequestParam realIpAddress: String? = null
     ): Response<Void>
 
-    @ApiOperation("更新版本")
+    @Operation(summary = "更新版本")
     @PostMapping("/version/update")
     fun updateVersion(
         @RequestBody request: PackageVersionUpdateRequest,
         @RequestParam realIpAddress: String? = null
     ): Response<Void>
 
-    @ApiOperation("搜索包")
+    @Operation(summary = "搜索包")
     @PostMapping("/package/search")
     fun searchPackage(
         @RequestBody queryModel: QueryModel
     ): Response<Page<MutableMap<*, *>>>
 
-    @ApiOperation("分页查询版本")
+    @Operation(summary = "分页查询版本")
     @PostMapping("/version/page/{projectId}/{repoName}")
     fun listVersionPage(
         @PathVariable projectId: String,
@@ -148,7 +150,7 @@ interface PackageClient {
         @RequestBody option: VersionListOption = VersionListOption()
     ): Response<Page<PackageVersion>>
 
-    @ApiOperation("查询所有版本")
+    @Operation(summary = "查询所有版本")
     @PostMapping("/version/list/{projectId}/{repoName}")
     fun listAllVersion(
         @PathVariable projectId: String,
@@ -157,7 +159,7 @@ interface PackageClient {
         @RequestBody option: VersionListOption = VersionListOption()
     ): Response<List<PackageVersion>>
 
-    @ApiOperation("分页查询包")
+    @Operation(summary = "分页查询包")
     @PostMapping("/package/page/{projectId}/{repoName}")
     fun listPackagePage(
         @PathVariable projectId: String,
@@ -165,7 +167,7 @@ interface PackageClient {
         @RequestBody option: PackageListOption = PackageListOption()
     ): Response<Page<PackageSummary>>
 
-    @ApiOperation("列出包中已存在的版本")
+    @Operation(summary = "列出包中已存在的版本")
     @PostMapping("/exist/list/{projectId}/{repoName}")
     fun listExistPackageVersion(
         @PathVariable projectId: String,
@@ -174,14 +176,14 @@ interface PackageClient {
         @RequestBody packageVersionList: List<String> = emptyList()
     ): Response<List<String>>
 
-    @ApiOperation("查询所有包名称")
+    @Operation(summary = "查询所有包名称")
     @PostMapping("/package/list/{projectId}/{repoName}")
     fun listAllPackageNames(
         @PathVariable projectId: String,
         @PathVariable repoName: String
     ): Response<List<String>>
 
-    @ApiOperation("查询包数量")
+    @Operation(summary = "查询包数量")
     @PostMapping("/package/count/{projectId}/{repoName}")
     fun getPackageCount(
         @PathVariable projectId: String,
@@ -193,7 +195,7 @@ interface PackageClient {
      * 1. 如果包已经存在则不会更新包，跳到步骤2，否则创建新包
      * 2. 遍历versionList进行版本创建，如果版本已经存在则跳过。
      */
-    @ApiOperation("包版本数据填充")
+    @Operation(summary = "包版本数据填充")
     @PostMapping("/package/populate")
     fun populatePackage(
         @RequestBody request: PackagePopulateRequest

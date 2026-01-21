@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -29,9 +29,9 @@ dependencies {
     implementation("com.alibaba:easyexcel:3.1.1")
     implementation(project(":analyst:api-analyst"))
     implementation(project(":analysis-executor:api-analysis-executor"))
-    implementation(project(":oci:api-oci"))
+    implementation(project(":core:oci:api-oci"))
     implementation(project(":common:common-notify:notify-service"))
-    implementation(project(":common:common-service"))
+    implementation(project(":common:common-service:service-servlet"))
     implementation("org.springframework.boot:spring-boot-starter-webflux")
     implementation(project(":common:common-redis"))
     implementation(project(":common:common-artifact:artifact-service"))
@@ -42,6 +42,9 @@ dependencies {
     implementation(project(":common:common-lock"))
     implementation(project(":common:common-job"))
     implementation(project(":common:common-statemachine"))
-    implementation("io.kubernetes:client-java:${Versions.KubernetesClient}")
+    implementation("io.kubernetes:client-java")
     testImplementation("org.mockito.kotlin:mockito-kotlin")
+    testImplementation("io.mockk:mockk")
+    testImplementation("de.flapdoodle.embed:de.flapdoodle.embed.mongo.spring30x")
+    testImplementation("de.flapdoodle.embed:de.flapdoodle.embed.mongo")
 }

@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -58,7 +58,17 @@ data class ArtifactTransferRecord(
     @Column(name = "project")
     val project: String,
     @Column(name = "repoName")
-    val repoName: String
+    val repoName: String,
+    @Column(name = "fullPath")
+    val fullPath: String,
+    @Column(name = "agent")
+    val agent: String,
+    @Column(name = "userId")
+    val userId: String,
+    @Column(name = "serverIp")
+    val serverIp: String,
+    @Column(name = "traceId")
+    val traceId: String,
 ) {
     companion object {
         const val RECEIVE = "RECEIVE"

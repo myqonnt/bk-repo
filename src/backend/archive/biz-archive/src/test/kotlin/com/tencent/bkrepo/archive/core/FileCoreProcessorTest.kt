@@ -8,17 +8,15 @@ import com.tencent.bkrepo.common.artifact.api.ArtifactFile
 import com.tencent.bkrepo.common.artifact.api.FileSystemArtifactFile
 import com.tencent.bkrepo.common.storage.StorageAutoConfiguration
 import com.tencent.bkrepo.common.storage.core.StorageService
-import com.tencent.bkrepo.repository.api.FileReferenceClient
-import com.tencent.bkrepo.repository.api.RepositoryClient
-import com.tencent.bkrepo.repository.api.StorageCredentialsClient
+import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.Assertions
-import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.TestInstance
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.autoconfigure.ImportAutoConfiguration
 import org.springframework.boot.autoconfigure.task.TaskExecutionAutoConfiguration
 import org.springframework.boot.test.autoconfigure.data.mongo.DataMongoTest
-import org.springframework.boot.test.mock.mockito.MockBean
 import org.springframework.test.context.TestPropertySource
 import java.time.LocalDateTime
 import kotlin.random.Random
@@ -26,24 +24,21 @@ import kotlin.random.Random
 @DataMongoTest
 @ImportAutoConfiguration(StorageAutoConfiguration::class, TaskExecutionAutoConfiguration::class)
 @TestPropertySource(locations = ["classpath:file-core-processor.properties"])
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class FileCoreProcessorTest @Autowired constructor(
     private val fileCoreProcessor: FileCoreProcessor,
     private val storageService: StorageService,
     private val compressFileRepository: CompressFileRepository,
 ) : BaseTest() {
 
-    @MockBean
-    lateinit var fileReferenceClient: FileReferenceClient
-
-    @MockBean
-    lateinit var storageCredentialsClient: StorageCredentialsClient
-
-    @MockBean
-    lateinit var repositoryClient: RepositoryClient
-
-    @BeforeEach
-    fun beforeEach() {
+    @BeforeAll
+    fun beforeAll() {
         initMock()
+    }
+
+    @AfterAll
+    fun afterAll() {
+        fileCoreProcessor.shutdown()
     }
 
     @Test
@@ -83,27 +78,6 @@ class FileCoreProcessorTest @Autowired constructor(
         Assertions.assertNotNull(cf)
         Assertions.assertEquals(CompressStatus.COMPRESS_FAILED, cf!!.status)
         pushTest()
-    }
-
-    @Test
-    fun priorityTest() {
-        val file0 = createTempCompressFile()
-        fileCoreProcessor.listen(FileEntityEvent(file0.sha256, file0))
-        Thread.sleep(1000)
-        Assertions.assertEquals(CompressStatus.COMPRESSED, file0.status)
-        val fileList = mutableListOf<TCompressFile>()
-        repeat(5) {
-            val file = createTempCompressFile()
-            fileCoreProcessor.listen(FileEntityEvent(file.sha256, file))
-            fileList.add(file)
-        }
-        file0.status = CompressStatus.WAIT_TO_UNCOMPRESS
-        compressFileRepository.save(file0)
-        fileCoreProcessor.listen(FileEntityEvent(file0.sha256, file0))
-        Thread.sleep(3000)
-        val cf = compressFileRepository.findBySha256AndStorageCredentialsKey(file0.sha256, null)
-        Assertions.assertEquals(CompressStatus.UNCOMPRESSED, cf!!.status)
-        Assertions.assertTrue(cf!!.lastModifiedDate.isBefore(fileList.last().lastModifiedDate))
     }
 
     private fun createTempCompressFile(): TCompressFile {

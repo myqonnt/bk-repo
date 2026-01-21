@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -31,10 +31,14 @@
 
 package com.tencent.bkrepo.opdata.model
 
+import com.tencent.bkrepo.common.api.util.readJsonString
+import com.tencent.bkrepo.opdata.config.OpArchiveOrGcProperties
+import com.tencent.bkrepo.opdata.model.GcInfoModel.Companion.BATCH_SIZE
+import com.tencent.bkrepo.repository.pojo.project.ProjectMetadata
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.data.mongodb.core.MongoTemplate
-import org.springframework.data.mongodb.core.find
 import org.springframework.data.mongodb.core.query.Criteria
 import org.springframework.data.mongodb.core.query.Query
 import org.springframework.data.mongodb.core.query.isEqualTo
@@ -43,54 +47,103 @@ import org.springframework.stereotype.Service
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
+
 @Service
 class ArchiveInfoModel @Autowired constructor(
     private val mongoTemplate: MongoTemplate,
+    private val opArchiveOrGcProperties: OpArchiveOrGcProperties,
 ) {
 
     private var archiveInfo: Map<String, Array<Long>> = emptyMap()
+
+    @Volatile
+    private var refreshing = false
 
     /**
      * <repo,[archiveNum,archiveSize]>
      * */
     fun info(): Map<String, Array<Long>> {
-        if (archiveInfo.isEmpty()) {
+        if (archiveInfo.isEmpty() && !refreshing) {
             archiveInfo = stat()
         }
         return archiveInfo
     }
 
     @Scheduled(cron = "0 0 4 * * ?")
+    @SchedulerLock(name = "ArchiveInfoStatJob", lockAtMostFor = "PT24H")
     fun refresh() {
         archiveInfo = stat()
     }
 
     private fun stat(): Map<String, Array<Long>> {
+        refreshing = true
+        if (!opArchiveOrGcProperties.archiveEnabled) return emptyMap()
         logger.info("Start update archive metrics.")
-        // 遍历节点表
-        val criteria = Criteria.where("archived").isEqualTo(true)
-        val query = Query(criteria)
         val statistics = ConcurrentHashMap<String, Array<AtomicLong>>()
-        GcInfoModel.forEachCollectionAsync {
-            val nodes = mongoTemplate.find<Node>(query, it)
-            for (node in nodes) {
-                val repo = "${node.projectId}/${node.repoName}"
-                // array info: [archiveNum,archiveSize]
-                val longs = statistics.getOrPut(repo) { arrayOf(AtomicLong(), AtomicLong()) }
-                longs[0].incrementAndGet()
-                longs[1].addAndGet(node.size)
-            }
+
+        if (opArchiveOrGcProperties.archiveProjects.isEmpty()) {
+            processAllProjects(statistics)
+        } else {
+            processSpecificProjects(statistics)
         }
+
         statistics[SUM] = GcInfoModel.reduce(statistics)
         logger.info("Update archive metrics successful.")
+        refreshing = false
         return statistics.mapValues { arrayOf(it.value[0].get(), it.value[1].get()) }
     }
 
-    data class Node(
-        val projectId: String,
+    private fun processAllProjects(statistics: ConcurrentHashMap<String, Array<AtomicLong>>) {
+        // 处理所有项目的归档数据
+        val query = Query().cursorBatchSize(BATCH_SIZE)
+        // 遍历节点表
+        processProject(query, statistics)
+    }
+
+    private fun processSpecificProjects(statistics: ConcurrentHashMap<String, Array<AtomicLong>>) {
+        // 处理指定项目的归档数据
+        opArchiveOrGcProperties.archiveProjects.forEach { project ->
+            val query = Query(Criteria.where("name").isEqualTo(project))
+            processProject(query, statistics)
+        }
+    }
+
+    private fun processProject(query: Query, statistics: ConcurrentHashMap<String, Array<AtomicLong>>) {
+        mongoTemplate.find(query, Project::class.java, "project").forEach { project ->
+            val repoArchiveStatInfoStr = project.metadata.find { it.key == "archiveStatInfo" }?.value?.toString()
+                ?: return
+            try {
+                val repoArchiveStatInfo =
+                    repoArchiveStatInfoStr.readJsonString<ConcurrentHashMap<String, RepoArchiveStatInfo>>()
+                updateStatistics(statistics, project.name, repoArchiveStatInfo)
+            } catch (e: Exception) {
+                logger.error("Parse repoArchiveStatInfo failed.", e)
+                return
+            }
+        }
+    }
+
+    private fun updateStatistics(
+        statistics: ConcurrentHashMap<String, Array<AtomicLong>>,
+        projectId: String,
+        projectArchiveInfo: ConcurrentHashMap<String, RepoArchiveStatInfo>
+    ) {
+        projectArchiveInfo.forEach { (repoName, repo) ->
+            val repoStr = "$projectId/$repoName"
+            // 数组信息: [归档文件数量, 归档文件总大小]
+            val counts = statistics.getOrPut(repoStr) { arrayOf(AtomicLong(), AtomicLong()) }
+            counts[0].addAndGet(repo.num)
+            counts[1].addAndGet(repo.size)
+        }
+
+    }
+
+    data class Project(val name: String, val displayName: String, val metadata: List<ProjectMetadata> = emptyList())
+
+    data class RepoArchiveStatInfo(
         val repoName: String,
-        val sha256: String,
-        val size: Long,
+        var size: Long,
+        var num: Long,
     )
 
     companion object {

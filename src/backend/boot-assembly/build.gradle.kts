@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -32,20 +32,20 @@
 dependencies {
     implementation(project(":auth:biz-auth"))
     implementation(project(":repository:biz-repository"))
-    implementation(project(":generic:biz-generic"))
-    implementation(project(":composer:biz-composer"))
-    implementation(project(":helm:biz-helm"))
-    implementation(project(":maven:biz-maven"))
-    implementation(project(":npm:biz-npm"))
-    implementation(project(":nuget:biz-nuget"))
-    implementation(project(":rpm:biz-rpm"))
-    implementation(project(":oci:biz-oci"))
+    implementation(project(":core:generic:biz-generic"))
+    implementation(project(":core:composer:biz-composer"))
+    implementation(project(":core:helm:biz-helm"))
+    implementation(project(":core:maven:biz-maven"))
+    implementation(project(":core:npm:biz-npm"))
+    implementation(project(":core:nuget:biz-nuget"))
+    implementation(project(":core:oci:biz-oci"))
+    implementation(project(":core:rpm:biz-rpm"))
+    implementation(project(":core:lfs:biz-lfs"))
+    implementation(project(":core:ddc:biz-ddc"))
     implementation(project(":job:biz-job"))
     implementation(project(":analyst:biz-analyst"))
     implementation(project(":replication:biz-replication"))
     implementation(project(":webhook:biz-webhook"))
-    implementation(project(":lfs:biz-lfs"))
-    implementation(project(":ddc:biz-ddc"))
     implementation(project(":archive:biz-archive"))
 }
 

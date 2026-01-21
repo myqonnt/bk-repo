@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2021 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2021 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -27,13 +27,14 @@
 
 package com.tencent.bkrepo.replication.pojo.task.objects
 
-import io.swagger.annotations.ApiModel
-import io.swagger.annotations.ApiModelProperty
+import io.swagger.v3.oas.annotations.media.Schema
 
-@ApiModel("路径限制")
+
+@Schema(title = "路径限制")
 data class PathConstraint(
-    @ApiModelProperty("路径")
+    @get:Schema(title = "路径")
     val path: String? = null,
-    @ApiModelProperty("路径正则匹配规则")
-    val pathRegex: List<String>? = null
+    @get:Schema(title = "路径正则匹配规则")
+    val pathRegex: List<String>? = null,
+    val deletedDate: String? = null,
 )

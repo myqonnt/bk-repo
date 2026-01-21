@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -28,26 +28,32 @@
 package com.tencent.bkrepo.auth.pojo.enums
 
 enum class ResourceActionMapping(val resourceType: String, val actions: List<String>) {
-    PROJECT_ACTIONS(ResourceType.PROJECT.id(), listOf(
+    PROJECT_ACTIONS(
+        ResourceType.PROJECT.id(), listOf(
         ActionTypeMapping.PROJECT_VIEW.id(),
         ActionTypeMapping.PROJECT_EDIT.id(),
         ActionTypeMapping.PROJECT_MANAGE.id(),
         ActionTypeMapping.REPO_CREATE.id()
-    )),
-    REPO_ACTIONS(ResourceType.REPO.id(),
-                 listOf(
-                     ActionTypeMapping.REPO_VIEW.id(),
-                     ActionTypeMapping.REPO_EDIT.id(),
-                     ActionTypeMapping.REPO_MANAGE.id(),
-                     ActionTypeMapping.REPO_DELETE.id(),
-                     ActionTypeMapping.NODE_CREATE.id()
-                 )),
-    NODE_ACTIONS(ResourceType.NODE.id(),
-                 listOf(
-                     ActionTypeMapping.NODE_DELETE.id(),
-                     ActionTypeMapping.NODE_DOWNLOAD.id(),
-                     ActionTypeMapping.NODE_EDIT.id(),
-                     ActionTypeMapping.NODE_WRITE.id(),
-                     ActionTypeMapping.NODE_VIEW.id()
-                 ));
+    )
+    ),
+    REPO_ACTIONS(
+        ResourceType.REPO.id(),
+        listOf(
+            ActionTypeMapping.REPO_VIEW.id(),
+            ActionTypeMapping.REPO_EDIT.id(),
+            ActionTypeMapping.REPO_MANAGE.id(),
+            ActionTypeMapping.REPO_DELETE.id(),
+            ActionTypeMapping.NODE_CREATE.id()
+        )
+    ),
+    NODE_ACTIONS(
+        ResourceType.NODE.id(),
+        listOf(
+            ActionTypeMapping.NODE_DELETE.id(),
+            ActionTypeMapping.NODE_DOWNLOAD.id(),
+            ActionTypeMapping.NODE_EDIT.id(),
+            ActionTypeMapping.NODE_WRITE.id(),
+            ActionTypeMapping.NODE_VIEW.id()
+        )
+    );
 }

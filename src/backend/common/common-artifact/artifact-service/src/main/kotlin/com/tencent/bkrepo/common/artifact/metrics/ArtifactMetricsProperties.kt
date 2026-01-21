@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2019 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2019 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -53,4 +53,42 @@ data class ArtifactMetricsProperties(
      * 是否开启缓存使用情况统计
      */
     var enableArtifactCacheMetrics: Boolean = false,
+    /**
+     * 是否使用influxdb存储指标数据
+     */
+    var useInfluxDb: Boolean = true,
+    /**
+     * 页面host
+     */
+    var host: String = "",
+    /**
+     * 构建机agent列表
+     */
+    var builderAgentList: List<String> = emptyList(),
+    /**
+     * 客户端agent列表
+     */
+    var clientAgentList: List<String> = emptyList(),
+    /**
+     * web 平台账号id
+     */
+    var webPlatformId: String = "",
+    /**
+     * 超过该大小的文件未命中缓存时将计入大文件缓存未命中监控数据
+     */
+    var largeFileThreshold: DataSize = DataSize.ofGigabytes(3L),
+    /**
+     * 允许上报未知项目信息
+     * */
+    var allowUnknownProjectExport: Boolean = false,
+
+    /**
+     * 配置在在统计流量时固定在LruMeterFilter中不被淘汰的仓库
+     */
+    var pinnedRepositories: Set<String> = emptySet(),
+
+    /**
+     * 是否开启实例带宽指标上报
+     */
+    var enableInstanceBandwidthMetrics: Boolean = false
 )

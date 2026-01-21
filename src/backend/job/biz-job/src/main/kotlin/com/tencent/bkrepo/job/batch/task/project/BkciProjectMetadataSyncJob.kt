@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2023 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2023 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -28,14 +28,13 @@
 package com.tencent.bkrepo.job.batch.task.project
 
 import com.tencent.bkrepo.common.api.exception.SystemErrorException
+import com.tencent.bkrepo.common.api.util.okhttp.HttpClientBuilderFactory
 import com.tencent.bkrepo.common.api.util.readJsonString
-import com.tencent.bkrepo.common.service.util.okhttp.HttpClientBuilderFactory
 import com.tencent.bkrepo.job.batch.base.DefaultContextMongoDbJob
 import com.tencent.bkrepo.job.batch.base.JobContext
 import com.tencent.bkrepo.repository.pojo.project.ProjectMetadata
 import okhttp3.Request
 import org.slf4j.LoggerFactory
-import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.data.mongodb.core.query.Query
 import org.springframework.data.mongodb.core.query.Update
 import org.springframework.data.mongodb.core.query.isEqualTo
@@ -46,12 +45,13 @@ import java.time.Duration
  * 定时从蓝盾同步项目元数据
  */
 @Component
-@EnableConfigurationProperties(BkciProjectMetadataSyncJobProperties::class)
 class BkciProjectMetadataSyncJob(
     private val properties: BkciProjectMetadataSyncJobProperties,
 ) : DefaultContextMongoDbJob<BkciProjectMetadataSyncJob.Project>(properties) {
 
-    val client by lazy { HttpClientBuilderFactory.create().build() }
+    val client by lazy {
+        HttpClientBuilderFactory.create(registry = registry).build()
+    }
 
     override fun run(row: Project, collectionName: String, context: JobContext) {
         if (properties.ignoredProjectPrefix.any { row.name.startsWith(it) }) {
@@ -97,7 +97,7 @@ class BkciProjectMetadataSyncJob(
 
     private fun updateProjectInfo(project: Project, bkciProject: BkciProject) {
         val query = Query(Project::name.isEqualTo(project.name))
-        val newMetadata = ArrayList<ProjectMetadata>(8)
+        val newMetadata = ArrayList<ProjectMetadata>(12)
         bkciProject.bgId?.let { newMetadata.add(ProjectMetadata(ProjectMetadata.KEY_BG_ID, it)) }
         bkciProject.bgName?.let { newMetadata.add(ProjectMetadata(ProjectMetadata.KEY_BG_NAME, it)) }
         bkciProject.deptId?.let { newMetadata.add(ProjectMetadata(ProjectMetadata.KEY_DEPT_ID, it)) }
@@ -106,10 +106,14 @@ class BkciProjectMetadataSyncJob(
         bkciProject.centerName?.let { newMetadata.add(ProjectMetadata(ProjectMetadata.KEY_CENTER_NAME, it)) }
         bkciProject.productId?.let { newMetadata.add(ProjectMetadata(ProjectMetadata.KEY_PRODUCT_ID, it)) }
         bkciProject.enabled?.let { newMetadata.add(ProjectMetadata(ProjectMetadata.KEY_ENABLED, it)) }
+        bkciProject.properties?.enableShareArtifact?.let {
+            newMetadata.add(ProjectMetadata(ProjectMetadata.KEY_SHARE_ENABLED, it))
+        }
 
         val metadataMap = project.metadata.associateByTo(HashMap()) { it.key }
         newMetadata.forEach { metadataMap[it.key] = it }
         val update = Update().set(Project::metadata.name, metadataMap.values)
+            .set(Project::displayName.name, bkciProject.projectName)
         mongoTemplate.updateFirst(query, update, "project")
     }
 
@@ -124,7 +128,7 @@ class BkciProjectMetadataSyncJob(
             ProjectMetadata(it[ProjectMetadata::key.name].toString(), it[ProjectMetadata::value.name]!!)
         } ?: emptyList()
 
-        return Project(row[Project::name.name]!! as String, metadata)
+        return Project(row[Project::name.name]!! as String, row[Project::displayName.name]!! as String, metadata)
     }
 
     override fun entityClass() = Project::class
@@ -137,7 +141,7 @@ class BkciProjectMetadataSyncJob(
         private const val DEVOPS_GATEWAY_TAG = "X-GATEWAY-TAG"
     }
 
-    data class Project(val name: String, val metadata: List<ProjectMetadata> = emptyList())
+    data class Project(val name: String, val displayName: String, val metadata: List<ProjectMetadata> = emptyList())
 
     private data class BkciResponse(
         val code: Int? = null,
@@ -215,5 +219,17 @@ class BkciProjectMetadataSyncJob(
          * 运营产品ID
          */
         val productId: Int?,
+        /**
+         * 项目属性配置
+         */
+        val properties: BkciProjectProperties? = null,
+
+    )
+
+    private data class BkciProjectProperties(
+        /**
+         * 是否允许制品分享
+         */
+        val enableShareArtifact: Boolean? = null,
     )
 }

@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -60,7 +60,9 @@ enum class ScannerMessageCode(
     EXPORT_REPORT_STATUS_QUALITY_UN_PASS("export.report.status.quality.un.pass", 28),
     EXPORT_REPORT_STATUS_FAILED("export.report.status.failed", 29),
     ANALYST_ARTIFACT_DELETED("analyst.artifact.deleted", 30),
-    ANALYST_TASK_EXCEED_MAX_GLOBAL_TASK_COUNT("analyst.task.global.count.exceed", 31);
+    ANALYST_TASK_EXCEED_MAX_GLOBAL_TASK_COUNT("analyst.task.global.count.exceed", 31),
+    SUB_SCAN_TASK_NOT_FOUND("scanner.sub-task.not-found", 32),
+    ;
 
     override fun getBusinessCode() = businessCode
     override fun getKey() = key

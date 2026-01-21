@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2024 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2024 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -27,30 +27,39 @@
 
 package com.tencent.bkrepo.common.artifact.cache.service.impl
 
-import com.tencent.bkrepo.common.api.pojo.Response
+import com.tencent.bkrepo.common.api.constant.StringPool
 import com.tencent.bkrepo.common.artifact.api.ArtifactFile
 import com.tencent.bkrepo.common.artifact.cache.UT_PROJECT_ID
 import com.tencent.bkrepo.common.artifact.cache.UT_REPO_NAME
 import com.tencent.bkrepo.common.artifact.cache.UT_SHA256
 import com.tencent.bkrepo.common.artifact.cache.config.ArtifactPreloadProperties
 import com.tencent.bkrepo.common.artifact.cache.pojo.ArtifactPreloadPlan
-import com.tencent.bkrepo.common.storage.core.StorageProperties
+import com.tencent.bkrepo.common.artifact.cache.service.PreloadListener
+import com.tencent.bkrepo.common.storage.config.StorageProperties
 import com.tencent.bkrepo.common.storage.core.StorageService
 import com.tencent.bkrepo.common.storage.core.cache.CacheStorageService
 import com.tencent.bkrepo.common.storage.core.locator.FileLocator
 import com.tencent.bkrepo.common.storage.credentials.FileSystemCredentials
 import com.tencent.bkrepo.common.storage.monitor.StorageHealthMonitorHelper
+import com.tencent.bkrepo.common.storage.monitor.Throughput
+import com.tencent.bkrepo.common.storage.util.createFile
+import com.tencent.bkrepo.common.storage.util.delete
 import com.tencent.bkrepo.common.storage.util.existReal
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.mockito.ArgumentMatchers.anyString
 import org.mockito.kotlin.whenever
 import org.springframework.beans.factory.annotation.Autowired
+import java.nio.file.Files
+import java.nio.file.Paths
 import java.time.Duration
 import java.time.LocalDateTime
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import kotlin.contracts.ExperimentalContracts
 
 @DisplayName("预加载计划执行器测试")
@@ -94,16 +103,16 @@ class DefaultPreloadPlanExecutorTest @Autowired constructor(
         val cacheFile = deleteCache(storageProperties.defaultStorageCredentials(), UT_SHA256).toFile()
 
         // 加载缓存成功
-        Assertions.assertTrue(preloadPlanExecutor.execute(buildPlan()))
+        assertTrue(preloadPlanExecutor.execute(buildPlan()))
         Thread.sleep(1000L)
-        Assertions.assertTrue(cacheFile.exists())
+        assertTrue(cacheFile.exists())
         deleteCache(storageProperties.defaultStorageCredentials(), UT_SHA256)
         Assertions.assertFalse(cacheFile.exists())
 
         // 计划超时，加载失败
         properties.planTimeout = Duration.ofSeconds(1L)
         val plan = buildPlan(executeTime = System.currentTimeMillis() - 2000)
-        Assertions.assertTrue(preloadPlanExecutor.execute(plan))
+        assertTrue(preloadPlanExecutor.execute(plan))
         Thread.sleep(1000L)
         Assertions.assertFalse(cacheFile.exists())
         properties.planTimeout = Duration.ofHours(1L)
@@ -113,27 +122,61 @@ class DefaultPreloadPlanExecutorTest @Autowired constructor(
     fun testExecutorFull() {
         properties.preloadConcurrency = 1
         val plan = buildPlan()
-        Assertions.assertTrue(preloadPlanExecutor.execute(plan))
-        preloadPlanExecutor.execute(plan)
-        preloadPlanExecutor.execute(plan)
-        Assertions.assertFalse(preloadPlanExecutor.execute(plan))
+        val startLatch = CountDownLatch(1)
+        val listener = object : PreloadListener {
+            override fun onPreloadStart(plan: ArtifactPreloadPlan) {
+                // 通知任务已开始
+                startLatch.countDown()
+            }
+
+            override fun onPreloadSuccess(plan: ArtifactPreloadPlan, throughput: Throughput?) {
+                // No-op
+            }
+
+            override fun onPreloadFailed(plan: ArtifactPreloadPlan) {
+                // No-op
+            }
+
+            override fun onPreloadFinished(plan: ArtifactPreloadPlan) {
+                // No-op
+                Thread.sleep(5000)
+            }
+        }
+        assertTrue(preloadPlanExecutor.execute(plan, listener))
+        // 等待第一个任务真正开始执行
+        startLatch.await(1, TimeUnit.SECONDS)
+        Assertions.assertFalse(preloadPlanExecutor.execute(plan, listener))
         properties.preloadConcurrency = 8
     }
 
     @Test
     fun testLoadCacheSuccess() {
         require(storageService is CacheStorageService)
-        // 缓存已经存在
-        Assertions.assertTrue(preloadPlanExecutor.execute(buildPlan()))
+        val cacheRootPath = storageProperties.defaultStorageCredentials().cache.path
+        val path = fileLocator.locate(UT_SHA256)
+        val cachePath = Paths.get(cacheRootPath, path, UT_SHA256)
+        var mtime = Files.getLastModifiedTime(cachePath)
+
+        // 缓存已经存在,仅更新mtime
+        assertTrue(preloadPlanExecutor.execute(buildPlan()))
         Thread.sleep(1000L)
+        assertTrue(Files.getLastModifiedTime(cachePath) > mtime)
+        mtime = Files.getLastModifiedTime(cachePath)
 
         // 确认缓存被删除
-        val cachePath = deleteCache(storageProperties.defaultStorageCredentials(), UT_SHA256)
+        deleteCache(storageProperties.defaultStorageCredentials(), UT_SHA256)
+
+        // 缓存锁文件已存在，跳过预加载
+        val cacheFileLock = Paths.get(cacheRootPath, StringPool.TEMP, "$UT_SHA256.locked")
+        cacheFileLock.createFile()
+        assertTrue(preloadPlanExecutor.execute(buildPlan()))
+        Thread.sleep(1000L)
+        cacheFileLock.delete()
 
         // 加载缓存
         preloadPlanExecutor.execute(buildPlan())
         Thread.sleep(1000L)
-        Assertions.assertTrue(cachePath.existReal())
+        assertTrue(cachePath.existReal())
     }
 
     private fun buildPlan(executeTime: Long = System.currentTimeMillis() - 1000) = ArtifactPreloadPlan(
@@ -152,8 +195,8 @@ class DefaultPreloadPlanExecutorTest @Autowired constructor(
 
     private fun resetMock() {
         val defaultCredentials = storageProperties.defaultStorageCredentials() as FileSystemCredentials
-        whenever(storageCredentialsClient.findByKey(anyString())).thenReturn(
-            Response(0, null, defaultCredentials.copy(key = "test"))
+        whenever(storageCredentialService.findByKey(anyString())).thenReturn(
+            defaultCredentials.copy(key = "test")
         )
     }
 }

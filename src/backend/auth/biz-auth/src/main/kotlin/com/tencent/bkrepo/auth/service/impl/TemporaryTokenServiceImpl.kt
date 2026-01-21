@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2019 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2019 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -27,16 +27,20 @@
 
 package com.tencent.bkrepo.auth.service.impl
 
+import com.tencent.bkrepo.auth.dao.AuthTemporaryTokenDao
+import com.tencent.bkrepo.auth.message.AuthMessageCode
 import com.tencent.bkrepo.auth.model.TTemporaryToken
 import com.tencent.bkrepo.auth.pojo.token.TemporaryTokenCreateRequest
 import com.tencent.bkrepo.auth.pojo.token.TemporaryTokenInfo
-import com.tencent.bkrepo.auth.dao.TemporaryTokenDao
 import com.tencent.bkrepo.auth.service.TemporaryTokenService
 import com.tencent.bkrepo.common.api.constant.StringPool
+import com.tencent.bkrepo.common.api.exception.ErrorCodeException
 import com.tencent.bkrepo.common.api.util.Preconditions
 import com.tencent.bkrepo.common.artifact.path.PathUtils
+import com.tencent.bkrepo.common.metadata.handler.MaskPartString
+import com.tencent.bkrepo.common.metadata.service.project.ProjectService
 import com.tencent.bkrepo.common.security.util.SecurityUtils
-import com.tencent.bkrepo.common.service.cluster.DefaultCondition
+import com.tencent.bkrepo.common.service.cluster.condition.DefaultCondition
 import org.slf4j.LoggerFactory
 import org.springframework.context.annotation.Conditional
 import org.springframework.stereotype.Service
@@ -50,11 +54,14 @@ import java.util.UUID
 @Service("authTemporaryTokenServiceImpl")
 @Conditional(DefaultCondition::class)
 class TemporaryTokenServiceImpl(
-    private val temporaryTokenRepository: TemporaryTokenDao
+    private val temporaryTokenRepository: AuthTemporaryTokenDao,
+    private val projectService: ProjectService
 ) : TemporaryTokenService {
 
     override fun createToken(request: TemporaryTokenCreateRequest): List<TemporaryTokenInfo> {
         with(request) {
+            // 检查项目是否禁用token功能（允许特定平台账户跳过检查）
+            checkTokenFeatureEnabled(projectId, bypassProjectDisable)
             return validateAndNormalize(this).map {
                 val temporaryToken = TTemporaryToken(
                     projectId = projectId,
@@ -66,13 +73,12 @@ class TemporaryTokenServiceImpl(
                     token = generateToken(),
                     permits = permits,
                     type = type,
-                    createdBy = SecurityUtils.getUserId(),
+                    createdBy = createdBy ?: SecurityUtils.getUserId(),
                     createdDate = LocalDateTime.now(),
-                    lastModifiedBy = SecurityUtils.getUserId(),
+                    lastModifiedBy = createdBy ?: SecurityUtils.getUserId(),
                     lastModifiedDate = LocalDateTime.now()
                 )
                 temporaryTokenRepository.save(temporaryToken)
-                logger.info("Create share record[$temporaryToken] success.")
                 convert(temporaryToken)
             }
         }
@@ -85,12 +91,12 @@ class TemporaryTokenServiceImpl(
 
     override fun deleteToken(token: String) {
         temporaryTokenRepository.deleteByToken(token)
-        logger.info("Delete temporary token[$token] success.")
+        logger.info("Delete temporary token ${MaskPartString().desensitize(token)} success.")
     }
 
     override fun decrementPermits(token: String) {
         temporaryTokenRepository.decrementPermits(token)
-        logger.info("Decrement permits of token[$token] success.")
+        logger.info("Decrement permits of token ${MaskPartString().desensitize(token)} success.")
     }
 
     /**
@@ -100,6 +106,24 @@ class TemporaryTokenServiceImpl(
         with(request) {
             Preconditions.checkArgument(permits == null || permits!! > 0, "permits")
             return fullPathSet.map { PathUtils.normalizeFullPath(it) }
+        }
+    }
+
+    /**
+     * 检查项目是否禁用token功能
+     * @param projectId 项目ID
+     * @param bypassProjectDisable 是否允许跳过项目禁用检查（仅特定平台账户可用）
+     */
+    private fun checkTokenFeatureEnabled(projectId: String, bypassProjectDisable: Boolean = false) {
+        // 如果允许跳过检查，则直接返回
+        if (bypassProjectDisable) {
+            logger.info("Bypass project token feature check for project [$projectId]")
+            return
+        }
+
+        val shareEnabled = projectService.isProjectShareEnabled(projectId)
+        if (!shareEnabled) {
+            throw ErrorCodeException(AuthMessageCode.TOKEN_DISABLED, projectId)
         }
     }
 

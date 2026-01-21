@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -31,9 +31,12 @@
 
 package com.tencent.bkrepo.opdata.pojo.enums
 
+import com.tencent.bkrepo.common.api.constant.CLOSED_SOURCE_PREFIX
+import com.tencent.bkrepo.common.api.constant.CODE_PROJECT_PREFIX
+
 enum class ProjectType(val prefix: List<String>?) {
     ALL(listOf()),
     BLUEKING(listOf()),
-    CODECC(listOf("CODE_","CLOSED_SOURCE_")),
+    CODECC(listOf(CLOSED_SOURCE_PREFIX, CODE_PROJECT_PREFIX)),
     GIT(listOf("git_")),
 }

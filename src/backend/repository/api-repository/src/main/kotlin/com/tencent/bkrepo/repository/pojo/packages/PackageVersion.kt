@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -32,44 +32,47 @@
 package com.tencent.bkrepo.repository.pojo.packages
 
 import com.tencent.bkrepo.repository.pojo.metadata.MetadataModel
-import io.swagger.annotations.ApiModel
-import io.swagger.annotations.ApiModelProperty
+import io.swagger.v3.oas.annotations.media.Schema
+
 import java.time.LocalDateTime
 
 /**
  * 包信息
  */
-@ApiModel("包信息")
+@Schema(title = "包信息")
 data class PackageVersion(
-    @ApiModelProperty("创建者")
+    @get:Schema(title = "创建者")
     val createdBy: String,
-    @ApiModelProperty("创建时间")
+    @get:Schema(title = "创建时间")
     val createdDate: LocalDateTime,
-    @ApiModelProperty("修改者")
+    @get:Schema(title = "修改者")
     val lastModifiedBy: String,
-    @ApiModelProperty("修改时间")
+    @get:Schema(title = "修改时间")
     val lastModifiedDate: LocalDateTime,
 
-    @ApiModelProperty("包版本")
+    @get:Schema(title = "包版本")
     val name: String,
-    @ApiModelProperty("包大小")
+    @get:Schema(title = "包大小")
     val size: Long,
-    @ApiModelProperty("下载次数")
+    @get:Schema(title = "下载次数")
     var downloads: Long,
-    @ApiModelProperty("制品晋级阶段")
+    @get:Schema(title = "制品晋级阶段")
     val stageTag: List<String>,
-    @ApiModelProperty("元数据")
+    @get:Schema(title = "元数据")
     val metadata: Map<String, Any>,
-    @ApiModelProperty("元数据")
+    @get:Schema(title = "元数据")
     val packageMetadata: List<MetadataModel>,
-    @ApiModelProperty("标签")
+    @get:Schema(title = "标签")
     val tags: List<String>,
-    @ApiModelProperty("扩展字段")
+    @get:Schema(title = "扩展字段")
     val extension: Map<String, Any>,
-    @ApiModelProperty("包内容文件路径")
+    @get:Schema(title = "包内容文件路径")
+    @Deprecated("replace by contentPaths")
     val contentPath: String? = null,
-    @ApiModelProperty("清单文件路径")
+    @get:Schema(title = "包内容文件路径列表")
+    val contentPaths: Set<String>? = null,
+    @get:Schema(title = "清单文件路径")
     val manifestPath: String? = null,
-    @ApiModelProperty("集群名")
+    @get:Schema(title = "集群名")
     val clusterNames: Set<String>? = null
 )

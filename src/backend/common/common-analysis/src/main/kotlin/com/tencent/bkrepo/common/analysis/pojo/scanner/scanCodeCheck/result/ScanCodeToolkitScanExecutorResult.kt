@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -29,12 +29,12 @@ package com.tencent.bkrepo.common.analysis.pojo.scanner.scanCodeCheck.result
 
 import com.tencent.bkrepo.common.analysis.pojo.scanner.ScanExecutorResult
 import com.tencent.bkrepo.common.analysis.pojo.scanner.scanCodeCheck.scanner.ScancodeToolkitScanner
-import io.swagger.annotations.ApiModel
-import io.swagger.annotations.ApiModelProperty
+import io.swagger.v3.oas.annotations.media.Schema
 
-@ApiModel("scancode_toolkit扫描器扫描结果")
+
+@Schema(title = "scancode_toolkit扫描器扫描结果")
 data class ScanCodeToolkitScanExecutorResult(
     override val scanStatus: String,
-    @ApiModelProperty("结果")
+    @get:Schema(title = "结果")
     val scancodeItem: Set<ScancodeItem>
 ) : ScanExecutorResult(scanStatus, ScancodeToolkitScanner.TYPE)

@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -54,5 +54,56 @@ internal class ZeroInputStreamTest {
         Assertions.assertEquals(0, zeroInputStream.available())
 
         Assertions.assertEquals(-1, zeroInputStream.read(ByteArray(100)))
+    }
+
+    @Test
+    fun testInfiniteStream() {
+        val zeroInputStream = ZeroInputStream(-1)
+        Assertions.assertEquals(Int.MAX_VALUE, zeroInputStream.available())
+        // 读取多次仍然返回0
+        repeat(1000) {
+            Assertions.assertEquals(0, zeroInputStream.read())
+        }
+        Assertions.assertEquals(Int.MAX_VALUE, zeroInputStream.available())
+    }
+
+    @Test
+    fun testSizeLargerThanIntMax() {
+        // Given: size 大于 Int.MAX_VALUE
+        val largeSize = Int.MAX_VALUE.toLong() + 100L
+        val zeroInputStream = ZeroInputStream(largeSize)
+
+        // When & Then: available() 应该返回 Int.MAX_VALUE（因为剩余字节超过 Int 范围）
+        Assertions.assertEquals(Int.MAX_VALUE, zeroInputStream.available())
+
+        // When: 读取一些字节后
+        repeat(100) {
+            Assertions.assertEquals(0, zeroInputStream.read())
+        }
+
+        // Then: 剩余仍然大于 Int.MAX_VALUE，available() 仍返回 Int.MAX_VALUE
+        Assertions.assertEquals(Int.MAX_VALUE, zeroInputStream.available())
+    }
+
+    @Test
+    fun testAvailableAfterPartialRead() {
+        // Given: size 刚好超过 Int.MAX_VALUE 一点
+        val excess = 50L
+        val largeSize = Int.MAX_VALUE.toLong() + excess
+        val zeroInputStream = ZeroInputStream(largeSize)
+
+        // When: 读取 excess 个字节后，剩余刚好等于 Int.MAX_VALUE
+        repeat(excess.toInt()) {
+            zeroInputStream.read()
+        }
+
+        // Then: available() 应该返回 Int.MAX_VALUE
+        Assertions.assertEquals(Int.MAX_VALUE, zeroInputStream.available())
+
+        // When: 再读取一个字节
+        zeroInputStream.read()
+
+        // Then: available() 应该返回 Int.MAX_VALUE - 1
+        Assertions.assertEquals(Int.MAX_VALUE - 1, zeroInputStream.available())
     }
 }

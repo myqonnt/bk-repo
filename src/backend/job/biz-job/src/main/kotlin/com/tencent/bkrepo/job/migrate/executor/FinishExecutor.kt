@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2024 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2024 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -27,6 +27,8 @@
 
 package com.tencent.bkrepo.job.migrate.executor
 
+import com.tencent.bkrepo.common.metadata.service.file.FileReferenceService
+import com.tencent.bkrepo.common.metadata.service.repo.RepositoryService
 import com.tencent.bkrepo.common.storage.core.StorageService
 import com.tencent.bkrepo.job.migrate.config.MigrateRepoStorageProperties
 import com.tencent.bkrepo.job.migrate.dao.MigrateFailedNodeDao
@@ -35,27 +37,28 @@ import com.tencent.bkrepo.job.migrate.pojo.MigrateRepoStorageTaskState.FINISHING
 import com.tencent.bkrepo.job.migrate.pojo.MigrateRepoStorageTaskState.MIGRATE_FAILED_NODE_FINISHED
 import com.tencent.bkrepo.job.migrate.pojo.MigrationContext
 import com.tencent.bkrepo.job.migrate.utils.ExecutingTaskRecorder
-import com.tencent.bkrepo.repository.api.FileReferenceClient
-import com.tencent.bkrepo.repository.api.RepositoryClient
+import com.tencent.bkrepo.job.service.MigrateArchivedFileService
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
 
 @Component
 class FinishExecutor(
     properties: MigrateRepoStorageProperties,
-    fileReferenceClient: FileReferenceClient,
+    fileReferenceService: FileReferenceService,
     migrateRepoStorageTaskDao: MigrateRepoStorageTaskDao,
     migrateFailedNodeDao: MigrateFailedNodeDao,
     storageService: StorageService,
     executingTaskRecorder: ExecutingTaskRecorder,
-    private val repositoryClient: RepositoryClient,
+    migrateArchivedFileService: MigrateArchivedFileService,
+    private val repositoryService: RepositoryService,
 ) : BaseTaskExecutor(
     properties,
     migrateRepoStorageTaskDao,
     migrateFailedNodeDao,
-    fileReferenceClient,
+    fileReferenceService,
     storageService,
     executingTaskRecorder,
+    migrateArchivedFileService,
 ) {
     /**
      * 迁移任务执行结束后对相关资源进行清理
@@ -64,7 +67,7 @@ class FinishExecutor(
         val newContext = checkExecutable(context, MIGRATE_FAILED_NODE_FINISHED.name, FINISHING.name) ?: return null
         with(newContext.task) {
             logger.info("migrate finished, task[${newContext.task}]")
-            repositoryClient.unsetOldStorageCredentialsKey(projectId, repoName)
+            repositoryService.unsetOldStorageCredentialsKey(projectId, repoName)
             migrateRepoStorageTaskDao.removeById(id!!)
             logger.info("clean migrate task[${projectId}/${repoName}] success")
             return context

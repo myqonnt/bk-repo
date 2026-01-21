@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -35,6 +35,8 @@ import com.tencent.bkrepo.common.artifact.stream.Range
 import com.tencent.bkrepo.common.storage.credentials.StorageCredentials
 import java.io.File
 import java.io.InputStream
+import java.nio.file.Path
+import java.util.stream.Stream
 
 /**
  * 文件存储接口
@@ -145,4 +147,11 @@ interface FileStorage {
      * @param storageCredentials 存储凭证
      */
     fun getTempPath(storageCredentials: StorageCredentials): String = System.getProperty("java.io.tmpdir")
+
+    /**
+     * 列出指定目录下的所有文件
+     * @param path 目录路径
+     * @param storageCredentials 存储实例
+     * */
+    fun listAll(path: String, storageCredentials: StorageCredentials): Stream<Path>
 }

@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2024 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2024 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -39,7 +39,6 @@ import org.slf4j.LoggerFactory
 import org.springframework.context.event.EventListener
 import org.springframework.dao.DuplicateKeyException
 import org.springframework.scheduling.annotation.Async
-import org.springframework.stereotype.Component
 import java.time.Duration
 import java.time.LocalDateTime
 import java.time.ZoneId
@@ -48,14 +47,13 @@ import java.time.format.DateTimeFormatter
 /**
  * 记录制品访问时间，用于统计项目制品使用习惯
  */
-@Component
-class ArtifactAccessRecorder(
+open class ArtifactAccessRecorder(
     private val preloadProperties: ArtifactPreloadProperties,
     private val artifactAccessRecordDao: ArtifactAccessRecordDao,
 ) {
 
     @Async
-    fun onArtifactAccess(node: NodeDetail, cacheMiss: Boolean) {
+    open fun onArtifactAccess(node: NodeDetail, cacheMiss: Boolean) {
         val validNode = !node.folder && node.size > preloadProperties.minSize.toBytes()
         val shouldNotRecord = preloadProperties.onlyRecordCacheMiss && !cacheMiss
         if (!preloadProperties.enabled || shouldNotRecord || !validNode) {
@@ -106,20 +104,20 @@ class ArtifactAccessRecorder(
     /**
      * 清理访问记录
      */
-    fun cleanup(): Long {
+    open fun cleanup(): Long {
         val beforeDateTime = LocalDateTime.now().minus(preloadProperties.accessRecordKeepDuration)
         val result = artifactAccessRecordDao.delete(beforeDateTime)
         logger.info("${result.deletedCount} artifact access record was deleted")
         return result.deletedCount
     }
 
-    fun generateStrategy() {
+    open fun generateStrategy() {
         // TODO
     }
 
     @Async
     @EventListener(ArtifactResponseEvent::class)
-    fun listen(event: ArtifactResponseEvent) {
+    open fun listen(event: ArtifactResponseEvent) {
         safeRecordArtifactCacheAccess(event.artifactResource)
     }
 

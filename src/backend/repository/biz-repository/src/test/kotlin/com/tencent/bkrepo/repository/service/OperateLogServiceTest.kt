@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2019 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2019 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -29,9 +29,9 @@ package com.tencent.bkrepo.repository.service
 
 import com.tencent.bkrepo.common.artifact.event.base.EventType
 import com.tencent.bkrepo.common.mongo.dao.util.Pages
-import com.tencent.bkrepo.common.mongo.dao.util.sharding.MonthRangeShardingUtils
-import com.tencent.bkrepo.common.operate.service.dao.OperateLogDao
-import com.tencent.bkrepo.common.operate.service.model.TOperateLog
+import com.tencent.bkrepo.common.mongo.api.util.sharding.MonthRangeShardingUtils
+import com.tencent.bkrepo.common.metadata.dao.log.OperateLogDao
+import com.tencent.bkrepo.common.metadata.model.TOperateLog
 import com.tencent.bkrepo.repository.UT_PROJECT_ID
 import com.tencent.bkrepo.repository.UT_REPO_NAME
 import com.tencent.bkrepo.repository.UT_USER

@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -27,30 +27,30 @@
 
 package com.tencent.bkrepo.replication.metrics
 
-import com.tencent.bkrepo.replication.constant.EDGE_PULL_ACTIVE_COUNT
-import com.tencent.bkrepo.replication.constant.EDGE_PULL_ACTIVE_COUNT_DESC
-import com.tencent.bkrepo.replication.constant.EVENT_CONSUMER_TASK_ACTIVE_COUNT
-import com.tencent.bkrepo.replication.constant.EVENT_CONSUMER_TASK_ACTIVE_COUNT_DESC
-import com.tencent.bkrepo.replication.constant.EVENT_CONSUMER_TASK_QUEUE_SIZE
-import com.tencent.bkrepo.replication.constant.EVENT_CONSUMER_TASK_QUEUE_SIZE_DESC
-import com.tencent.bkrepo.replication.constant.MANUAL_TASK_ACTIVE_COUNT
-import com.tencent.bkrepo.replication.constant.MANUAL_TASK_ACTIVE_COUNT_DESC
-import com.tencent.bkrepo.replication.constant.MANUAL_TASK_QUEUE_SIZE
-import com.tencent.bkrepo.replication.constant.MANUAL_TASK_QUEUE_SIZE_DESC
-import com.tencent.bkrepo.replication.constant.OCI_BLOB_UPLOAD_TASK_ACTIVE_COUNT
-import com.tencent.bkrepo.replication.constant.OCI_BLOB_UPLOAD_TASK_ACTIVE_COUNT_DESC
-import com.tencent.bkrepo.replication.constant.OCI_BLOB_UPLOAD_TASK_QUEUE_SIZE
-import com.tencent.bkrepo.replication.constant.OCI_BLOB_UPLOAD_TASK_QUEUE_SIZE_DESC
-import com.tencent.bkrepo.replication.constant.REPLICATION_TASK_ACTIVE_COUNT
-import com.tencent.bkrepo.replication.constant.REPLICATION_TASK_ACTIVE_COUNT_DESC
-import com.tencent.bkrepo.replication.constant.REPLICATION_TASK_COMPLETED_COUNT
-import com.tencent.bkrepo.replication.constant.REPLICATION_TASK_COMPLETED_COUNT_DESC
-import com.tencent.bkrepo.replication.constant.REPLICATION_TASK_QUEUE_SIZE
-import com.tencent.bkrepo.replication.constant.REPLICATION_TASK_QUEUE_SIZE_DESC
-import com.tencent.bkrepo.replication.constant.RUN_ONCE_EXECUTOR_ACTIVE_COUNT
-import com.tencent.bkrepo.replication.constant.RUN_ONCE_EXECUTOR_ACTIVE_COUNT_DESC
-import com.tencent.bkrepo.replication.constant.RUN_ONCE_EXECUTOR_QUEUE_SIZE
-import com.tencent.bkrepo.replication.constant.RUN_ONCE_EXECUTOR_QUEUE_SIZE_DESC
+import com.tencent.bkrepo.common.metrics.constant.EDGE_PULL_ACTIVE_COUNT
+import com.tencent.bkrepo.common.metrics.constant.EDGE_PULL_ACTIVE_COUNT_DESC
+import com.tencent.bkrepo.common.metrics.constant.EVENT_CONSUMER_TASK_ACTIVE_COUNT
+import com.tencent.bkrepo.common.metrics.constant.EVENT_CONSUMER_TASK_ACTIVE_COUNT_DESC
+import com.tencent.bkrepo.common.metrics.constant.EVENT_CONSUMER_TASK_QUEUE_SIZE
+import com.tencent.bkrepo.common.metrics.constant.EVENT_CONSUMER_TASK_QUEUE_SIZE_DESC
+import com.tencent.bkrepo.common.metrics.constant.MANUAL_TASK_ACTIVE_COUNT
+import com.tencent.bkrepo.common.metrics.constant.MANUAL_TASK_ACTIVE_COUNT_DESC
+import com.tencent.bkrepo.common.metrics.constant.MANUAL_TASK_QUEUE_SIZE
+import com.tencent.bkrepo.common.metrics.constant.MANUAL_TASK_QUEUE_SIZE_DESC
+import com.tencent.bkrepo.common.metrics.constant.OCI_BLOB_UPLOAD_TASK_ACTIVE_COUNT
+import com.tencent.bkrepo.common.metrics.constant.OCI_BLOB_UPLOAD_TASK_ACTIVE_COUNT_DESC
+import com.tencent.bkrepo.common.metrics.constant.OCI_BLOB_UPLOAD_TASK_QUEUE_SIZE
+import com.tencent.bkrepo.common.metrics.constant.OCI_BLOB_UPLOAD_TASK_QUEUE_SIZE_DESC
+import com.tencent.bkrepo.common.metrics.constant.REPLICATION_TASK_ACTIVE_COUNT
+import com.tencent.bkrepo.common.metrics.constant.REPLICATION_TASK_ACTIVE_COUNT_DESC
+import com.tencent.bkrepo.common.metrics.constant.REPLICATION_TASK_COMPLETED_COUNT
+import com.tencent.bkrepo.common.metrics.constant.REPLICATION_TASK_COMPLETED_COUNT_DESC
+import com.tencent.bkrepo.common.metrics.constant.REPLICATION_TASK_QUEUE_SIZE
+import com.tencent.bkrepo.common.metrics.constant.REPLICATION_TASK_QUEUE_SIZE_DESC
+import com.tencent.bkrepo.common.metrics.constant.RUN_ONCE_EXECUTOR_ACTIVE_COUNT
+import com.tencent.bkrepo.common.metrics.constant.RUN_ONCE_EXECUTOR_ACTIVE_COUNT_DESC
+import com.tencent.bkrepo.common.metrics.constant.RUN_ONCE_EXECUTOR_QUEUE_SIZE
+import com.tencent.bkrepo.common.metrics.constant.RUN_ONCE_EXECUTOR_QUEUE_SIZE_DESC
 import com.tencent.bkrepo.replication.replica.executor.EdgePullThreadPoolExecutor
 import com.tencent.bkrepo.replication.replica.executor.EventConsumerThreadPoolExecutor
 import com.tencent.bkrepo.replication.replica.executor.ManualThreadPoolExecutor

@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -27,17 +27,16 @@
 
 package com.tencent.bkrepo.replication.replica.repository.internal.type
 
-import com.tencent.bkrepo.common.artifact.exception.NodeNotFoundException
 import com.tencent.bkrepo.common.artifact.pojo.RepositoryType
-import com.tencent.bkrepo.repository.api.NodeClient
+import com.tencent.bkrepo.common.metadata.service.node.NodeService
 import com.tencent.bkrepo.repository.pojo.packages.PackageSummary
 import com.tencent.bkrepo.repository.pojo.packages.PackageVersion
 import org.springframework.stereotype.Component
 
 @Component
 class HelmPackageNodeMapper(
-    private val nodeClient: NodeClient
-    ): PackageNodeMapper {
+    private val nodeService: NodeService
+): PackageNodeMapper {
 
     override fun type() = RepositoryType.HELM
     override fun extraType(): RepositoryType? {
@@ -55,9 +54,9 @@ class HelmPackageNodeMapper(
             CHART_PACKAGE_FILE_PATH.format(name, version),
             PROVENANCE_FILE_PATH.format(name, version)
         )
-        return nodeClient.listExistFullPath(
+        return nodeService.listExistFullPath(
             packageSummary.projectId, packageSummary.repoName, chartNodeList
-        ).data ?: throw NodeNotFoundException(chartNodeList.toString())
+        )
     }
 
     companion object {

@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2024 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2024 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -69,4 +69,30 @@ data class ArtifactPreloadProperties(
      * 允许同时预加载的制品个数
      */
     var preloadConcurrency: Int = 8,
+    /**
+     * 预加载策略未配置时间时使用的预加载时间，取值范围[0,24]，可配置多个，将选择离当前时间最近的一个作为预加载时间
+     */
+    var preloadHourOfDay: Set<Int> = emptySet(),
+    /**
+     * 减去随机时间，避免同时加载过多文件
+     */
+    var maxRandomSeconds: Long = 600L,
+    /**
+     * 根据sha256查询到的node数量超过该值时将不生成预加载计划，避免预加载计划创建时间过久
+     */
+    var maxNodes: Int = 10,
+    /**
+     * 是否仅模拟预加载，为true时不执行加载计划，仅输出一条日志
+     */
+    var mock: Boolean = false,
+    /**
+     * 是否在缓存保留时生成预加载计划
+     *
+     * 系统中存在缓存保留策略时可能会由于保留缓存导致较大的空间占用，此时可以通过配置预加载策略，仅在需要时才将文件加载到缓存中减少空间占用，
+     * 但是由于直接移除缓存保留策略可能影响系统稳定性，不移除保留策略会导致缓存文件不会被清理无法触发预加载计划生成，无法验证预加载效果，
+     * 因此增加此开关，在缓存应该被清理，但是由于保留策略导致缓存未被清理时，也能触发预加载计划生成，验证预加载效果后再移除保留策略
+     *
+     * 需要注意此开关开启的同时需要开启[mock]，仅模拟预加载验证效果而不执行实际的加载操作，需要等所有计划执行完毕才能关闭此开关与[mock]
+     */
+    var generateOnRetained: Boolean = false,
 )

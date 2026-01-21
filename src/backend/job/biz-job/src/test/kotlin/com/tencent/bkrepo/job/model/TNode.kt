@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2024 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2024 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -27,6 +27,8 @@
 
 package com.tencent.bkrepo.job.model
 
+import com.tencent.bkrepo.repository.pojo.metadata.MetadataModel
+import org.springframework.data.mongodb.core.index.TextIndexDefinition.TextIndexDefinitionBuilder
 import java.time.LocalDateTime
 
 data class TNode(
@@ -40,4 +42,17 @@ data class TNode(
     val sha256: String,
     val md5: String,
     val deleted: LocalDateTime? = null,
-)
+    val archived: Boolean? = null,
+    val compressed: Boolean? = null,
+    val metadata: List<MetadataModel> = emptyList(),
+) {
+    companion object {
+        fun pathIndex() = TextIndexDefinitionBuilder()
+            .onField("projectId")
+            .onField("repoName")
+            .onField("path")
+            .onField("deleted")
+            .named("projectId_repoName_path_idx")
+            .build()
+    }
+}

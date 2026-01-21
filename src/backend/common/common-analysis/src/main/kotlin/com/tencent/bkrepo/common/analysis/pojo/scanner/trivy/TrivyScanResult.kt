@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -28,28 +28,28 @@
 package com.tencent.bkrepo.common.analysis.pojo.scanner.trivy
 
 import com.fasterxml.jackson.annotation.JsonAlias
-import io.swagger.annotations.ApiModel
-import io.swagger.annotations.ApiModelProperty
+import io.swagger.v3.oas.annotations.media.Schema
 
-@ApiModel("扫描结果")
+
+@Schema(title = "扫描结果")
 data class TrivyScanResults(
-    @ApiModelProperty("扫描结果")
+    @get:Schema(title = "扫描结果")
     @JsonAlias("Results")
     val results: List<TrivyScanResult> = emptyList()
 )
 
-@ApiModel("制品漏洞信息")
+@Schema(title = "制品漏洞信息")
 data class TrivyScanResult(
-    @ApiModelProperty("目标")
+    @get:Schema(title = "目标")
     @JsonAlias("Target")
     val target: String,
-    @ApiModelProperty("类")
+    @get:Schema(title = "类")
     @JsonAlias("Class")
     val clazz: String,
-    @ApiModelProperty("类型")
+    @get:Schema(title = "类型")
     @JsonAlias("Type")
     val type: String,
-    @ApiModelProperty("Results")
+    @get:Schema(title = "Results")
     @JsonAlias("Vulnerabilities")
     val vulnerabilities: List<VulnerabilityItem>? = emptyList()
 )

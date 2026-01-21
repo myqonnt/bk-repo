@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2021 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2021 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -32,11 +32,12 @@ import com.tencent.bkrepo.common.artifact.event.ArtifactReceivedEvent
 import com.tencent.bkrepo.common.artifact.hash.sha1
 import com.tencent.bkrepo.common.artifact.resolve.file.ArtifactDataReceiver
 import com.tencent.bkrepo.common.service.util.SpringContextUtils
-import com.tencent.bkrepo.common.storage.core.StorageProperties
+import com.tencent.bkrepo.common.storage.config.StorageProperties
 import com.tencent.bkrepo.common.storage.credentials.StorageCredentials
 import com.tencent.bkrepo.common.storage.monitor.StorageHealthMonitor
 import com.tencent.bkrepo.common.storage.monitor.Throughput
 import com.tencent.bkrepo.common.storage.util.toPath
+import io.micrometer.observation.ObservationRegistry
 import java.io.File
 import java.io.InputStream
 
@@ -47,6 +48,7 @@ class ChunkedArtifactFile(
     private val monitor: StorageHealthMonitor,
     private val storageProperties: StorageProperties,
     private val storageCredentials: StorageCredentials,
+    private val registry: ObservationRegistry
 ) : ArtifactFile {
 
     /**
@@ -71,6 +73,7 @@ class ChunkedArtifactFile(
             storageProperties.monitor,
             path,
             randomPath = true,
+            registry = registry
         )
         monitor.add(receiver)
         if (!monitor.healthy.get()) {
@@ -125,6 +128,11 @@ class ChunkedArtifactFile(
     override fun getFileSha256(): String {
         require(receiver.finished)
         return receiver.listener.getSha256()
+    }
+
+    override fun getFileCrc64ecma(): String {
+        require(receiver.finished)
+        return receiver.listener.getCrc64ecma()
     }
 
     override fun delete() {

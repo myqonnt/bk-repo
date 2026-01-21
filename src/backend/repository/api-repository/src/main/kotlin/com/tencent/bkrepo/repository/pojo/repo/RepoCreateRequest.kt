@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -35,37 +35,39 @@ import com.tencent.bkrepo.common.artifact.pojo.RepositoryCategory
 import com.tencent.bkrepo.common.artifact.pojo.RepositoryType
 import com.tencent.bkrepo.common.artifact.pojo.configuration.RepositoryConfiguration
 import com.tencent.bkrepo.repository.constant.SYSTEM_USER
-import io.swagger.annotations.ApiModel
-import io.swagger.annotations.ApiModelProperty
+import io.swagger.v3.oas.annotations.media.Schema
+
 
 /**
  * 创建仓库请求
  */
-@ApiModel("创建仓库请求")
+@Schema(title = "创建仓库请求")
 data class RepoCreateRequest(
-    @ApiModelProperty("所属项目id", required = true)
+    @get:Schema(title = "所属项目id", required = true)
     override val projectId: String,
-    @ApiModelProperty("仓库名称", required = true)
+    @get:Schema(title = "仓库名称", required = true)
     override val name: String,
-    @ApiModelProperty("仓库类型", required = true)
+    @get:Schema(title = "仓库类型", required = true)
     val type: RepositoryType,
-    @ApiModelProperty("仓库类别", required = true)
+    @get:Schema(title = "仓库类别", required = true)
     val category: RepositoryCategory,
-    @ApiModelProperty("是否公开", required = true)
+    @get:Schema(title = "是否公开", required = true)
     val public: Boolean,
-    @ApiModelProperty("简要描述", required = false)
+    @get:Schema(title = "简要描述", required = false)
     val description: String? = null,
-    @ApiModelProperty("仓库配置", required = true)
+    @get:Schema(title = "仓库配置", required = true)
     val configuration: RepositoryConfiguration? = null,
-    @ApiModelProperty("存储凭证key", required = false)
+    @get:Schema(title = "存储凭证key", required = false)
     val storageCredentialsKey: String? = null,
-    @ApiModelProperty("仓库配额", required = false)
+    @get:Schema(title = "仓库配额", required = false)
     val quota: Long? = null,
-    @ApiModelProperty("来自插件的请求", required = false)
+    @get:Schema(title = "来自插件的请求", required = false)
     val pluginRequest: Boolean = false,
 
-    @ApiModelProperty("操作用户", required = false)
+    @get:Schema(title = "操作用户", required = false)
     val operator: String = SYSTEM_USER,
-    @ApiModelProperty("是否展示", required = true)
-    val display: Boolean = true
+    @get:Schema(title = "是否展示", required = true)
+    val display: Boolean = true,
+    @get:Schema(title = "操作来源,联邦仓库同步时源集群name", required = false)
+    val source: String? = null
 ) : RepoRequest

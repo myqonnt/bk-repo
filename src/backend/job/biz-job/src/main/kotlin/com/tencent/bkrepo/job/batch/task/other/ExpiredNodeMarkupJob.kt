@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2019 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2019 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -27,16 +27,15 @@
 
 package com.tencent.bkrepo.job.batch.task.other
 
+import com.tencent.bkrepo.common.metadata.service.node.NodeService
 import com.tencent.bkrepo.job.SHARDING_COUNT
 import com.tencent.bkrepo.job.batch.base.DefaultContextMongoDbJob
 import com.tencent.bkrepo.job.batch.base.JobContext
 import com.tencent.bkrepo.job.batch.utils.TimeUtils
 import com.tencent.bkrepo.job.config.properties.ExpiredNodeMarkupJobProperties
-import com.tencent.bkrepo.repository.api.NodeClient
 import com.tencent.bkrepo.repository.constant.SYSTEM_USER
 import com.tencent.bkrepo.repository.pojo.node.service.NodeDeleteRequest
 import org.slf4j.LoggerFactory
-import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.data.mongodb.core.query.Query
 import org.springframework.data.mongodb.core.query.and
 import org.springframework.data.mongodb.core.query.isEqualTo
@@ -50,10 +49,9 @@ import kotlin.reflect.KClass
  * 标记已过期的节点为已删除
  */
 @Component
-@EnableConfigurationProperties(ExpiredNodeMarkupJobProperties::class)
 class ExpiredNodeMarkupJob(
     properties: ExpiredNodeMarkupJobProperties,
-    private val nodeClient: NodeClient
+    private val nodeService: NodeService
 ) : DefaultContextMongoDbJob<ExpiredNodeMarkupJob.Node>(properties) {
 
     data class Node(
@@ -97,7 +95,7 @@ class ExpiredNodeMarkupJob(
 
     override fun run(row: Node, collectionName: String, context: JobContext) {
         try {
-            nodeClient.deleteNode(NodeDeleteRequest(row.projectId, row.repoName, row.fullPath, SYSTEM_USER))
+            nodeService.deleteNode(NodeDeleteRequest(row.projectId, row.repoName, row.fullPath, SYSTEM_USER))
         } catch (e: Exception) {
             logger.warn("delete expired node[$row] failed: $e")
         }

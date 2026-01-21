@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -34,10 +34,11 @@ dependencies {
     api(project(":common:common-job"))
     api(project(":common:common-artifact:artifact-service"))
     api(project(":common:common-mongo"))
-    api(project(":fs:api-fs-server"))
+    api(project(":driver:api-driver"))
     api(project(":job:api-job"))
     implementation(project(":common:common-notify:notify-service"))
     implementation("org.influxdb:influxdb-java")
+    implementation("io.fabric8:kubernetes-client:7.4.0")
     compileOnly("org.springframework.cloud:spring-cloud-starter-consul-discovery")
     compileOnly("org.springframework.cloud:spring-cloud-starter-consul-config")
 }

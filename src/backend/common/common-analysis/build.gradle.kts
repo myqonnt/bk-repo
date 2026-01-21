@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -29,8 +29,8 @@ dependencies {
     api(project(":common:common-api"))
     api(project(":common:common-artifact:artifact-api"))
     api(project(":common:common-checker:api-checker"))
-    api(project(":common:common-operate:operate-annotation"))
     api("com.github.docker-java:docker-java:${Versions.DockerJava}")
     api("com.github.docker-java:docker-java-transport-okhttp:${Versions.DockerJava}")
     implementation("org.apache.commons:commons-lang3")
+    api(project(":common:common-metadata:metadata-api"))
 }

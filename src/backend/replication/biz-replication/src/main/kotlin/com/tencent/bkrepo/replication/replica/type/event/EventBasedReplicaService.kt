@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -35,8 +35,9 @@ import com.tencent.bkrepo.replication.constant.RETRY_COUNT
 import com.tencent.bkrepo.replication.manager.LocalDataManager
 import com.tencent.bkrepo.replication.pojo.task.objects.PackageConstraint
 import com.tencent.bkrepo.replication.pojo.task.objects.PathConstraint
-import com.tencent.bkrepo.replication.replica.type.AbstractReplicaService
 import com.tencent.bkrepo.replication.replica.context.ReplicaContext
+import com.tencent.bkrepo.replication.dao.ReplicaFailureRecordDao
+import com.tencent.bkrepo.replication.replica.type.AbstractReplicaService
 import com.tencent.bkrepo.replication.service.ReplicaRecordService
 import org.springframework.stereotype.Component
 
@@ -46,8 +47,9 @@ import org.springframework.stereotype.Component
 @Component
 class EventBasedReplicaService(
     replicaRecordService: ReplicaRecordService,
-    localDataManager: LocalDataManager
-) : AbstractReplicaService(replicaRecordService, localDataManager) {
+    localDataManager: LocalDataManager,
+    replicaFailureRecordDao: ReplicaFailureRecordDao
+) : AbstractReplicaService(replicaRecordService, localDataManager, replicaFailureRecordDao) {
 
     override fun replica(context: ReplicaContext) {
         with(context) {
@@ -65,18 +67,21 @@ class EventBasedReplicaService(
                     val pathConstraint = PathConstraint(event.resourceKey)
                     replicaByPathConstraint(this, pathConstraint)
                 }
+
                 EventType.VERSION_CREATED -> {
                     val packageKey = event.data["packageKey"].toString()
                     val packageVersion = event.data["packageVersion"].toString()
                     val packageConstraint = PackageConstraint(packageKey, listOf(packageVersion))
                     replicaByPackageConstraint(this, packageConstraint)
                 }
+
                 EventType.VERSION_UPDATED -> {
                     val packageKey = event.data["packageKey"].toString()
                     val packageVersion = event.data["packageVersion"].toString()
                     val packageConstraint = PackageConstraint(packageKey, listOf(packageVersion))
                     replicaByPackageConstraint(this, packageConstraint)
                 }
+
                 else -> throw UnsupportedOperationException()
             }
         }

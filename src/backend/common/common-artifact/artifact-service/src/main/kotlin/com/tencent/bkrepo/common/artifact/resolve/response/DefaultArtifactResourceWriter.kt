@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2021 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2021 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -29,8 +29,9 @@ package com.tencent.bkrepo.common.artifact.resolve.response
 
 import com.tencent.bkrepo.common.api.constant.HttpHeaders
 import com.tencent.bkrepo.common.api.constant.HttpStatus
-import com.tencent.bkrepo.common.api.constant.MediaTypes
 import com.tencent.bkrepo.common.api.constant.StringPool
+import com.tencent.bkrepo.common.api.exception.OverloadException
+import com.tencent.bkrepo.common.artifact.constant.X_CHECKSUM_CRC64ECMA
 import com.tencent.bkrepo.common.artifact.constant.X_CHECKSUM_MD5
 import com.tencent.bkrepo.common.artifact.constant.X_CHECKSUM_SHA256
 import com.tencent.bkrepo.common.artifact.exception.ArtifactResponseException
@@ -43,32 +44,40 @@ import com.tencent.bkrepo.common.artifact.stream.rateLimit
 import com.tencent.bkrepo.common.artifact.util.http.HttpHeaderUtils.determineMediaType
 import com.tencent.bkrepo.common.artifact.util.http.HttpHeaderUtils.encodeDisposition
 import com.tencent.bkrepo.common.artifact.util.http.IOExceptionUtils.isClientBroken
+import com.tencent.bkrepo.common.ratelimiter.service.RequestLimitCheckService
+import com.tencent.bkrepo.common.ratelimiter.stream.CommonRateLimitInputStream
 import com.tencent.bkrepo.common.service.otel.util.TraceHeaderUtils
 import com.tencent.bkrepo.common.service.util.HttpContextHolder
-import com.tencent.bkrepo.common.storage.core.StorageProperties
+import com.tencent.bkrepo.common.storage.config.StorageProperties
 import com.tencent.bkrepo.common.storage.monitor.Throughput
 import com.tencent.bkrepo.common.storage.monitor.measureThroughput
 import com.tencent.bkrepo.repository.pojo.node.NodeDetail
+import jakarta.servlet.http.HttpServletRequest
+import jakarta.servlet.http.HttpServletResponse
+import org.slf4j.LoggerFactory
 import org.springframework.http.HttpMethod
 import java.io.IOException
 import java.time.LocalDateTime
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
+import java.util.Locale
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
-import javax.servlet.http.HttpServletRequest
-import javax.servlet.http.HttpServletResponse
 
 /**
  * ArtifactResourceWriter默认实现
  */
 open class DefaultArtifactResourceWriter(
-    private val storageProperties: StorageProperties
-) : AbstractArtifactResourceHandler(storageProperties) {
+    private val storageProperties: StorageProperties,
+    private val requestLimitCheckService: RequestLimitCheckService
+) : AbstractArtifactResourceHandler(
+    storageProperties, requestLimitCheckService
+) {
 
-    @Throws(ArtifactResponseException::class)
+    @Throws(ArtifactResponseException::class, OverloadException::class)
     override fun write(resource: ArtifactResource): Throughput {
         responseRateLimitCheck()
+        downloadRateLimitCheck(resource)
         TraceHeaderUtils.setResponseHeader()
         return if (resource.containsMultiArtifact()) {
             writeMultiArtifact(resource)
@@ -87,7 +96,7 @@ open class DefaultArtifactResourceWriter(
         val name = resource.getSingleName()
         val range = resource.getSingleStream().range
         val cacheControl = resource.node?.metadata?.get(HttpHeaders.CACHE_CONTROL)?.toString()
-            ?: resource.node?.metadata?.get(HttpHeaders.CACHE_CONTROL.toLowerCase())?.toString()
+            ?: resource.node?.metadata?.get(HttpHeaders.CACHE_CONTROL.lowercase(Locale.getDefault()))?.toString()
             ?: StringPool.NO_CACHE
 
         response.bufferSize = getBufferSize(range.length)
@@ -107,9 +116,16 @@ open class DefaultArtifactResourceWriter(
             response.setHeader(HttpHeaders.ETAG, resolveETag(it))
             response.setHeader(X_CHECKSUM_MD5, it.md5)
             response.setHeader(X_CHECKSUM_SHA256, it.sha256)
+            it.crc64ecma?.let { crc64 -> response.setHeader(X_CHECKSUM_CRC64ECMA, crc64) }
             response.setDateHeader(HttpHeaders.LAST_MODIFIED, resolveLastModified(it.lastModifiedDate))
         }
+
+        setCustomHeader(response, resource)
         return writeRangeStream(resource, request, response)
+    }
+
+    open fun setCustomHeader(response: HttpServletResponse, resource: ArtifactResource) {
+
     }
 
     /**
@@ -172,9 +188,11 @@ open class DefaultArtifactResourceWriter(
         request: HttpServletRequest,
         response: HttpServletResponse
     ): Throughput {
-        if (request.method == HttpMethod.HEAD.name) {
+        if (request.method == HttpMethod.HEAD.name()) {
             return Throughput.EMPTY
         }
+        var rateLimitFlag = false
+        var exp: Exception? = null
         try {
             return measureThroughput {
                 val zipOutput = ZipOutputStream(response.outputStream.buffered())
@@ -183,9 +201,14 @@ open class DefaultArtifactResourceWriter(
                     resource.artifactMap.forEach { (name, inputStream) ->
                         val recordAbleInputStream = RecordAbleInputStream(inputStream)
                         zipOutput.putNextEntry(generateZipEntry(name, inputStream))
-                        recordAbleInputStream.rateLimit(
+                        val stream = requestLimitCheckService.bandwidthCheck(
+                            recordAbleInputStream, storageProperties.response.circuitBreakerThreshold,
+                            inputStream.range.length
+                        ) ?: recordAbleInputStream.rateLimit(
                             responseRateLimitWrapper(storageProperties.response.rateLimit)
-                        ).use {
+                        )
+                        rateLimitFlag = stream is CommonRateLimitInputStream
+                        stream.use {
                             it.copyTo(
                                 out = zipOutput,
                                 bufferSize = getBufferSize(inputStream.range.length)
@@ -198,21 +221,23 @@ open class DefaultArtifactResourceWriter(
             }
         } catch (exception: IOException) {
             val message = exception.message.orEmpty()
-            val status = if (isClientBroken(exception)) HttpStatus.BAD_REQUEST else HttpStatus.INTERNAL_SERVER_ERROR
+            val status = if (isClientBroken(exception)) {
+                HttpStatus.BAD_REQUEST
+            } else {
+                logger.warn("write zip stream failed", exception)
+                HttpStatus.INTERNAL_SERVER_ERROR
+            }
+            exp = exception
             throw ArtifactResponseException(message, status)
+        } catch (overloadEx: OverloadException) {
+            exp = overloadEx
+            throw overloadEx
         } finally {
+            if (rateLimitFlag) {
+                requestLimitCheckService.bandwidthFinish(exp)
+            }
             resource.artifactMap.values.forEach { it.closeQuietly() }
         }
-    }
-
-    /**
-     * 判断charset,一些媒体类型设置了charset会影响其表现，如application/vnd.android.package-archive
-     * */
-    private fun determineCharset(mediaType: String, defaultCharset: String): String? {
-        return if (binaryMediaTypes.contains(mediaType) ||
-            storageProperties.response.binaryMediaTypes.contains(mediaType)
-        ) null
-        else defaultCharset
     }
 
     /**
@@ -232,6 +257,6 @@ open class DefaultArtifactResourceWriter(
     }
 
     companion object {
-        private val binaryMediaTypes = setOf(MediaTypes.APPLICATION_APK)
+        private val logger = LoggerFactory.getLogger(DefaultArtifactResourceWriter::class.java)
     }
 }

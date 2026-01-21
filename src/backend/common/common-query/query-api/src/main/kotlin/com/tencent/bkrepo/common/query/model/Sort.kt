@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -31,14 +31,14 @@
 
 package com.tencent.bkrepo.common.query.model
 
-import io.swagger.annotations.ApiModel
-import io.swagger.annotations.ApiModelProperty
+import io.swagger.v3.oas.annotations.media.Schema
 
-@ApiModel("排序规则")
+
+@Schema(title = "排序规则")
 data class Sort(
-    @ApiModelProperty("排序字段")
+    @get:Schema(title = "排序字段")
     val properties: List<String>,
-    @ApiModelProperty("排序方式")
+    @get:Schema(title = "排序方式")
     val direction: Direction = Direction.DEFAULT
 ) {
     enum class Direction {

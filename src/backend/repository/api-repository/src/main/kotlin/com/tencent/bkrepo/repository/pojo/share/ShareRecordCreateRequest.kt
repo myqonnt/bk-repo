@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -32,15 +32,15 @@
 package com.tencent.bkrepo.repository.pojo.share
 
 import com.tencent.bkrepo.repository.pojo.UserRequest
-import io.swagger.annotations.ApiModel
-import io.swagger.annotations.ApiModelProperty
+import io.swagger.v3.oas.annotations.media.Schema
 
-@ApiModel("创建分享请求")
+
+@Schema(title = "创建分享请求")
 data class ShareRecordCreateRequest(
-    @ApiModelProperty("分享用户")
+    @get:Schema(title = "分享用户")
     val authorizedUserList: List<String> = emptyList(),
-    @ApiModelProperty("分享IP")
+    @get:Schema(title = "分享IP")
     val authorizedIpList: List<String> = emptyList(),
-    @ApiModelProperty("有效时间，单位秒")
+    @get:Schema(title = "有效时间，单位秒")
     val expireSeconds: Long = 0
 ) : UserRequest

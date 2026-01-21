@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -27,13 +27,13 @@
 
 package com.tencent.bkrepo.analyst.pojo.response
 
-import io.swagger.annotations.ApiModel
-import io.swagger.annotations.ApiModelProperty
+import io.swagger.v3.oas.annotations.media.Schema
 
-@ApiModel("制品关联的扫描方案信息列表")
+
+@Schema(title = "制品关联的扫描方案信息列表")
 data class ArtifactPlanRelations(
-    @ApiModelProperty("制品扫描状态")
+    @get:Schema(title = "制品扫描状态")
     val scanStatus: String?,
-    @ApiModelProperty("方案信息列表")
+    @get:Schema(title = "方案信息列表")
     val scanPlans: List<ArtifactPlanRelation>
 )

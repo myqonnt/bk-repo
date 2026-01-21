@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -31,20 +31,22 @@
 
 package com.tencent.bkrepo.common.storage.innercos.http
 
-import com.fasterxml.jackson.dataformat.xml.XmlMapper
+import com.tencent.bkrepo.common.api.util.XmlUtils
 import okhttp3.Response
 
 abstract class HttpResponseHandler<T> {
 
     abstract fun handle(response: Response): T
     open fun handle404(): T? = null
-    open fun keepConnection(): Boolean = false
+    open fun keepConnection(response: Response): Boolean = false
 
     companion object {
-        private val xmlMapper: XmlMapper = XmlMapper()
 
-        fun readXmlValue(response: Response): Map<*, *> {
-            return xmlMapper.readValue(response.body?.string(), Map::class.java)
+        fun readXmlToMap(response: Response): Map<*, *> {
+            return readXmlValue(response)
+        }
+        inline fun <reified T> readXmlValue(response: Response): T {
+            return XmlUtils.objectMapper.readValue(response.body?.string(), T::class.java)
         }
     }
 }

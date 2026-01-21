@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -27,21 +27,19 @@
 
 package com.tencent.bkrepo.replication.replica.replicator.standalone
 
-import com.google.common.base.Throwables
-import com.tencent.bkrepo.common.api.constant.HttpStatus
-import com.tencent.bkrepo.common.api.constant.retry
+import com.tencent.bkrepo.common.metadata.model.TBlockNode
 import com.tencent.bkrepo.replication.config.ReplicationProperties
-import com.tencent.bkrepo.replication.constant.DELAY_IN_SECONDS
-import com.tencent.bkrepo.replication.constant.RETRY_COUNT
-import com.tencent.bkrepo.replication.enums.WayOfPushArtifact
-import com.tencent.bkrepo.replication.exception.ArtifactPushException
 import com.tencent.bkrepo.replication.manager.LocalDataManager
+import com.tencent.bkrepo.replication.pojo.request.PackageVersionDeleteSummary
+import com.tencent.bkrepo.replication.replica.context.ReplicaContext
+import com.tencent.bkrepo.replication.replica.replicator.base.AbstractFileReplicator
 import com.tencent.bkrepo.replication.replica.replicator.base.internal.ClusterArtifactReplicationHandler
 import com.tencent.bkrepo.replication.replica.repository.internal.PackageNodeMappings
-import com.tencent.bkrepo.replication.replica.context.FilePushContext
-import com.tencent.bkrepo.replication.replica.context.ReplicaContext
-import com.tencent.bkrepo.replication.replica.replicator.Replicator
+import com.tencent.bkrepo.repository.pojo.metadata.MetadataDeleteRequest
+import com.tencent.bkrepo.repository.pojo.metadata.MetadataSaveRequest
 import com.tencent.bkrepo.repository.pojo.node.NodeInfo
+import com.tencent.bkrepo.repository.pojo.node.service.NodeMoveCopyRequest
+import com.tencent.bkrepo.repository.pojo.node.service.NodeRenameRequest
 import com.tencent.bkrepo.repository.pojo.packages.PackageSummary
 import com.tencent.bkrepo.repository.pojo.packages.PackageVersion
 import org.slf4j.LoggerFactory
@@ -53,10 +51,10 @@ import org.springframework.stereotype.Component
  */
 @Component
 class EdgeNodeReplicator(
-    private val localDataManager: LocalDataManager,
-    private val artifactReplicationHandler: ClusterArtifactReplicationHandler,
-    private val replicationProperties: ReplicationProperties
-) : Replicator {
+    localDataManager: LocalDataManager,
+    artifactReplicationHandler: ClusterArtifactReplicationHandler,
+    replicationProperties: ReplicationProperties
+) : AbstractFileReplicator(artifactReplicationHandler, replicationProperties, localDataManager) {
 
     override fun checkVersion(context: ReplicaContext) {
         // do nothing
@@ -105,49 +103,77 @@ class EdgeNodeReplicator(
         }
     }
 
+    override fun replicaDeletedPackage(
+        context: ReplicaContext,
+        packageVersionDeleteSummary: PackageVersionDeleteSummary
+    ): Boolean {
+        return true
+    }
+
     override fun replicaFile(context: ReplicaContext, node: NodeInfo): Boolean {
+        if (unNormalNode(node)) {
+            handleBlockNodeReplication(context, node)
+            return true
+        }
+        executeFilePush(
+            context = context,
+            node = node,
+            logPrefix = "[EdgeNode] ",
+        )
+        return true
+    }
+
+    override fun replicaDeletedNode(context: ReplicaContext, node: NodeInfo): Boolean {
+        return true
+    }
+
+    override fun replicaNodeMove(context: ReplicaContext, moveOrCopyRequest: NodeMoveCopyRequest): Boolean {
+        return true
+    }
+
+    override fun replicaNodeCopy(context: ReplicaContext, moveOrCopyRequest: NodeMoveCopyRequest): Boolean {
+        return true
+    }
+
+    override fun replicaNodeRename(context: ReplicaContext, nodeRenameRequest: NodeRenameRequest): Boolean {
+        return true
+    }
+
+    override fun replicaMetadataSave(context: ReplicaContext, metadataSaveRequest: MetadataSaveRequest): Boolean {
+        return true
+    }
+
+    override fun replicaMetadataDelete(context: ReplicaContext, metadataDeleteRequest: MetadataDeleteRequest): Boolean {
+        return true
+    }
+
+    private fun handleBlockNodeReplication(context: ReplicaContext, node: NodeInfo): Boolean {
         with(context) {
-            val sha256 = node.sha256.orEmpty()
-            var type: String = replicationProperties.pushType
-            var downGrade = false
-            val remoteRepositoryType = context.remoteRepoType
-            retry(times = RETRY_COUNT, delayInSeconds = DELAY_IN_SECONDS) { retry ->
-                if (blobReplicaClient?.check(sha256 = sha256, repoType = remoteRepositoryType)?.data != true) {
-                    try {
-                        artifactReplicationHandler.blobPush(
-                            filePushContext = FilePushContext(
-                                context = context,
-                                name = node.fullPath,
-                                size = node.size,
-                                sha256 = node.sha256,
-                                md5 = node.md5
-                            ),
-                            pushType = type,
-                            downGrade = downGrade
-                        )
-                    } catch (throwable: Throwable) {
-                        logger.warn(
-                            "File replica push from edge error $throwable, trace is " +
-                                "${Throwables.getStackTraceAsString(throwable)}!"
-                        )
-                        // 当不支持分块上传时，降级为普通上传
-                        if (
-                            throwable is ArtifactPushException &&
-                            (
-                                throwable.code == HttpStatus.METHOD_NOT_ALLOWED.value ||
-                                    throwable.code == HttpStatus.UNAUTHORIZED.value
-                                )
-                        ) {
-                            type = WayOfPushArtifact.PUSH_WITH_DEFAULT.value
-                            downGrade = true
-                        }
-                        throw throwable
-                    }
-                    return true
-                }
+            if (!blockNode(node)) {
+                logger.warn("Node ${node.fullPath} in repo ${node.projectId}|${node.repoName} is link node.")
                 return false
             }
+            val blockNodeList = localDataManager.listBlockNode(node)
+            if (blockNodeList.isEmpty()) {
+                logger.warn("Block node of ${node.fullPath} in repo ${node.projectId}|${node.repoName} is empty.")
+                return true
+            }
+            blockNodeList.forEach { blockNode ->
+                executeBlockNodePush(this, blockNode)
+            }
+            return true
         }
+    }
+
+    private fun executeBlockNodePush(
+        context: ReplicaContext,
+        blockNode: TBlockNode,
+    ) {
+        executeFilePush(
+            context = context,
+            node = blockNode,
+            logPrefix = "[Cluster-Block] ",
+        )
     }
 
     companion object {

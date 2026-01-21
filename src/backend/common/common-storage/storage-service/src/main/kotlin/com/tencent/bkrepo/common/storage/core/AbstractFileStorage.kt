@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -35,6 +35,7 @@ import com.google.common.cache.CacheBuilder
 import com.google.common.cache.CacheLoader
 import com.google.common.cache.LoadingCache
 import com.tencent.bkrepo.common.artifact.stream.Range
+import com.tencent.bkrepo.common.storage.config.StorageProperties
 import com.tencent.bkrepo.common.storage.credentials.StorageCredentials
 import com.tencent.bkrepo.common.storage.listener.FileStoreRetryListener
 import com.tencent.bkrepo.common.storage.monitor.measureThroughput
@@ -47,6 +48,8 @@ import org.springframework.retry.support.RetryTemplate
 import java.io.File
 import java.io.IOException
 import java.io.InputStream
+import java.nio.file.Path
+import java.util.stream.Stream
 
 /**
  * 文件存储抽象模板类
@@ -69,7 +72,7 @@ abstract class AbstractFileStorage<Credentials : StorageCredentials, Client> : F
         val cacheLoader = object : CacheLoader<Credentials, Client>() {
             override fun load(credentials: Credentials): Client = onCreateClient(credentials)
         }
-        CacheBuilder.newBuilder().maximumSize(MAX_CACHE_CLIENT).build(cacheLoader)
+        CacheBuilder.newBuilder().maximumSize(storageProperties.clientCacheSize).build(cacheLoader)
     }
 
     init {
@@ -192,6 +195,11 @@ abstract class AbstractFileStorage<Credentials : StorageCredentials, Client> : F
         restore(path, name, days, tier, client)
     }
 
+    override fun listAll(path: String, storageCredentials: StorageCredentials): Stream<Path> {
+        val client = getClient(storageCredentials)
+        return listAll(path, client)
+    }
+
     private fun getClient(storageCredentials: StorageCredentials): Client {
         return if (storageCredentials == storageProperties.defaultStorageCredentials()) {
             defaultClient
@@ -229,9 +237,12 @@ abstract class AbstractFileStorage<Credentials : StorageCredentials, Client> : F
         throw UnsupportedOperationException("Restore operation unsupported")
     }
 
+    open fun listAll(path: String, client: Client): Stream<Path> {
+        throw UnsupportedOperationException("ListAll operation unsupported")
+    }
+
     companion object {
         private val logger = LoggerFactory.getLogger(AbstractFileStorage::class.java)
-        private const val MAX_CACHE_CLIENT = 10L
         private const val RETRY_MAX_ATTEMPTS = 5
         private const val RETRY_INITIAL_INTERVAL = 1000L
         private const val RETRY_MAX_INTERVAL = 20 * 1000L

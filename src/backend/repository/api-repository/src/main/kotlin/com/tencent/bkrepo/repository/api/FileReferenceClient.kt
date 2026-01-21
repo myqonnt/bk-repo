@@ -10,14 +10,22 @@ import org.springframework.web.bind.annotation.RequestParam
 
 @FeignClient(REPOSITORY_SERVICE_NAME, contextId = "FileReferenceClient")
 @RequestMapping("/service/fileReference")
+@Deprecated(message = "replace for FileReferenceService or RFileReferenceService")
 interface FileReferenceClient {
 
     @PutMapping("/decrement")
     fun decrement(@RequestParam sha256: String, @RequestParam credentialsKey: String?): Response<Boolean>
 
     @PutMapping("/increment")
-    fun increment(@RequestParam sha256: String, @RequestParam credentialsKey: String?): Response<Boolean>
+    fun increment(
+        @RequestParam sha256: String,
+        @RequestParam credentialsKey: String?,
+        @RequestParam(required = false, defaultValue = "1") inc: Long = 1L
+    ): Response<Boolean>
 
     @GetMapping("/count")
     fun count(@RequestParam sha256: String, @RequestParam credentialsKey: String?): Response<Long>
+
+    @GetMapping("/exists")
+    fun exists(@RequestParam sha256: String, @RequestParam credentialsKey: String?): Response<Boolean>
 }

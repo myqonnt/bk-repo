@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -27,25 +27,35 @@
 
 package com.tencent.bkrepo.common.notify.config
 
+import com.tencent.bkrepo.common.notify.api.bkci.BkciChannelCredential
 import com.tencent.bkrepo.common.notify.api.weworkbot.WeworkBotChannelCredential
 import com.tencent.bkrepo.common.notify.client.NotifyClient
+import com.tencent.bkrepo.common.notify.client.bkci.BkciNotifyClient
 import com.tencent.bkrepo.common.notify.client.weworkbot.WeworkBotClient
 import okhttp3.OkHttpClient
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import java.util.concurrent.TimeUnit
 
-@Configuration
+@Configuration(proxyBeanMethods = false)
 class NotifyClientConfiguration {
 
-    @Bean(WeworkBotChannelCredential.type)
-    fun weworkBotClient(notifyProperties: NotifyProperties): NotifyClient {
-        val okHttpClient = OkHttpClient.Builder()
+    private val defaultNotifyHttpClient by lazy {
+        OkHttpClient.Builder()
             .connectTimeout(DEFAULT_CONNECT_TIMEOUT_SECOND, TimeUnit.SECONDS)
             .readTimeout(DEFAULT_READ_TIMEOUT_SECOND, TimeUnit.SECONDS)
             .writeTimeout(DEFAULT_WRITE_TIMEOUT_SECOND, TimeUnit.SECONDS)
             .build()
-        return WeworkBotClient(okHttpClient, notifyProperties)
+    }
+
+    @Bean(WeworkBotChannelCredential.TYPE)
+    fun weworkBotClient(notifyProperties: NotifyProperties): NotifyClient {
+        return WeworkBotClient(defaultNotifyHttpClient, notifyProperties)
+    }
+
+    @Bean(BkciChannelCredential.TYPE)
+    fun bkciClient(notifyProperties: NotifyProperties): NotifyClient {
+        return BkciNotifyClient(defaultNotifyHttpClient, notifyProperties)
     }
 
     companion object {

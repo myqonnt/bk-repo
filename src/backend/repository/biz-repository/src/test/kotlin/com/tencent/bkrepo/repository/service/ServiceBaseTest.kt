@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -31,6 +31,7 @@
 
 package com.tencent.bkrepo.repository.service
 
+import com.tencent.bkrepo.archive.api.ArchiveClient
 import com.tencent.bkrepo.auth.api.ServiceBkiamV3ResourceClient
 import com.tencent.bkrepo.auth.api.ServicePermissionClient
 import com.tencent.bkrepo.auth.api.ServiceRoleClient
@@ -41,34 +42,41 @@ import com.tencent.bkrepo.common.artifact.event.project.ProjectCreatedEvent
 import com.tencent.bkrepo.common.artifact.pojo.RepositoryCategory
 import com.tencent.bkrepo.common.artifact.pojo.RepositoryType
 import com.tencent.bkrepo.common.artifact.pojo.configuration.local.LocalConfiguration
-import com.tencent.bkrepo.common.artifact.router.RouterControllerProperties
+import com.tencent.bkrepo.common.artifact.properties.EnableMultiTenantProperties
+import com.tencent.bkrepo.common.artifact.properties.RouterControllerProperties
+import com.tencent.bkrepo.common.metadata.config.RepositoryProperties
+import com.tencent.bkrepo.common.metadata.dao.node.NodeDao
+import com.tencent.bkrepo.common.metadata.dao.project.ProjectDao
+import com.tencent.bkrepo.common.metadata.dao.repo.RepositoryDao
+import com.tencent.bkrepo.common.metadata.dao.router.NodeLocationDao
+import com.tencent.bkrepo.common.metadata.listener.ResourcePermissionListener
+import com.tencent.bkrepo.common.metadata.permission.PermissionManager
+import com.tencent.bkrepo.common.metadata.service.log.OperateLogService
+import com.tencent.bkrepo.common.metadata.service.project.ProjectService
+import com.tencent.bkrepo.common.metadata.service.repo.RepositoryService
+import com.tencent.bkrepo.common.metadata.service.repo.ResourceClearService
+import com.tencent.bkrepo.common.metadata.util.RepositoryServiceHelper
+import com.tencent.bkrepo.common.metadata.util.StorageCredentialHelper
 import com.tencent.bkrepo.common.security.http.core.HttpAuthProperties
-import com.tencent.bkrepo.common.security.manager.PermissionManager
-import com.tencent.bkrepo.common.service.cluster.ClusterProperties
+import com.tencent.bkrepo.common.security.manager.ci.CIPermissionManager
+import com.tencent.bkrepo.common.service.cluster.properties.ClusterProperties
 import com.tencent.bkrepo.common.service.util.ResponseBuilder
 import com.tencent.bkrepo.common.service.util.SpringContextUtils
-import com.tencent.bkrepo.common.storage.core.StorageProperties
+import com.tencent.bkrepo.common.storage.config.StorageProperties
 import com.tencent.bkrepo.common.storage.core.StorageService
 import com.tencent.bkrepo.common.stream.event.supplier.MessageSupplier
-import com.tencent.bkrepo.fs.server.api.FsNodeClient
 import com.tencent.bkrepo.repository.UT_PROJECT_ID
 import com.tencent.bkrepo.repository.UT_REPO_DESC
 import com.tencent.bkrepo.repository.UT_REPO_DISPLAY
 import com.tencent.bkrepo.repository.UT_REPO_NAME
 import com.tencent.bkrepo.repository.UT_USER
-import com.tencent.bkrepo.repository.config.RepositoryProperties
-import com.tencent.bkrepo.repository.dao.NodeDao
-import com.tencent.bkrepo.repository.dao.ProjectDao
-import com.tencent.bkrepo.repository.dao.ProxyChannelDao
-import com.tencent.bkrepo.repository.dao.RepositoryDao
-import com.tencent.bkrepo.repository.listener.ResourcePermissionListener
 import com.tencent.bkrepo.repository.pojo.project.ProjectCreateRequest
 import com.tencent.bkrepo.repository.pojo.project.ProjectInfo
 import com.tencent.bkrepo.repository.pojo.repo.RepoCreateRequest
 import com.tencent.bkrepo.repository.pojo.repo.RepositoryDetail
-import com.tencent.bkrepo.repository.service.repo.ProjectService
-import com.tencent.bkrepo.repository.service.repo.RepositoryService
-import com.tencent.bkrepo.router.api.RouterControllerClient
+import io.micrometer.observation.ObservationRegistry
+import io.micrometer.tracing.Tracer
+import io.micrometer.tracing.otel.bridge.OtelTracer
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkObject
@@ -78,12 +86,10 @@ import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.whenever
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.boot.test.mock.mockito.MockBean
-import org.springframework.cloud.sleuth.Tracer
-import org.springframework.cloud.sleuth.otel.bridge.OtelTracer
 import org.springframework.context.annotation.ComponentScan
 import org.springframework.context.annotation.Import
 import org.springframework.test.context.TestPropertySource
+import org.springframework.test.context.bean.override.mockito.MockitoBean
 
 @Import(
     ClusterProperties::class,
@@ -91,49 +97,68 @@ import org.springframework.test.context.TestPropertySource
     RepositoryProperties::class,
     ProjectDao::class,
     RepositoryDao::class,
-    ProxyChannelDao::class,
     HttpAuthProperties::class,
     SpringContextUtils::class,
     NodeDao::class,
-    RouterControllerProperties::class
+    RouterControllerProperties::class,
+    RepositoryProperties::class,
+    EnableMultiTenantProperties::class,
+    NodeLocationDao::class
 )
-@ComponentScan("com.tencent.bkrepo.repository.service")
+@ComponentScan(value = ["com.tencent.bkrepo.repository.service", "com.tencent.bkrepo.common.metadata"])
 @TestPropertySource(locations = ["classpath:bootstrap-ut.properties", "classpath:center-ut.properties"])
 open class ServiceBaseTest {
 
-    @MockBean
+    @MockitoBean
     lateinit var storageService: StorageService
 
-    @MockBean
+    @MockitoBean
     lateinit var roleResource: ServiceRoleClient
 
-    @MockBean
+    @MockitoBean
     lateinit var userResource: ServiceUserClient
 
-    @MockBean
+    @MockitoBean
     lateinit var servicePermissionClient: ServicePermissionClient
 
-    @MockBean
+    @MockitoBean
     lateinit var serviceBkiamV3ResourceClient: ServiceBkiamV3ResourceClient
 
-    @MockBean
+    @MockitoBean
     lateinit var permissionManager: PermissionManager
 
-    @MockBean
+    @MockitoBean
+    lateinit var ciPermissionManager: CIPermissionManager
+
+    @MockitoBean
     lateinit var messageSupplier: MessageSupplier
 
-    @MockBean
+    @MockitoBean
     lateinit var resourcePermissionListener: ResourcePermissionListener
-
-    @MockBean
-    lateinit var routerControllerClient: RouterControllerClient
-
-    @MockBean
-    lateinit var fsNodeClient: FsNodeClient
 
     @Autowired
     lateinit var springContextUtils: SpringContextUtils
 
+    @MockitoBean
+    lateinit var archiveClient: ArchiveClient
+
+    @Autowired
+    lateinit var storageCredentialHelper: StorageCredentialHelper
+
+    @MockitoBean
+    lateinit var resourceClearService: ResourceClearService
+
+    @Autowired
+    lateinit var repositoryServiceHelper: RepositoryServiceHelper
+
+    @MockitoBean
+    lateinit var operateLogService: OperateLogService
+
+    @Autowired
+    lateinit var registry: ObservationRegistry
+
+    @MockitoBean
+    lateinit var nodeLocationDao: NodeLocationDao
 
     fun initMock() {
         val tracer = mockk<OtelTracer>()
@@ -169,8 +194,6 @@ open class ServiceBaseTest {
         whenever(messageSupplier.delegateToSupplier(any<ArtifactEvent>(), anyOrNull(), anyString(), anyOrNull(), any()))
             .then {}
         whenever(resourcePermissionListener.handle(any<ProjectCreatedEvent>())).then {}
-        whenever(fsNodeClient.restoreBlockResources(anyString(), anyString(), anyString(), anyString(), anyString()))
-            .then {}
     }
 
     fun initRepoForUnitTest(

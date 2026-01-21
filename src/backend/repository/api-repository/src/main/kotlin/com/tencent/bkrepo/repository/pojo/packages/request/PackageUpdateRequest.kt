@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -31,21 +31,24 @@
 
 package com.tencent.bkrepo.repository.pojo.packages.request
 
-import io.swagger.annotations.ApiModelProperty
+import io.swagger.v3.oas.annotations.media.Schema
+
 
 data class PackageUpdateRequest(
-    @ApiModelProperty("项目id")
+    @get:Schema(title = "项目id")
     val projectId: String,
-    @ApiModelProperty("仓库名称")
+    @get:Schema(title = "仓库名称")
     val repoName: String,
-    @ApiModelProperty("包唯一标识符")
+    @get:Schema(title = "包唯一标识符")
     val packageKey: String,
-    @ApiModelProperty("包名称")
+    @get:Schema(title = "包名称")
     val name: String? = null,
-    @ApiModelProperty("包简要描述")
+    @get:Schema(title = "包key")
+    val key: String? = null,
+    @get:Schema(title = "包简要描述")
     val description: String? = null,
-    @ApiModelProperty("包版本标签")
+    @get:Schema(title = "包版本标签")
     val versionTag: Map<String, String>? = null,
-    @ApiModelProperty("包扩展字段")
+    @get:Schema(title = "包扩展字段")
     val extension: Map<String, Any>? = null
 )

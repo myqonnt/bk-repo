@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2021 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2021 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -36,10 +36,12 @@ import com.tencent.bkrepo.common.artifact.resolve.file.chunk.RandomAccessArtifac
 import com.tencent.bkrepo.common.artifact.resolve.file.multipart.MultipartArtifactFile
 import com.tencent.bkrepo.common.artifact.resolve.file.stream.StreamArtifactFile
 import com.tencent.bkrepo.common.bksync.BlockChannel
-import com.tencent.bkrepo.common.storage.core.StorageProperties
+import com.tencent.bkrepo.common.storage.config.StorageProperties
+import com.tencent.bkrepo.common.ratelimiter.service.RequestLimitCheckService
 import com.tencent.bkrepo.common.storage.credentials.StorageCredentials
 import com.tencent.bkrepo.common.storage.monitor.StorageHealthMonitor
 import com.tencent.bkrepo.common.storage.monitor.StorageHealthMonitorHelper
+import io.micrometer.observation.ObservationRegistry
 import org.springframework.stereotype.Component
 import org.springframework.web.context.request.RequestAttributes.SCOPE_REQUEST
 import org.springframework.web.context.request.RequestContextHolder
@@ -53,18 +55,24 @@ import java.io.InputStream
 @Component
 class ArtifactFileFactory(
     storageProperties: StorageProperties,
-    storageHealthMonitorHelper: StorageHealthMonitorHelper
+    storageHealthMonitorHelper: StorageHealthMonitorHelper,
+    limitCheckService: RequestLimitCheckService,
+    registry: ObservationRegistry
 ) {
 
     init {
         monitorHelper = storageHealthMonitorHelper
         properties = storageProperties
+        requestLimitCheckService = limitCheckService
+        observationRegistry = registry
     }
 
     companion object {
 
         private lateinit var monitorHelper: StorageHealthMonitorHelper
         private lateinit var properties: StorageProperties
+        private lateinit var requestLimitCheckService: RequestLimitCheckService
+        private lateinit var observationRegistry: ObservationRegistry
 
         const val ARTIFACT_FILES = "artifact.files"
 
@@ -74,12 +82,12 @@ class ArtifactFileFactory(
         fun buildBkSync(
             blockChannel: BlockChannel,
             deltaInputStream: InputStream,
-            blockSize: Int
+            blockSize: Int,
         ): BkSyncArtifactFile {
             return BkSyncArtifactFile(
                 blockChannel,
                 deltaInputStream,
-                blockSize
+                blockSize,
             ).apply {
                 track(this)
             }
@@ -89,24 +97,71 @@ class ArtifactFileFactory(
          * 构造分块接收数据的artifact file
          */
         fun buildChunked(): ChunkedArtifactFile {
-            return ChunkedArtifactFile(getMonitor(), properties, getStorageCredentials()).apply {
+            return ChunkedArtifactFile(
+                monitor = getMonitor(),
+                storageProperties = properties,
+                storageCredentials = getStorageCredentials(),
+                registry = observationRegistry
+            ).apply {
+                track(this)
+            }
+        }
+
+        fun buildChunked(storageCredentials: StorageCredentials): ChunkedArtifactFile {
+            return ChunkedArtifactFile(
+                monitor = getMonitor(storageCredentials),
+                storageProperties = properties,
+                storageCredentials = storageCredentials,
+                registry = observationRegistry
+            ).apply {
                 track(this)
             }
         }
 
         fun buildDfsArtifactFile(): RandomAccessArtifactFile {
-            return RandomAccessArtifactFile(getMonitor(), getStorageCredentials(), properties).apply {
+            return RandomAccessArtifactFile(
+                monitor = getMonitor(),
+                storageCredentials = getStorageCredentials(),
+                storageProperties = properties,
+                registry = observationRegistry
+            ).apply {
                 track(this)
             }
         }
 
         /**
-         * 通过输入流构造artifact file
+         * 通过输入流构造artifact file, 主要针对上传请求对其做限流操作
          * @param inputStream 输入流
          */
-        fun build(inputStream: InputStream, contentLength: Long? = null): ArtifactFile {
+        fun buildWithRateLimiter(inputStream: InputStream, contentLength: Long? = null): ArtifactFile {
             return StreamArtifactFile(
-                inputStream, getMonitor(), properties, getStorageCredentials(), contentLength
+                source = inputStream,
+                monitor = getMonitor(),
+                storageProperties = properties,
+                storageCredentials = getStorageCredentials(),
+                contentLength = contentLength,
+                requestLimitCheckService = requestLimitCheckService,
+                registry = observationRegistry
+            ).apply {
+                track(this)
+            }
+        }
+
+        /**
+         * 通过输入流构造artifact file，服务内部输入流转换成文件使用
+         * @param inputStream 输入流
+         */
+        fun build(
+            inputStream: InputStream, contentLength: Long? = null, storageCredentials: StorageCredentials? = null
+        ): ArtifactFile {
+            val realStorageCredentials = storageCredentials ?: getStorageCredentials()
+            return StreamArtifactFile(
+                source = inputStream,
+                monitor = getMonitor(),
+                storageProperties = properties,
+                storageCredentials = realStorageCredentials,
+                contentLength = contentLength,
+                registry = observationRegistry
             ).apply {
                 track(this)
             }
@@ -127,7 +182,8 @@ class ArtifactFileFactory(
          */
         fun build(multipartFile: MultipartFile, storageCredentials: StorageCredentials): ArtifactFile {
             return MultipartArtifactFile(
-                multipartFile, getMonitor(storageCredentials), properties, storageCredentials
+                multipartFile, getMonitor(storageCredentials), properties, storageCredentials,
+                requestLimitCheckService = requestLimitCheckService, observationRegistry
             ).apply {
                 track(this)
             }
@@ -169,7 +225,7 @@ class ArtifactFileFactory(
         }
 
         private fun getMonitor(
-            storageCredentials: StorageCredentials? = null
+            storageCredentials: StorageCredentials? = null,
         ): StorageHealthMonitor {
             val credentials = storageCredentials ?: getStorageCredentials()
             return monitorHelper.getMonitor(properties, credentials)

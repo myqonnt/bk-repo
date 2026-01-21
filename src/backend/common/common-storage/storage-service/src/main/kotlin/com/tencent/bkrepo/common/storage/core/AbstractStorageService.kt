@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -31,6 +31,7 @@
 
 package com.tencent.bkrepo.common.storage.core
 
+import com.tencent.bkrepo.common.api.util.TraceUtils
 import com.tencent.bkrepo.common.artifact.api.ArtifactFile
 import com.tencent.bkrepo.common.artifact.stream.ArtifactInputStream
 import com.tencent.bkrepo.common.artifact.stream.Range
@@ -39,8 +40,11 @@ import com.tencent.bkrepo.common.storage.filesystem.check.SynchronizeResult
 import com.tencent.bkrepo.common.storage.message.StorageErrorException
 import com.tencent.bkrepo.common.storage.message.StorageMessageCode
 import com.tencent.bkrepo.common.storage.monitor.Throughput
-import java.util.concurrent.atomic.AtomicBoolean
+import io.micrometer.common.KeyValues
+import io.micrometer.observation.ObservationRegistry
 import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Autowired
+import java.io.File
 import kotlin.system.measureNanoTime
 
 /**
@@ -49,11 +53,13 @@ import kotlin.system.measureNanoTime
 @Suppress("TooGenericExceptionCaught")
 abstract class AbstractStorageService : CompressSupport() {
 
+    @Autowired
+    lateinit var registry: ObservationRegistry
+
     override fun store(
         digest: String,
         artifactFile: ArtifactFile,
         storageCredentials: StorageCredentials?,
-        cancel: AtomicBoolean?,
         storageClass: String?,
     ): Int {
         val path = fileLocator.locate(digest)
@@ -65,7 +71,7 @@ abstract class AbstractStorageService : CompressSupport() {
             } else {
                 val size = artifactFile.getSize()
                 val nanoTime = measureNanoTime {
-                    doStore(path, digest, artifactFile, credentials, cancel, storageClass)
+                    doStore(path, digest, artifactFile, credentials, storageClass)
                 }
                 val throughput = Throughput(size, nanoTime)
                 logger.info("Success to store artifact file [$digest], $throughput.")
@@ -160,7 +166,30 @@ abstract class AbstractStorageService : CompressSupport() {
         }
     }
 
+    protected fun ArtifactFile.traceableFlushToFile(): File {
+        val lowKVs: KeyValues = KeyValues.empty()
+        val highKVs: KeyValues = KeyValues.of("size", getSize().toString())
+        val spanName = if (isFallback()) {
+            FALLBACK_FLUSH
+        } else if (isInLocalDisk()) {
+            LOCAL_FLUSH
+        } else {
+            NORMAL_FLUSH
+        }
+        return TraceUtils.newSpan(
+            observationRegistry = registry,
+            spanName = spanName,
+            lowCardinalityKeyValues = lowKVs,
+            highCardinalityKeyValues = highKVs
+        ) {
+            flushToFile()
+        }
+    }
+
     companion object {
         private val logger = LoggerFactory.getLogger(AbstractStorageService::class.java)
+        private const val FALLBACK_FLUSH = "fallback flush"
+        private const val LOCAL_FLUSH = "local flush"
+        private const val NORMAL_FLUSH = "normal flush"
     }
 }

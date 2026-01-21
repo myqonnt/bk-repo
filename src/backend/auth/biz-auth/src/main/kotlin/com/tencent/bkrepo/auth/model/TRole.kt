@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -31,7 +31,9 @@
 
 package com.tencent.bkrepo.auth.model
 
+import com.tencent.bkrepo.auth.pojo.DeptInfo
 import com.tencent.bkrepo.auth.pojo.enums.RoleType
+import com.tencent.bkrepo.auth.pojo.role.RoleSource
 import org.springframework.data.mongodb.core.index.CompoundIndex
 import org.springframework.data.mongodb.core.index.CompoundIndexes
 import org.springframework.data.mongodb.core.mapping.Document
@@ -44,15 +46,18 @@ import org.springframework.data.mongodb.core.mapping.Document
     CompoundIndex(name = "roleId_idx", def = "{'roleId': 1}", background = true),
     CompoundIndex(name = "type_idx", def = "{'type': 1}", background = true),
     CompoundIndex(name = "projectId_idx", def = "{'projectId': 1}", background = true),
-    CompoundIndex(name = "repoName_idx", def = "{'repoName': 1}", background = true)
+    CompoundIndex(name = "repoName_idx", def = "{'repoName': 1}", background = true),
+    CompoundIndex(name = "source_idx", def = "{'source': 1}", background = true)
 )
 data class TRole(
     val id: String? = null,
     val roleId: String,
     val type: RoleType,
     var name: String,
-    val projectId: String,
+    val projectId: String? = null,
     val repoName: String? = null,
     val admin: Boolean = false,
-    var description: String? = null
+    var description: String? = null,
+    var source: RoleSource? = null,
+    var deptInfoList: List<DeptInfo>? = null
 )

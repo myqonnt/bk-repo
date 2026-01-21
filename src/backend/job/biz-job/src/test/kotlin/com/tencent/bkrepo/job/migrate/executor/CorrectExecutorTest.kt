@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2024 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2024 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -27,11 +27,12 @@
 
 package com.tencent.bkrepo.job.migrate.executor
 
-import com.tencent.bkrepo.common.api.pojo.Response
 import com.tencent.bkrepo.job.UT_PROJECT_ID
 import com.tencent.bkrepo.job.UT_REPO_NAME
 import com.tencent.bkrepo.job.migrate.pojo.MigrateRepoStorageTaskState.CORRECT_FINISHED
 import com.tencent.bkrepo.job.migrate.pojo.MigrateRepoStorageTaskState.MIGRATE_FINISHED
+import com.tencent.bkrepo.job.migrate.utils.MigrateTestUtils.createNode
+import com.tencent.bkrepo.job.migrate.utils.MigrateTestUtils.removeNodes
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -61,16 +62,17 @@ class CorrectExecutorTest @Autowired constructor(
     fun beforeEach() {
         initMock()
         migrateRepoStorageTaskDao.remove(Query())
-        removeNodes()
+        mongoTemplate.removeNodes()
     }
 
     @Test
     fun correctSuccess() {
         val now = LocalDateTime.now()
         // 创建待迁移node
-        createNode(createDate = now.minusMinutes(1L))
-        createNode(createDate = now)
-        createNode(createDate = now.plusMinutes(1L))
+        mongoTemplate.createNode(createDate = now.minusMinutes(1L))
+        mongoTemplate.createNode(createDate = now)
+        mongoTemplate.createNode(createDate = now, archived = true)
+        mongoTemplate.createNode(createDate = now.plusMinutes(1L))
         // 创建任务
         var task = createTask()
         updateTask(task.id!!, MIGRATE_FINISHED.name, now)
@@ -79,7 +81,7 @@ class CorrectExecutorTest @Autowired constructor(
         Thread.sleep(100L)
         assertTrue(executingTaskRecorder.executing(task.id!!))
 
-        // 等待执行结素和
+        // 等待执行结束
         Thread.sleep(1000L)
         context.waitAllTransferFinished()
         task = migrateTaskService.findTask(UT_PROJECT_ID, UT_REPO_NAME)!!
@@ -93,10 +95,10 @@ class CorrectExecutorTest @Autowired constructor(
         whenever(storageService.copy(anyString(), anyOrNull(), anyOrNull())).then {
             throw FileNotFoundException()
         }
-        whenever(fileReferenceClient.count(anyString(), anyOrNull())).thenReturn(Response(0, data = 1L))
+        whenever(fileReferenceService.count(anyString(), anyOrNull())).thenReturn(1L)
         // 创建node用于模拟遍历迁移
         val now = LocalDateTime.now()
-        createNode(createDate = now.plusMinutes(1L))
+        mongoTemplate.createNode(createDate = now.plusMinutes(1L))
 
         // 执行任务
         val task = createTask()

@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2019 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2019 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -28,8 +28,15 @@
 package com.tencent.bkrepo.job.config.properties
 
 import org.springframework.boot.context.properties.ConfigurationProperties
+import org.springframework.stereotype.Component
+import java.time.Duration
 
+@Component
 @ConfigurationProperties(value = "job.archived-node-complete")
-class ArchivedNodeCompleteJobProperties(
-    override var cron: String = "0 0 0/1 * * ?",
-) : MongodbJobProperties()
+class ArchivedNodeCompleteJobProperties : MongodbJobProperties() {
+    override var cron: String = "0 0 0/1 * * ?"
+    /**
+     * 只允许标记最后访问时间与当前时间间隔大于该值的制品为已归档
+     */
+    var minAccessInterval: Duration = Duration.ofDays(7L)
+}

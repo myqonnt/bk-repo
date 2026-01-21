@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -35,9 +35,9 @@ import com.tencent.bkrepo.common.notify.pojo.enums.EnumEmailFormat
 import com.tencent.bkrepo.common.notify.pojo.enums.EnumEmailType
 import com.tencent.bkrepo.common.notify.pojo.enums.EnumNotifyPriority
 import com.tencent.bkrepo.common.notify.pojo.enums.EnumNotifySource
-import io.swagger.annotations.ApiModel
+import io.swagger.v3.oas.annotations.media.Schema
 
-@ApiModel("邮件")
+@Schema(title = "邮件")
 open class EmailNotifyMessage(
     var format: EnumEmailFormat = EnumEmailFormat.PLAIN_TEXT,
     var type: EnumEmailType = EnumEmailType.OUTER_MAIL,

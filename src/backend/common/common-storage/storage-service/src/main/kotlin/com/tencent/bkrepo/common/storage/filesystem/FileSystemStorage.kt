@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -40,8 +40,10 @@ import com.tencent.bkrepo.common.storage.credentials.StorageCredentials
 import java.io.File
 import java.io.InputStream
 import java.nio.file.Files
+import java.nio.file.Path
 import java.nio.file.Paths
 import java.nio.file.StandardCopyOption
+import java.util.stream.Stream
 
 /**
  * 文件系统存储
@@ -90,5 +92,9 @@ open class FileSystemStorage : AbstractEncryptorFileStorage<FileSystemCredential
         val fromFullPath = Paths.get(fromClient.root, fromPath, fromName)
         val toFullPath = Paths.get(toClient.root, toPath, toName)
         Files.move(fromFullPath, toFullPath, StandardCopyOption.REPLACE_EXISTING)
+    }
+
+    override fun listAll(path: String, client: FileSystemClient): Stream<Path> {
+        return client.walk(path).filter { Files.isRegularFile(it) }
     }
 }

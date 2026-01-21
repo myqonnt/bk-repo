@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -29,8 +29,8 @@ package com.tencent.bkrepo.replication.api
 
 import com.tencent.bkrepo.common.api.constant.REPLICATION_SERVICE_NAME
 import com.tencent.bkrepo.common.api.pojo.Response
-import io.swagger.annotations.Api
-import io.swagger.annotations.ApiOperation
+import io.swagger.v3.oas.annotations.Operation
+import io.swagger.v3.oas.annotations.tags.Tag
 import org.springframework.cloud.openfeign.FeignClient
 import org.springframework.context.annotation.Primary
 import org.springframework.web.bind.annotation.DeleteMapping
@@ -40,12 +40,12 @@ import org.springframework.web.bind.annotation.RequestParam
 /**
  * 分发服务操作接口
  */
-@Api("分发服务操作接口")
+@Tag(name = "分发服务操作接口")
 @Primary
 @FeignClient(REPLICATION_SERVICE_NAME, contextId = "DistributionClient")
 @RequestMapping("/service/distribution")
 interface DistributionClient {
-    @ApiOperation("删除已完成的一次性执行任务")
+    @Operation(summary = "删除已完成的一次性执行任务")
     @DeleteMapping("/delete")
     fun deleteRunonceTask(
         @RequestParam taskName: String

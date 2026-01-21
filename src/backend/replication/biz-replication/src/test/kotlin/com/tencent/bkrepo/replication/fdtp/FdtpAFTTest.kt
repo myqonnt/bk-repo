@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2019 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2019 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -29,25 +29,31 @@ package com.tencent.bkrepo.replication.fdtp
 
 import com.tencent.bkrepo.common.artifact.config.ArtifactConfigurer
 import com.tencent.bkrepo.common.artifact.hash.sha256
-import com.tencent.bkrepo.common.artifact.metrics.ARTIFACT_UPLOADING_TIME
+import com.tencent.bkrepo.common.artifact.manager.NodeForwardService
 import com.tencent.bkrepo.common.artifact.metrics.ArtifactMetrics
 import com.tencent.bkrepo.common.artifact.repository.composite.CompositeRepository
 import com.tencent.bkrepo.common.artifact.repository.context.ArtifactClient
 import com.tencent.bkrepo.common.artifact.repository.context.ArtifactContextHolder
 import com.tencent.bkrepo.common.artifact.repository.proxy.ProxyRepository
 import com.tencent.bkrepo.common.artifact.resolve.file.ArtifactFileFactory
+import com.tencent.bkrepo.common.metrics.constant.ARTIFACT_UPLOADING_TIME
+import com.tencent.bkrepo.common.ratelimiter.config.RateLimiterProperties
+import com.tencent.bkrepo.common.ratelimiter.service.RequestLimitCheckService
 import com.tencent.bkrepo.common.security.http.core.HttpAuthSecurity
 import com.tencent.bkrepo.common.security.service.ServiceAuthManager
 import com.tencent.bkrepo.common.security.service.ServiceAuthProperties
 import com.tencent.bkrepo.common.service.cluster.ClusterInfo
 import com.tencent.bkrepo.common.service.util.SpringContextUtils
-import com.tencent.bkrepo.common.storage.core.StorageProperties
+import com.tencent.bkrepo.common.storage.config.StorageProperties
 import com.tencent.bkrepo.common.storage.monitor.StorageHealthMonitorHelper
 import com.tencent.bkrepo.fdtp.codec.DefaultFdtpHeaders
 import com.tencent.bkrepo.fdtp.codec.FdtpResponseStatus
 import com.tencent.bkrepo.replication.constant.SHA256
 import io.micrometer.core.instrument.Timer
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry
+import io.micrometer.observation.ObservationRegistry
+import io.micrometer.tracing.Tracer
+import io.micrometer.tracing.otel.bridge.OtelTracer
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkObject
@@ -57,9 +63,8 @@ import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
 import org.mockito.Mockito
+import org.springframework.beans.factory.ObjectProvider
 import org.springframework.cloud.loadbalancer.support.SimpleObjectProvider
-import org.springframework.cloud.sleuth.Tracer
-import org.springframework.cloud.sleuth.otel.bridge.OtelTracer
 import java.io.ByteArrayInputStream
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
@@ -95,15 +100,17 @@ class FdtpAFTTest {
         val proxyRepository = Mockito.mock(ProxyRepository::class.java)
         val artifactClient = Mockito.mock(ArtifactClient::class.java)
         val httpAuthSecurity = SimpleObjectProvider<HttpAuthSecurity>(null)
+        val limitCheckService = RequestLimitCheckService(RateLimiterProperties())
         ArtifactContextHolder(
             listOf(artifactConfigurer),
             compositeRepository,
             proxyRepository,
             artifactClient,
             httpAuthSecurity,
+            Mockito.mock(ObjectProvider::class.java) as ObjectProvider<NodeForwardService>
         )
         val helper = StorageHealthMonitorHelper(ConcurrentHashMap())
-        ArtifactFileFactory(StorageProperties(), helper)
+        ArtifactFileFactory(StorageProperties(), helper, limitCheckService, ObservationRegistry.NOOP)
         mockkObject(ArtifactMetrics)
         every { ArtifactMetrics.getUploadingCounters(any()) } returns emptyList()
         every { ArtifactMetrics.getUploadingTimer(any()) } returns Timer.builder(ARTIFACT_UPLOADING_TIME)

@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -86,7 +86,8 @@ const val ANALYSIS_EXECUTOR_SERVICE_NAME = "\${service.prefix:}analysis-executor
 const val HELM_SERVICE_NAME = "\${service.prefix:}helm\${service.suffix:}"
 const val OCI_SERVICE_NAME = "\${service.prefix:}docker\${service.suffix:}"
 const val JOB_SERVICE_NAME = "\${service.prefix:}job\${service.suffix:}"
-const val FS_SERVER_SERVICE_NAME = "\${service.prefix:}fs-server\${service.suffix:}"
+const val SCHEDULE_SERVICE_NAME = "\${service.prefix:}job-schedule\${service.suffix:}"
+const val FS_SERVER_SERVICE_NAME = "\${service.prefix:}driver\${service.suffix:}"
 const val MAVEN_SERVICE_NAME = "\${service.prefix:}maven\${service.suffix:}"
 const val ARCHIVE_SERVICE_NAME = "\${service.prefix:}archive\${service.suffix:}"
 const val OPDATA_SERVICE_NAME = "\${service.prefix:}opdata\${service.suffix:}"
@@ -104,6 +105,8 @@ const val AUTH_HEADER_UID = "X-BKREPO-UID"
 const val OAUTH_AUTH_PREFIX = "Oauth "
 const val TEMPORARY_TOKEN_AUTH_PREFIX = "Temporary "
 
+
+
 /**
  * micro service header user id key
  */
@@ -112,6 +115,8 @@ const val MS_AUTH_HEADER_UID = "X-BKREPO-MS-UID"
 const val MS_REQUEST_SRC_CLUSTER = "X-BKREPO-MS-CLUSTER"
 
 const val PROXY_HEADER_NAME = "X-BKREPO-PROXY-NAME"
+
+const val COMMIT_EDGE_HEADER = "X-BKREPO-COMMIT-EDGE"
 
 /**
  * 验证是否允许下载时，写入request attributes的key
@@ -135,6 +140,46 @@ const val ACCESS_FROM_API = "api"
 const val ACCESS_FROM_WEB = "web"
 
 /**
+ * 用于标记devx访问来源, office or others
+ */
+const val HEADER_DEVX_ACCESS_FROM = "X-BKREPO-DEVX-ACCESS-FROM"
+
+/**
+ * devx 访问来源, office
+ */
+const val DEVX_ACCESS_FROM_OFFICE = "devx_office"
+
+/**
+ * devx 访问来源, others
+ */
+const val DEVX_ACCESS_FROM_OTHERS = "others"
+
+/**
  * b3 trace header
  */
 const val B3_TRACE = "b3"
+
+/**
+ * bkrepo trace header
+ */
+const val BKREPO_TRACE = "X-BKREPO-RID"
+
+/**
+ * codecc 业务前缀
+ */
+const val CODE_PROJECT_PREFIX = "CODE_"
+const val CLOSED_SOURCE_PREFIX = "CLOSED_SOURCE_"
+
+
+const val AUDITED_UID = "audited_uid"
+const val AUDIT_REQUEST_URI = "audit_request_uri"
+const val AUDIT_REQUEST_KEY = "http_request"
+const val AUDIT_SHARE_USER_ID = "audit_share_user_id"
+const val HTTP_RESPONSE_CODE = "http_response_code"
+const val HTTP_METHOD = "http_method"
+
+
+/**
+ * 多租户相关
+ */
+const val TENANT_ID = "X-Bk-Tenant-Id"

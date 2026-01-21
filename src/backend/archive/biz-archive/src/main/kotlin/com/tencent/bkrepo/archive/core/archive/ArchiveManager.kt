@@ -4,9 +4,10 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder
 import com.tencent.bkrepo.archive.ArchiveStatus
 import com.tencent.bkrepo.archive.config.ArchiveProperties
 import com.tencent.bkrepo.archive.constant.ArchiveStorageClass
+import com.tencent.bkrepo.archive.core.provider.FileTask
 import com.tencent.bkrepo.archive.event.FileArchivedEvent
 import com.tencent.bkrepo.archive.event.FileRestoredEvent
-import com.tencent.bkrepo.archive.core.FileProvider
+import com.tencent.bkrepo.archive.core.provider.PriorityFileProvider
 import com.tencent.bkrepo.archive.core.TaskResult
 import com.tencent.bkrepo.archive.model.TArchiveFile
 import com.tencent.bkrepo.archive.repository.ArchiveFileDao
@@ -22,6 +23,8 @@ import com.tencent.bkrepo.common.storage.monitor.Throughput
 import com.tencent.bkrepo.common.storage.monitor.measureThroughput
 import org.apache.tika.Tika
 import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.context.annotation.Lazy
 import org.springframework.stereotype.Component
 import reactor.core.publisher.Mono
 import reactor.core.scheduler.Schedulers
@@ -29,16 +32,25 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
 import java.time.LocalDateTime
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.function.Function
 
 @Component
 class ArchiveManager(
     private val archiveProperties: ArchiveProperties,
-    private val fileProvider: FileProvider,
-    private val archiveFileDao: ArchiveFileDao,
-    private val archiveFileRepository: ArchiveFileRepository,
-    private val storageService: StorageService,
+    private val fileProvider: PriorityFileProvider,
 ) : Function<TArchiveFile, Mono<TaskResult>> {
+    @Autowired
+    @Lazy
+    private lateinit var archiveFileDao: ArchiveFileDao
+
+    @Autowired
+    @Lazy
+    private lateinit var archiveFileRepository: ArchiveFileRepository
+
+    @Autowired
+    @Lazy
+    private lateinit var storageService: StorageService
 
     private val tika = Tika()
     private val compressPool = ArchiveUtils.newFixedAndCachedThreadPool(
@@ -54,6 +66,7 @@ class ArchiveManager(
         ThreadFactoryBuilder().setNameFormat("archive-worker-%d").build(),
     )
     private val scheduler = Schedulers.fromExecutor(archiveThreadPool)
+    private val prioritySeq = AtomicInteger(Int.MIN_VALUE)
 
     init {
         if (!Files.exists(compressedPath)) {
@@ -115,7 +128,8 @@ class ArchiveManager(
         Files.createDirectories(dir)
         val credentials = ArchiveUtils.getStorageCredentials(storageCredentialsKey)
         val begin = System.nanoTime()
-        val ret = fileProvider.get(sha256, Range.full(file.size), credentials)
+        val fileTask = FileTask(sha256, Range.full(file.size), credentials)
+        val ret = fileProvider.get(fileTask)
             .publishOn(scheduler)
             .flatMap {
                 val filePath = dir.resolve(sha256)
@@ -197,7 +211,8 @@ class ArchiveManager(
         Files.createDirectories(dir)
         val begin = System.nanoTime()
         val range = if (file.compressedSize == -1L) Range.FULL_RANGE else Range.full(file.compressedSize)
-        val ret = fileProvider.get(key, range, credentials)
+        val fileTask = FileTask(key, range, credentials, prioritySeq.getAndIncrement())
+        val ret = fileProvider.get(fileTask)
             .publishOn(scheduler)
             .flatMap {
                 val archiveFilePath = dir.resolve(key)

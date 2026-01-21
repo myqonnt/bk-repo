@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -75,6 +75,11 @@ enum class AuthMessageCode(private val businessCode: Int, private val key: Strin
     AUTH_ACCOUT_FORAUTH_NOT_PERM(37, "auth.account.forauth.not-perm"),
     AUTH_ENTITY_USER_NOT_EXIST(38, "auth.entity.user.not-exist"),
     AUTH_PROXY_NOT_EXIST(39,"auth.proxy.not-exist"),
+    AUTH_CREATE_ROLE_INVALID_WITHOUT_PROJECT(40, "auth.create.role.invalid.without-project"),
+    AUTH_CREATE_SERVICE_ROLE_WITH_PROJECT(41, "auth.create.service-role.with-project"),
+    AUTH_PLATFORM_ONLY(42, "auth.platform.only"),
+    AUTH_IAM_TOKEN_CHECK_FAILED(43, "auth.iam.token.check.failed"),
+    TOKEN_DISABLED(44, "auth.token.disabled"),
     ;
 
     override fun getBusinessCode() = businessCode

@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2023 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2023 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -27,30 +27,24 @@
 
 package com.tencent.bkrepo.common.artifact.repository.redirect
 
-import com.tencent.bkrepo.common.api.constant.HttpStatus
 import com.tencent.bkrepo.common.api.constant.StringPool
-import com.tencent.bkrepo.common.api.exception.ErrorCodeException
-import com.tencent.bkrepo.common.api.message.CommonMessageCode
 import com.tencent.bkrepo.common.artifact.repository.context.ArtifactContextHolder
 import com.tencent.bkrepo.common.artifact.repository.context.ArtifactDownloadContext
-import com.tencent.bkrepo.common.artifact.stream.Range
 import com.tencent.bkrepo.common.artifact.util.http.HttpHeaderUtils.determineMediaType
 import com.tencent.bkrepo.common.artifact.util.http.HttpHeaderUtils.encodeDisposition
-import com.tencent.bkrepo.common.artifact.util.http.HttpRangeUtils
-import com.tencent.bkrepo.common.security.manager.PermissionManager
-import com.tencent.bkrepo.common.security.util.SecurityUtils
+import com.tencent.bkrepo.common.metadata.constant.FAKE_SHA256
 import com.tencent.bkrepo.common.service.util.HttpContextHolder
-import com.tencent.bkrepo.common.storage.core.StorageProperties
+import com.tencent.bkrepo.common.storage.config.StorageProperties
 import com.tencent.bkrepo.common.storage.core.StorageService
 import com.tencent.bkrepo.common.storage.credentials.InnerCosCredentials
 import com.tencent.bkrepo.common.storage.credentials.StorageCredentials
 import com.tencent.bkrepo.common.storage.innercos.client.ClientConfig
 import com.tencent.bkrepo.common.storage.innercos.endpoint.DefaultEndpointResolver
+import com.tencent.bkrepo.common.storage.innercos.http.Headers
 import com.tencent.bkrepo.common.storage.innercos.http.HttpProtocol
 import com.tencent.bkrepo.common.storage.innercos.request.CosRequest
 import com.tencent.bkrepo.common.storage.innercos.request.GetObjectRequest
 import com.tencent.bkrepo.common.storage.innercos.urlEncode
-import com.tencent.bkrepo.repository.constant.SYSTEM_USER
 import com.tencent.bkrepo.repository.pojo.node.NodeDetail
 import org.slf4j.LoggerFactory
 import org.springframework.core.annotation.Order
@@ -59,6 +53,7 @@ import org.springframework.stereotype.Service
 import java.time.Duration
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 /**
  * 当使用对象存储作为后端存储时，支持创建对象的预签名下载URL，并将用户的下载请求重定向到该URL
@@ -68,7 +63,6 @@ import java.time.format.DateTimeFormatter
 class CosRedirectService(
     private val storageProperties: StorageProperties,
     private val storageService: StorageService,
-    private val permissionManager: PermissionManager,
 ) : DownloadRedirectService {
     override fun shouldRedirect(context: ArtifactDownloadContext): Boolean {
         if (!storageProperties.redirect.enabled) {
@@ -83,7 +77,8 @@ class CosRedirectService(
             node.folder ||
             artifact == null ||
             node.compressed == true || // 压缩文件不支持重定向
-            node.archived == true // 归档文件不支持重定向
+            node.archived == true || // 归档文件不支持重定向
+            node.sha256 == FAKE_SHA256 // block-node或link-node不支持重定向
         ) {
             return false
         }
@@ -111,7 +106,7 @@ class CosRedirectService(
             storageProperties.redirect.redirectAllDownload
 
         // 文件存在于COS上时才会被重定向
-        return needToRedirect && isSystemOrAdmin() && guessFileExists(node, storageCredentials)
+        return needToRedirect && isProjectAllowed(context.projectId) && guessFileExists(node, storageCredentials)
     }
 
     override fun redirect(context: ArtifactDownloadContext) {
@@ -126,8 +121,11 @@ class CosRedirectService(
             endpointResolver = DefaultEndpointResolver()
             httpProtocol = HttpProtocol.HTTPS
         }
-        val range = resolveRange(node.size)
-        val request = GetObjectRequest(node.sha256!!, range?.start, range?.end)
+        val request = GetObjectRequest(node.sha256!!)
+        val range = HttpContextHolder.getRequest().getHeader(Headers.RANGE)
+        if (!range.isNullOrEmpty()) {
+            request.headers[Headers.RANGE] = range
+        }
         addCosResponseHeaders(context, request, node)
         val urlencodedSign = request.sign(credentials, clientConfig).urlEncode(true)
         if (request.parameters.isEmpty()) {
@@ -141,27 +139,10 @@ class CosRedirectService(
         context.response.sendRedirect(request.url)
     }
 
-    private fun resolveRange(total: Long): Range? {
-        return try {
-            val request = HttpContextHolder.getRequest()
-            if (request.getHeader(HttpHeaders.RANGE).isNullOrEmpty()) {
-                null
-            } else {
-                HttpRangeUtils.resolveRange(request, total)
-            }
-        } catch (exception: IllegalArgumentException) {
-            logger.warn("Failed to resolve http range: ${exception.message}")
-            throw ErrorCodeException(
-                status = HttpStatus.REQUESTED_RANGE_NOT_SATISFIABLE,
-                messageCode = CommonMessageCode.REQUEST_RANGE_INVALID,
-            )
-        }
-    }
-
     private fun addCosResponseHeaders(context: ArtifactDownloadContext, request: CosRequest, node: NodeDetail) {
         val filename = context.artifactInfo.getResponseName()
         val cacheControl = node.metadata[HttpHeaders.CACHE_CONTROL]?.toString()
-            ?: node.metadata[HttpHeaders.CACHE_CONTROL.toLowerCase()]?.toString()
+            ?: node.metadata[HttpHeaders.CACHE_CONTROL.lowercase(Locale.getDefault())]?.toString()
             ?: StringPool.NO_CACHE
         request.parameters["response-cache-control"] = cacheControl
         val mime = determineMediaType(filename, storageProperties.response.mimeMappings)
@@ -189,9 +170,9 @@ class CosRedirectService(
         return storageService.exist(node.sha256!!, storageCredentials)
     }
 
-    private fun isSystemOrAdmin(): Boolean {
-        val userId = SecurityUtils.getUserId()
-        return userId == SYSTEM_USER || permissionManager.isAdminUser(SecurityUtils.getUserId())
+    private fun isProjectAllowed(projectId: String ): Boolean {
+        val blackProjectList = storageProperties.redirect.projectBlackList
+        return !blackProjectList.contains(projectId)
     }
 
     companion object {

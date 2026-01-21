@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -27,29 +27,33 @@
 
 package com.tencent.bkrepo.job.batch.task.archive
 
+import com.tencent.bkrepo.archive.ArchiveStatus.WAIT_TO_RESTORE
+import com.tencent.bkrepo.archive.ArchiveStatus.RESTORING
+import com.tencent.bkrepo.archive.ArchiveStatus.RESTORED
 import com.tencent.bkrepo.archive.api.ArchiveClient
 import com.tencent.bkrepo.archive.constant.ArchiveStorageClass
 import com.tencent.bkrepo.archive.request.CreateArchiveFileRequest
-import com.tencent.bkrepo.common.mongo.dao.util.sharding.HashShardingUtils
-import com.tencent.bkrepo.fs.server.constant.FAKE_SHA256
+import com.tencent.bkrepo.common.metadata.constant.FAKE_SHA256
+import com.tencent.bkrepo.common.metadata.service.file.FileReferenceService
+import com.tencent.bkrepo.common.mongo.api.util.sharding.HashShardingUtils
+import com.tencent.bkrepo.common.storage.core.StorageService
 import com.tencent.bkrepo.job.SHARDING_COUNT
 import com.tencent.bkrepo.job.batch.base.MongoDbBatchJob
 import com.tencent.bkrepo.job.batch.context.NodeContext
 import com.tencent.bkrepo.job.batch.utils.RepositoryCommonUtils
 import com.tencent.bkrepo.job.batch.utils.TimeUtils
 import com.tencent.bkrepo.job.config.properties.IdleNodeArchiveJobProperties
-import com.tencent.bkrepo.repository.api.FileReferenceClient
+import com.tencent.bkrepo.job.migrate.MigrateRepoStorageService
 import com.tencent.bkrepo.repository.constant.SYSTEM_USER
-import java.time.Duration
-import java.time.LocalDateTime
-import java.util.concurrent.ConcurrentHashMap
 import org.slf4j.LoggerFactory
-import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.data.mongodb.core.query.Criteria
 import org.springframework.data.mongodb.core.query.Query
 import org.springframework.data.mongodb.core.query.inValues
 import org.springframework.data.mongodb.core.query.isEqualTo
 import org.springframework.stereotype.Component
+import java.time.Duration
+import java.time.LocalDateTime
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.reflect.KClass
 
 /**
@@ -61,11 +65,12 @@ import kotlin.reflect.KClass
  * 4. 如果未被使用，则进行归档。
  * */
 @Component
-@EnableConfigurationProperties(IdleNodeArchiveJobProperties::class)
 class IdleNodeArchiveJob(
     private val properties: IdleNodeArchiveJobProperties,
     private val archiveClient: ArchiveClient,
-    private val fileReferenceClient: FileReferenceClient,
+    private val fileReferenceService: FileReferenceService,
+    private val migrateRepoStorageService: MigrateRepoStorageService,
+    private val storageService: StorageService,
 ) : MongoDbBatchJob<IdleNodeArchiveJob.Node, NodeContext>(properties) {
     private var lastCutoffTime: LocalDateTime? = null
     private var tempCutoffTime: LocalDateTime? = null
@@ -74,8 +79,8 @@ class IdleNodeArchiveJob(
 
     override fun collectionNames(): List<String> {
         val collectionNames = mutableListOf<String>()
-        if (properties.projects.isNotEmpty()) {
-            properties.projects.forEach {
+        if (properties.projectArchiveCredentialsKeys.isNotEmpty()) {
+            properties.projectArchiveCredentialsKeys.keys.forEach {
                 val index = HashShardingUtils.shardingSequenceFor(it, SHARDING_COUNT)
                 collectionNames.add("$COLLECTION_NAME_PREFIX$index")
             }
@@ -88,6 +93,10 @@ class IdleNodeArchiveJob(
     override fun getLockAtMostFor(): Duration = Duration.ofDays(7)
 
     override fun doStart0(jobContext: NodeContext) {
+        if (properties.projectArchiveCredentialsKeys.isEmpty()) {
+            logger.info("projectArchiveCredentialsKeys is empty, skip archive job")
+            return
+        }
         super.doStart0(jobContext)
         // 由于新的文件可能会被删除，所以旧文件数据的引用会被改变，所以需要重新扫描旧文件引用。
         if (refreshCount-- < 0) {
@@ -111,8 +120,8 @@ class IdleNodeArchiveJob(
                 .and("compressed").ne(true)
                 .and("size").gt(properties.fileSizeThreshold.toBytes())
                 .apply {
-                    if (properties.projects.isNotEmpty()) {
-                        and("projectId").inValues(properties.projects)
+                    if (properties.projectArchiveCredentialsKeys.isNotEmpty()) {
+                        and("projectId").inValues(properties.projectArchiveCredentialsKeys.keys)
                     }
                     if (lastCutoffTime == null) {
                         // 首次查询
@@ -128,7 +137,11 @@ class IdleNodeArchiveJob(
     }
 
     override fun run(row: Node, collectionName: String, context: NodeContext) {
-        archiveNode(row, context, ArchiveStorageClass.DEEP_ARCHIVE, null, properties.days)
+        val archiveCredentialsKey = properties.projectArchiveCredentialsKeys[row.projectId]
+        val storageClass = properties.storageClass
+        val days = properties.days
+        logger.info("Start to archive $row, storageClass: $storageClass, collectionName: $collectionName, days: $days")
+        archiveNode(row, context, storageClass, archiveCredentialsKey)
     }
 
     fun archiveNode(
@@ -136,12 +149,16 @@ class IdleNodeArchiveJob(
         context: NodeContext,
         storageClass: ArchiveStorageClass,
         archiveCredentialsKey: String?,
-        days: Int,
     ) {
         val sha256 = row.sha256
         val projectId = row.projectId
         val repoName = row.repoName
         val repo = RepositoryCommonUtils.getRepositoryDetail(projectId, repoName)
+        val migrating = migrateRepoStorageService.migrating(projectId, repoName)
+        if (migrating && !storageService.exist(sha256, repo.storageCredentials)) {
+            logger.info("repo[$projectId/$repoName] is migrating, skip unmigrated node[${row.fullPath}][$sha256]")
+            return
+        }
         val credentialsKey = repo.storageCredentials?.key
         if (properties.ignoreStorageCredentialsKeys.contains(credentialsKey) ||
             properties.ignoreRepoType.contains(repo.type.name)
@@ -154,19 +171,18 @@ class IdleNodeArchiveJob(
             return
         }
         val af = archiveClient.get(sha256, credentialsKey).data
-        if (af == null) {
-            val count = fileReferenceClient.count(sha256, credentialsKey).data
-            // 归档任务不存在
-            if (count == 1L) {
-                // 快速归档
-                createArchiveFile(credentialsKey, context, row, storageClass, archiveCredentialsKey)
-            } else {
-                synchronized(sha256.intern()) {
-                    slowArchive(row, credentialsKey, context, storageClass, archiveCredentialsKey, days)
-                }
-            }
+        if (af?.status in ARCHIVE_STATUS_RESTORING) {
+            logger.info("Archive[$row] job is restoring [${af?.status}].")
+            return
+        }
+        val count = fileReferenceService.count(sha256, credentialsKey)
+        if (count == 1L) {
+            // 快速归档
+            createArchiveFile(credentialsKey, context, row, storageClass, archiveCredentialsKey)
         } else {
-            logger.info("Archive[$row] job already exist[${af.status}].")
+            synchronized(sha256.intern()) {
+                slowArchive(row, credentialsKey, context, storageClass, archiveCredentialsKey)
+            }
         }
     }
 
@@ -176,20 +192,14 @@ class IdleNodeArchiveJob(
         context: NodeContext,
         storageClass: ArchiveStorageClass,
         archiveCredentialsKey: String?,
-        days: Int,
     ) {
         with(row) {
-            val af = archiveClient.get(sha256, credentialsKey).data
-            if (af == null) {
-                val inUse = nodeUseInfoCache[sha256] ?: checkUse(sha256, days, row.projectId)
-                if (inUse) {
-                    // 只需要缓存被使用的情况，这可以避免sha256被重复搜索。当sha256未被使用时，它会创建一条归档记录，所以无需缓存。
-                    nodeUseInfoCache[sha256] = true
-                } else {
-                    createArchiveFile(credentialsKey, context, row, storageClass, archiveCredentialsKey)
-                }
+            val inUse = nodeUseInfoCache[sha256] ?: checkUse(sha256, row.projectId)
+            if (inUse) {
+                // 只需要缓存被使用的情况，这可以避免sha256被重复搜索。当sha256未被使用时，它会创建一条归档记录，所以无需缓存。
+                nodeUseInfoCache[sha256] = true
             } else {
-                logger.info("Archive[$row] job already exist[${af.status}].")
+                createArchiveFile(credentialsKey, context, row, storageClass, archiveCredentialsKey)
             }
         }
     }
@@ -251,23 +261,19 @@ class IdleNodeArchiveJob(
         }
     }
 
-    private fun checkUse(sha256: String, days: Int, projectId: String): Boolean {
-        val cutoffTime = LocalDateTime.now().minus(Duration.ofDays(days.toLong()))
+    private fun checkUse(sha256: String, projectId: String): Boolean {
         /*
         * 满足以下条件之一，则不进行归档
         * 1. 其他项目存在相同sha256的节点。（跨项目的文件会无法归档）
-        * 2. 当前项目存在更新（晚于归档截止时间）的节点。
         * */
-        (0 until SHARDING_COUNT).forEach {
-            val collectionName = COLLECTION_NAME_PREFIX.plus(it)
+        for (i in 0 until SHARDING_COUNT) {
+            val collectionName = COLLECTION_NAME_PREFIX.plus(i)
             val query = Query.query(
                 Criteria.where("sha256").isEqualTo(sha256)
-                    .and("deleted").isEqualTo(null),
+                    .and("deleted").isEqualTo(null)
+                    .and("projectId").ne(projectId)
             )
-            val nodes = mongoTemplate.find(query, Node::class.java, collectionName)
-            val existNode = nodes.firstOrNull { node ->
-                node.projectId != projectId || node.lastAccessDate?.isAfter(cutoffTime) ?: false
-            }
+            val existNode = mongoTemplate.findOne(query, Node::class.java, collectionName)
             if (existNode != null) {
                 logger.info("Find in use $existNode.")
                 return true
@@ -278,6 +284,7 @@ class IdleNodeArchiveJob(
 
     companion object {
         const val COLLECTION_NAME_PREFIX = "node_"
+        private val ARCHIVE_STATUS_RESTORING = listOf(WAIT_TO_RESTORE, RESTORING, RESTORED)
         private const val INITIAL_REFRESH_COUNT = 3
         private val logger = LoggerFactory.getLogger(IdleNodeArchiveJob::class.java)
     }

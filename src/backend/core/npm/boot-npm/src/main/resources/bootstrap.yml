@@ -1,0 +1,12 @@
+spring.application.name: npm
+server.port: 25804
+
+npm:
+  migration:
+    remote-registry:
+    data-url:
+  tarball:
+    prefix:
+  domain: ${cluster.self.url}/npm
+  ohpm-domain: ${cluster.self.url}/ohpm
+

@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -27,10 +27,7 @@
 
 package com.tencent.bkrepo.replication.replica.executor
 
-import com.google.common.util.concurrent.ThreadFactoryBuilder
-import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.ThreadPoolExecutor
-import java.util.concurrent.TimeUnit
 
 /**
  * 用于将一次性分发任务分发到对应执行器的线程池
@@ -39,17 +36,5 @@ object RunOnceThreadPoolExecutor {
     /**
      * 线程池实例
      */
-    val instance: ThreadPoolExecutor = buildThreadPoolExecutor()
-
-    /**
-     * 创建线程池
-     */
-    private fun buildThreadPoolExecutor(): ThreadPoolExecutor {
-        val namedThreadFactory = ThreadFactoryBuilder().setNameFormat("runOnce-worker-%d").build()
-        val corePoolSize = Runtime.getRuntime().availableProcessors() * 2
-        return ThreadPoolExecutor(
-            corePoolSize, corePoolSize * 2, 60, TimeUnit.SECONDS,
-            ArrayBlockingQueue(1024), namedThreadFactory, ThreadPoolExecutor.CallerRunsPolicy()
-        )
-    }
+    val instance: ThreadPoolExecutor = ThreadPoolExecutorBuilder.build(ThreadPoolExecutorBuilder.Configs.RUN_ONCE)
 }

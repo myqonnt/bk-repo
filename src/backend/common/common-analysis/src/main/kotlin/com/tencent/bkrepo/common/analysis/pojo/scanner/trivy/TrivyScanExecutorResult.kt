@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -29,13 +29,13 @@ package com.tencent.bkrepo.common.analysis.pojo.scanner.trivy
 
 import com.tencent.bkrepo.common.analysis.pojo.scanner.ScanExecutorResult
 import com.tencent.bkrepo.common.analysis.pojo.scanner.utils.normalizedLevel
-import io.swagger.annotations.ApiModel
-import io.swagger.annotations.ApiModelProperty
+import io.swagger.v3.oas.annotations.media.Schema
 
-@ApiModel("trivy扫描器扫描结果")
+
+@Schema(title = "trivy扫描器扫描结果")
 data class TrivyScanExecutorResult(
     override val scanStatus: String,
-    @ApiModelProperty("cve审计结果")
+    @get:Schema(title = "cve审计结果")
     val vulnerabilityItems: List<VulnerabilityItem>
 ) : ScanExecutorResult(scanStatus, TrivyScanner.TYPE) {
     override fun normalizeResult() {

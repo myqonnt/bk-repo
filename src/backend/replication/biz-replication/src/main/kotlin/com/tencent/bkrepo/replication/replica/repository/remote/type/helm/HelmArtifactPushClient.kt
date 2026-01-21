@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -36,12 +36,14 @@ import com.tencent.bkrepo.common.artifact.pojo.RepositoryType
 import com.tencent.bkrepo.common.service.cluster.ClusterInfo
 import com.tencent.bkrepo.replication.config.ReplicationProperties
 import com.tencent.bkrepo.replication.manager.LocalDataManager
+import com.tencent.bkrepo.replication.manager.LocalDataManager.Companion.federatedSource
 import com.tencent.bkrepo.replication.pojo.remote.DefaultHandlerResult
 import com.tencent.bkrepo.replication.pojo.remote.RequestProperty
 import com.tencent.bkrepo.replication.replica.context.ReplicaContext
 import com.tencent.bkrepo.replication.replica.repository.remote.base.PushClient
 import com.tencent.bkrepo.replication.util.DefaultHandler
 import com.tencent.bkrepo.repository.pojo.node.NodeDetail
+import io.micrometer.observation.ObservationRegistry
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
 import okhttp3.RequestBody
@@ -58,8 +60,9 @@ import java.net.URL
 class HelmArtifactPushClient(
     private val authService: HelmAuthorizationService,
     replicationProperties: ReplicationProperties,
-    localDataManager: LocalDataManager
-) : PushClient(replicationProperties, localDataManager) {
+    localDataManager: LocalDataManager,
+    registry: ObservationRegistry
+) : PushClient(replicationProperties, localDataManager, registry) {
 
     override fun type(): RepositoryType {
         return RepositoryType.HELM
@@ -166,7 +169,8 @@ class HelmArtifactPushClient(
             sha256 = node.sha256!!,
             size = node.size,
             projectId = node.projectId,
-            repoName = node.repoName
+            repoName = node.repoName,
+            federatedSource = federatedSource(node.nodeInfo)
         )
         val fileName = CHART_FILE_NAME.format(name, version)
         val requestProperty = if (chartMuseum) {

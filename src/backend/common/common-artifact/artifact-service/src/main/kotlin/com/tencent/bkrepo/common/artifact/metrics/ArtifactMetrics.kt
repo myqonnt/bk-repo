@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -31,8 +31,39 @@
 
 package com.tencent.bkrepo.common.artifact.metrics
 
+import com.tencent.bkrepo.common.artifact.metrics.filter.LruMeterFilter
+import com.tencent.bkrepo.common.artifact.metrics.filter.RepositoryPinnedChecker
 import com.tencent.bkrepo.common.artifact.resolve.file.ArtifactDataReceiver
 import com.tencent.bkrepo.common.artifact.stream.ArtifactInputStream
+import com.tencent.bkrepo.common.metrics.constant.ARTIFACT_ACCESS_TIME
+import com.tencent.bkrepo.common.metrics.constant.ARTIFACT_ACCESS_TIME_DESC
+import com.tencent.bkrepo.common.metrics.constant.ARTIFACT_DOWNLOADED_SIZE
+import com.tencent.bkrepo.common.metrics.constant.ARTIFACT_DOWNLOADED_SIZE_DESC
+import com.tencent.bkrepo.common.metrics.constant.ARTIFACT_DOWNLOADING_COUNT
+import com.tencent.bkrepo.common.metrics.constant.ARTIFACT_DOWNLOADING_COUNT_DESC
+import com.tencent.bkrepo.common.metrics.constant.ARTIFACT_DOWNLOADING_SIZE
+import com.tencent.bkrepo.common.metrics.constant.ARTIFACT_DOWNLOADING_SIZE_DESC
+import com.tencent.bkrepo.common.metrics.constant.ARTIFACT_DOWNLOADING_TIME
+import com.tencent.bkrepo.common.metrics.constant.ARTIFACT_DOWNLOADING_TIME_DESC
+import com.tencent.bkrepo.common.metrics.constant.ARTIFACT_DOWNLOAD_FAILED_COUNT
+import com.tencent.bkrepo.common.metrics.constant.ARTIFACT_DOWNLOAD_FAILED_COUNT_DESC
+import com.tencent.bkrepo.common.metrics.constant.ARTIFACT_LIMIT_DOWNLOADING_SIZE
+import com.tencent.bkrepo.common.metrics.constant.ARTIFACT_LIMIT_DOWNLOADING_SIZE_DESC
+import com.tencent.bkrepo.common.metrics.constant.ARTIFACT_LIMIT_UPLOADING_SIZE
+import com.tencent.bkrepo.common.metrics.constant.ARTIFACT_LIMIT_UPLOADING_SIZE_DESC
+import com.tencent.bkrepo.common.metrics.constant.ARTIFACT_UPLOADED_SIZE
+import com.tencent.bkrepo.common.metrics.constant.ARTIFACT_UPLOADED_SIZE_DESC
+import com.tencent.bkrepo.common.metrics.constant.ARTIFACT_UPLOADING_COUNT
+import com.tencent.bkrepo.common.metrics.constant.ARTIFACT_UPLOADING_COUNT_DESC
+import com.tencent.bkrepo.common.metrics.constant.ARTIFACT_UPLOADING_SIZE
+import com.tencent.bkrepo.common.metrics.constant.ARTIFACT_UPLOADING_SIZE_DESC
+import com.tencent.bkrepo.common.metrics.constant.ARTIFACT_UPLOADING_TIME
+import com.tencent.bkrepo.common.metrics.constant.ARTIFACT_UPLOADING_TIME_DESC
+import com.tencent.bkrepo.common.metrics.constant.ASYNC_TASK_ACTIVE_COUNT
+import com.tencent.bkrepo.common.metrics.constant.ASYNC_TASK_ACTIVE_COUNT_DESC
+import com.tencent.bkrepo.common.metrics.constant.ASYNC_TASK_QUEUE_SIZE
+import com.tencent.bkrepo.common.metrics.constant.ASYNC_TASK_QUEUE_SIZE_DESC
+import com.tencent.bkrepo.common.metrics.constant.METER_LIMIT_PREFIX
 import io.micrometer.core.instrument.Counter
 import io.micrometer.core.instrument.DistributionSummary
 import io.micrometer.core.instrument.Gauge
@@ -49,7 +80,6 @@ import java.util.concurrent.atomic.AtomicInteger
 class ArtifactMetrics(
     private val threadPoolTaskExecutor: ThreadPoolTaskExecutor,
     tagProvider: ArtifactTransferTagProvider,
-    meterRegistry: MeterRegistry,
     properties: ArtifactMetricsProperties
 ) : MeterBinder {
 
@@ -58,13 +88,16 @@ class ArtifactMetrics(
 
     init {
         Companion.tagProvider = tagProvider
-        Companion.meterRegistry = meterRegistry
         Companion.properties = properties
-        lruMeterFilter = LruMeterFilter(METER_LIMIT_PREFIX, meterRegistry, properties.maxMeters)
-        meterRegistry.config().meterFilter(lruMeterFilter)
+
     }
 
     override fun bindTo(meterRegistry: MeterRegistry) {
+        Companion.meterRegistry = meterRegistry
+        lruMeterFilter = LruMeterFilter(
+            METER_LIMIT_PREFIX, Companion.meterRegistry, properties.maxMeters, RepositoryPinnedChecker(properties)
+        )
+        Companion.meterRegistry.config().meterFilter(lruMeterFilter)
         Gauge.builder(ARTIFACT_UPLOADING_COUNT, uploadingCount) { it.get().toDouble() }
             .description(ARTIFACT_UPLOADING_COUNT_DESC)
             .register(meterRegistry)
@@ -94,7 +127,7 @@ class ArtifactMetrics(
     companion object {
         private val logger = LoggerFactory.getLogger(ArtifactMetrics::class.java)
         private lateinit var tagProvider: ArtifactTransferTagProvider
-        private lateinit var meterRegistry: MeterRegistry
+        lateinit var meterRegistry: MeterRegistry
         private lateinit var lruMeterFilter: LruMeterFilter
         private lateinit var properties: ArtifactMetricsProperties
         private const val MAX_ATIME = 30.0

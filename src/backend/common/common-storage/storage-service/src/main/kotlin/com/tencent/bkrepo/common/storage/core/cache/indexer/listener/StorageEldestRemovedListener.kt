@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2024 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2024 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -27,7 +27,9 @@
 
 package com.tencent.bkrepo.common.storage.core.cache.indexer.listener
 
+import com.tencent.bkrepo.common.artifact.constant.DEFAULT_STORAGE_KEY
 import com.tencent.bkrepo.common.storage.core.cache.CacheStorageService
+import com.tencent.bkrepo.common.storage.core.cache.indexer.metrics.StorageCacheIndexerMetrics
 import com.tencent.bkrepo.common.storage.core.locator.FileLocator
 import com.tencent.bkrepo.common.storage.credentials.StorageCredentials
 
@@ -39,10 +41,12 @@ open class StorageEldestRemovedListener(
     protected var storageCredentials: StorageCredentials,
     protected val fileLocator: FileLocator,
     protected val storageService: CacheStorageService,
+    protected val storageCacheIndexerMetrics: StorageCacheIndexerMetrics? = null,
 ) : UpdatableEldestRemovedListener<String, Long> {
     override fun onEldestRemoved(key: String, value: Long) {
         val path = fileLocator.locate(key)
-        storageService.deleteCacheFile(path, key, storageCredentials)
+        val deleted = storageService.deleteCacheFile(path, key, storageCredentials)
+        storageCacheIndexerMetrics?.evicted(storageCredentials.key ?: DEFAULT_STORAGE_KEY, value, deleted)
     }
 
     override fun updateCredentials(credentials: StorageCredentials) {

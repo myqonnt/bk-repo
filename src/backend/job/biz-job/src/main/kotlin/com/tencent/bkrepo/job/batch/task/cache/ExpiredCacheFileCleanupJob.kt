@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2024 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2024 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -30,8 +30,8 @@ package com.tencent.bkrepo.job.batch.task.cache
 import com.tencent.bkrepo.common.api.util.executeAndMeasureTime
 import com.tencent.bkrepo.common.api.util.readJsonString
 import com.tencent.bkrepo.common.artifact.constant.DEFAULT_STORAGE_KEY
-import com.tencent.bkrepo.common.service.cluster.ClusterProperties
-import com.tencent.bkrepo.common.storage.core.StorageProperties
+import com.tencent.bkrepo.common.service.cluster.properties.ClusterProperties
+import com.tencent.bkrepo.common.storage.config.StorageProperties
 import com.tencent.bkrepo.common.storage.core.StorageService
 import com.tencent.bkrepo.common.storage.credentials.StorageCredentials
 import com.tencent.bkrepo.common.storage.util.toPath
@@ -40,7 +40,6 @@ import com.tencent.bkrepo.job.batch.base.JobContext
 import com.tencent.bkrepo.job.config.properties.ExpiredCacheFileCleanupJobProperties
 import com.tencent.bkrepo.job.metrics.StorageCacheMetrics
 import org.slf4j.LoggerFactory
-import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.data.mongodb.core.MongoTemplate
 import org.springframework.data.mongodb.core.query.Query
 import org.springframework.stereotype.Component
@@ -51,7 +50,6 @@ import java.time.LocalDateTime
  * 清理缓存文件定时任务
  */
 @Component
-@EnableConfigurationProperties(ExpiredCacheFileCleanupJobProperties::class)
 class ExpiredCacheFileCleanupJob(
     private val properties: ExpiredCacheFileCleanupJobProperties,
     private val mongoTemplate: MongoTemplate,
@@ -93,8 +91,8 @@ class ExpiredCacheFileCleanupJob(
             storageService.cleanUp(storage)
         }.apply {
             first[storage.cache.path.toPath()]?.let {
-                storageCacheMetrics.setCacheCount(key, it.rootDirNotDeletedFile)
-                storageCacheMetrics.setCacheSize(key, it.rootDirNotDeletedSize)
+                storageCacheMetrics.setCacheMetrics(key, it.rootDirNotDeletedSize, it.rootDirNotDeletedFile)
+                storageCacheMetrics.setProjectRetainCacheMetrics(key, it.retainSha256)
             }
             logger.info("Clean up on storage[$key] completed, summary: $first, elapse [${second.seconds}] s.")
         }

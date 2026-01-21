@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2024 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2024 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -36,19 +36,19 @@ import com.tencent.bkrepo.common.api.message.CommonMessageCode
 import com.tencent.bkrepo.common.api.pojo.Page
 import com.tencent.bkrepo.common.api.pojo.Response
 import com.tencent.bkrepo.common.artifact.cache.pojo.ArtifactPreloadPlan
+import com.tencent.bkrepo.common.artifact.cache.pojo.ArtifactPreloadPlanCreateRequest
 import com.tencent.bkrepo.common.artifact.cache.pojo.ArtifactPreloadStrategy
 import com.tencent.bkrepo.common.artifact.cache.pojo.ArtifactPreloadStrategyCreateRequest
 import com.tencent.bkrepo.common.artifact.cache.pojo.ArtifactPreloadStrategyUpdateRequest
-import com.tencent.bkrepo.common.artifact.cache.pojo.PreloadStrategyType
 import com.tencent.bkrepo.common.artifact.cache.service.ArtifactPreloadPlanService
 import com.tencent.bkrepo.common.artifact.cache.service.ArtifactPreloadStrategyService
+import com.tencent.bkrepo.common.metadata.permission.PermissionManager
 import com.tencent.bkrepo.common.mongo.dao.util.Pages
-import com.tencent.bkrepo.common.security.manager.PermissionManager
 import com.tencent.bkrepo.common.security.permission.Permission
 import com.tencent.bkrepo.common.security.util.SecurityUtils
 import com.tencent.bkrepo.common.service.util.ResponseBuilder
-import io.swagger.annotations.Api
-import io.swagger.annotations.ApiOperation
+import io.swagger.v3.oas.annotations.Operation
+import io.swagger.v3.oas.annotations.tags.Tag
 import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
@@ -61,7 +61,7 @@ import org.springframework.web.bind.annotation.RestController
 import kotlin.contracts.ExperimentalContracts
 import kotlin.contracts.contract
 
-@Api("制品预加载接口")
+@Tag(name = "制品预加载接口")
 @RestController
 @RequestMapping("/api/preload")
 @ExperimentalContracts
@@ -71,18 +71,18 @@ class UserArtifactPreloadController(
     private val permissionManager: PermissionManager,
 ) {
 
-    @ApiOperation("创建预加载策略")
+    @Operation(summary = "创建预加载策略")
     @PostMapping("/strategy")
     fun createStrategy(@RequestBody request: ArtifactPreloadStrategyCreateRequest): Response<ArtifactPreloadStrategy> {
         checkPreloadEnabled(preloadPlanService, preloadStrategyService)
         permissionManager.checkRepoPermission(PermissionAction.MANAGE, request.projectId, request.repoName)
         val strategy = preloadStrategyService.create(
-            request.copy(operator = SecurityUtils.getUserId(), type = PreloadStrategyType.CUSTOM.name)
+            request.copy(operator = SecurityUtils.getUserId())
         )
         return ResponseBuilder.success(strategy)
     }
 
-    @ApiOperation("更新预加载策略")
+    @Operation(summary = "更新预加载策略")
     @PutMapping("/strategy")
     fun updateStrategy(@RequestBody request: ArtifactPreloadStrategyUpdateRequest): Response<ArtifactPreloadStrategy> {
         checkPreloadEnabled(preloadPlanService, preloadStrategyService)
@@ -91,19 +91,20 @@ class UserArtifactPreloadController(
         return ResponseBuilder.success(strategy)
     }
 
-    @ApiOperation("删除预加载策略")
+    @Operation(summary = "删除预加载策略")
     @DeleteMapping("/strategy/{projectId}/{repoName}/{id}")
     @Permission(type = ResourceType.REPO, action = PermissionAction.MANAGE)
     fun deleteStrategy(
         @PathVariable projectId: String,
         @PathVariable repoName: String,
         @PathVariable id: String,
-    ) {
+    ): Response<Void> {
         checkPreloadEnabled(preloadPlanService, preloadStrategyService)
         preloadStrategyService.delete(projectId, repoName, id)
+        return ResponseBuilder.success()
     }
 
-    @ApiOperation("获取所有预加载策略")
+    @Operation(summary = "获取所有预加载策略")
     @GetMapping("/strategy/{projectId}/{repoName}")
     @Permission(type = ResourceType.REPO, action = PermissionAction.READ)
     fun listStrategies(
@@ -114,7 +115,15 @@ class UserArtifactPreloadController(
         return ResponseBuilder.success(preloadStrategyService.list(projectId, repoName))
     }
 
-    @ApiOperation("分页查询预加载计划")
+    @Operation(summary = "创建预加载计划")
+    @PostMapping("/plan")
+    fun preload(@RequestBody request: ArtifactPreloadPlanCreateRequest): Response<ArtifactPreloadPlan> {
+        checkPreloadEnabled(preloadPlanService, preloadStrategyService)
+        permissionManager.checkRepoPermission(PermissionAction.MANAGE, request.projectId, request.repoName)
+        return ResponseBuilder.success(preloadPlanService.createPlan(request))
+    }
+
+    @Operation(summary = "分页查询预加载计划")
     @Permission(type = ResourceType.REPO, action = PermissionAction.READ)
     @GetMapping("/plan/{projectId}/{repoName}")
     fun pagePlans(
@@ -128,30 +137,32 @@ class UserArtifactPreloadController(
         return ResponseBuilder.success(page)
     }
 
-    @ApiOperation("删除预加载计划")
+    @Operation(summary = "删除预加载计划")
     @DeleteMapping("/plan/{projectId}/{repoName}/{id}")
     @Permission(type = ResourceType.REPO, action = PermissionAction.MANAGE)
     fun deletePlan(
         @PathVariable projectId: String,
         @PathVariable repoName: String,
         @PathVariable id: String,
-    ) {
+    ): Response<Void> {
         checkPreloadEnabled(preloadPlanService, preloadStrategyService)
         preloadPlanService.deletePlan(projectId, repoName, id)
+        return ResponseBuilder.success()
     }
 
-    @ApiOperation("删除仓库的所有预加载计划")
+    @Operation(summary = "删除仓库的所有预加载计划")
     @DeleteMapping("/plan/{projectId}/{repoName}")
     @Permission(type = ResourceType.REPO, action = PermissionAction.MANAGE)
     fun deleteAllPlans(
         @PathVariable projectId: String,
         @PathVariable repoName: String,
-    ) {
+    ): Response<Void> {
         checkPreloadEnabled(preloadPlanService, preloadStrategyService)
         preloadPlanService.deletePlan(projectId, repoName)
+        return ResponseBuilder.success()
     }
 
-    private fun checkPreloadEnabled(
+    private final fun checkPreloadEnabled(
         preloadPlanService: ArtifactPreloadPlanService?,
         preloadStrategyService: ArtifactPreloadStrategyService?
     ) {

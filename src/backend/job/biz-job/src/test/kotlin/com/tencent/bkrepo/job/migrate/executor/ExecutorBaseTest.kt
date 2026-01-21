@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2024 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2024 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -27,17 +27,16 @@
 
 package com.tencent.bkrepo.job.migrate.executor
 
-import com.tencent.bkrepo.common.api.pojo.Response
+import com.tencent.bkrepo.common.metadata.dao.node.NodeDao
+import com.tencent.bkrepo.common.metadata.service.file.FileReferenceService
+import com.tencent.bkrepo.common.metadata.service.repo.RepositoryService
+import com.tencent.bkrepo.common.metadata.service.repo.StorageCredentialService
 import com.tencent.bkrepo.common.mongo.constant.ID
-import com.tencent.bkrepo.common.mongo.dao.util.sharding.HashShardingUtils
-import com.tencent.bkrepo.common.storage.core.StorageProperties
+import com.tencent.bkrepo.common.storage.config.StorageProperties
 import com.tencent.bkrepo.common.storage.core.StorageService
 import com.tencent.bkrepo.common.storage.credentials.FileSystemCredentials
-import com.tencent.bkrepo.job.SHARDING_COUNT
-import com.tencent.bkrepo.job.UT_MD5
 import com.tencent.bkrepo.job.UT_PROJECT_ID
 import com.tencent.bkrepo.job.UT_REPO_NAME
-import com.tencent.bkrepo.job.UT_SHA256
 import com.tencent.bkrepo.job.UT_STORAGE_CREDENTIALS_KEY
 import com.tencent.bkrepo.job.batch.utils.RepositoryCommonUtils
 import com.tencent.bkrepo.job.migrate.MigrateRepoStorageService
@@ -48,21 +47,19 @@ import com.tencent.bkrepo.job.migrate.model.TMigrateRepoStorageTask
 import com.tencent.bkrepo.job.migrate.pojo.CreateMigrateRepoStorageTaskRequest
 import com.tencent.bkrepo.job.migrate.pojo.MigrateRepoStorageTask
 import com.tencent.bkrepo.job.migrate.pojo.MigrationContext
+import com.tencent.bkrepo.job.migrate.strategy.MigrateFailedNodeAutoFixStrategy
 import com.tencent.bkrepo.job.migrate.utils.ExecutingTaskRecorder
 import com.tencent.bkrepo.job.migrate.utils.MigrateTestUtils
-import com.tencent.bkrepo.job.model.TNode
-import com.tencent.bkrepo.repository.api.FileReferenceClient
-import com.tencent.bkrepo.repository.api.RepositoryClient
-import com.tencent.bkrepo.repository.api.StorageCredentialsClient
+import com.tencent.bkrepo.job.service.MigrateArchivedFileService
 import org.junit.jupiter.api.TestInstance
 import org.mockito.ArgumentMatchers.anyString
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.whenever
 import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.boot.autoconfigure.task.TaskExecutionAutoConfiguration
 import org.springframework.boot.test.autoconfigure.data.mongo.DataMongoTest
-import org.springframework.boot.test.mock.mockito.MockBean
 import org.springframework.context.annotation.ComponentScan
 import org.springframework.context.annotation.Import
 import org.springframework.data.mongodb.core.MongoTemplate
@@ -70,6 +67,8 @@ import org.springframework.data.mongodb.core.query.Criteria
 import org.springframework.data.mongodb.core.query.Query
 import org.springframework.data.mongodb.core.query.Update
 import org.springframework.data.mongodb.core.query.isEqualTo
+import org.springframework.test.context.TestPropertySource
+import org.springframework.test.context.bean.override.mockito.MockitoBean
 import java.time.LocalDateTime
 
 @DataMongoTest
@@ -77,12 +76,12 @@ import java.time.LocalDateTime
 @Import(
     TaskExecutionAutoConfiguration::class,
     MigrateRepoStorageProperties::class,
-    FileReferenceClient::class,
-    RepositoryClient::class,
     RepositoryCommonUtils::class,
     StorageProperties::class,
+    NodeDao::class
 )
 @ComponentScan(basePackages = ["com.tencent.bkrepo.job.migrate"])
+@TestPropertySource(locations = ["classpath:bootstrap-ut.properties"])
 open class ExecutorBaseTest {
     @Autowired
     protected lateinit var migrateRepoStorageProperties: MigrateRepoStorageProperties
@@ -102,34 +101,47 @@ open class ExecutorBaseTest {
     @Autowired
     protected lateinit var executingTaskRecorder: ExecutingTaskRecorder
 
-    @MockBean
-    protected lateinit var fileReferenceClient: FileReferenceClient
+    @MockitoBean
+    protected lateinit var fileReferenceService: FileReferenceService
 
-    @MockBean
-    protected lateinit var repositoryClient: RepositoryClient
+    @MockitoBean
+    protected lateinit var repositoryService: RepositoryService
 
-    @MockBean
-    protected lateinit var storageCredentialsClient: StorageCredentialsClient
+    @MockitoBean
+    protected lateinit var storageCredentialService: StorageCredentialService
 
-    @MockBean
+    @MockitoBean
     protected lateinit var storageService: StorageService
 
-    fun initMock() {
-        whenever(fileReferenceClient.increment(any(), anyOrNull())).thenReturn(Response(0, data = true))
-        whenever(fileReferenceClient.decrement(any(), anyOrNull())).thenReturn(Response(0, data = true))
-        whenever(fileReferenceClient.count(anyString(), anyOrNull())).thenReturn(Response(0, data = 0L))
+    @MockitoBean
+    protected lateinit var migrateArchivedFileService: MigrateArchivedFileService
 
-        whenever(repositoryClient.getRepoDetail(anyString(), anyString(), anyOrNull()))
-            .thenReturn(Response(0, "", MigrateTestUtils.buildRepo()))
-        whenever(repositoryClient.updateStorageCredentialsKey(anyString(), anyString(), anyString()))
-            .thenReturn(Response(0))
-        whenever(repositoryClient.unsetOldStorageCredentialsKey(anyString(), anyString())).thenReturn(Response(0))
-        whenever(storageCredentialsClient.findByKey(anyString()))
-            .thenReturn(Response(0, data = FileSystemCredentials()))
+    @MockitoBean
+    @Qualifier("fileNotFoundAutoFixStrategy")
+    private lateinit var fileNotFoundAutoFixStrategy: MigrateFailedNodeAutoFixStrategy
+
+    @MockitoBean
+    @Qualifier("archivedFileAutoFixStrategy")
+    private lateinit var archivedFileAutoFixStrategy: MigrateFailedNodeAutoFixStrategy
+
+    fun initMock() {
+        whenever(fileReferenceService.increment(any(), anyOrNull(), any())).thenReturn(true)
+        whenever(fileReferenceService.decrement(any(), anyOrNull())).thenReturn(true)
+        whenever(fileReferenceService.count(anyString(), anyOrNull())).thenReturn(0)
+
+        whenever(repositoryService.getRepoDetail(anyString(), anyString(), anyOrNull()))
+            .thenReturn(MigrateTestUtils.buildRepo())
+        whenever(repositoryService.updateStorageCredentialsKey(anyString(), anyString(), anyString())).then { }
+        whenever(repositoryService.unsetOldStorageCredentialsKey(anyString(), anyString())).then { }
+        whenever(storageCredentialService.findByKey(anyString()))
+            .thenReturn(FileSystemCredentials())
         whenever(storageService.copy(anyString(), anyOrNull(), anyOrNull())).then {
             Thread.sleep(1000L)
         }
         whenever(storageService.exist(anyString(), anyOrNull())).thenReturn(false)
+        whenever(fileNotFoundAutoFixStrategy.fix(any())).thenReturn(true)
+        whenever(archivedFileAutoFixStrategy.fix(any())).thenReturn(true)
+        whenever(migrateArchivedFileService.archivedFileCompleted(anyOrNull(), anyString())).thenReturn(true)
     }
 
     protected fun createTask(repoName: String = UT_REPO_NAME): MigrateRepoStorageTask {
@@ -151,25 +163,4 @@ open class ExecutorBaseTest {
     protected fun buildContext(task: MigrateRepoStorageTask): MigrationContext = MigrationContext(
         task, null, FileSystemCredentials(key = UT_STORAGE_CREDENTIALS_KEY)
     )
-
-    protected fun createNode(repoName: String = UT_REPO_NAME, createDate: LocalDateTime = LocalDateTime.now()): TNode {
-        val node = TNode(
-            id = null,
-            projectId = UT_PROJECT_ID,
-            repoName = repoName,
-            fullPath = "/a/b/c.txt",
-            size = 100L,
-            sha256 = UT_SHA256,
-            md5 = UT_MD5,
-            createdDate = createDate,
-            folder = false,
-        )
-        val sharding = HashShardingUtils.shardingSequenceFor(UT_PROJECT_ID, SHARDING_COUNT)
-        return mongoTemplate.insert(node, "node_$sharding")
-    }
-
-    protected fun removeNodes() {
-        val sequence = HashShardingUtils.shardingSequenceFor(UT_PROJECT_ID, SHARDING_COUNT)
-        mongoTemplate.remove(Query(), "node_$sequence")
-    }
 }

@@ -13,12 +13,21 @@ object UserQueryHelper {
             Criteria.where(TUser::pwd.name).`is`(hashPwd),
             Criteria.where("tokens.id").`is`(pwd),
             Criteria.where("tokens.id").`is`(sm3HashPwd)
-        ).and(TUser::userId.name).`is`(userId)
+        ).and(TUser::userId.name).`is`(userId).and(TUser::locked.name).`is`(false)
         return query(criteria)
     }
 
-    fun filterNotLockedUser(): Query {
-        return Query(Criteria(TUser::locked.name).`is`(false))
+    fun filterNotLockedUser(tenantId: String?): Query {
+        val query = Query(Criteria(TUser::locked.name).`is`(false))
+        tenantId?.let {
+            query.addCriteria(
+                Criteria().orOperator(
+                    Criteria.where(TUser::tenantId.name).`is`(tenantId),
+                    Criteria.where(TUser::tenantId.name).`is`(null)
+                )
+            )
+        }
+        return query
     }
 
     fun getUserById(userId: String): Query {

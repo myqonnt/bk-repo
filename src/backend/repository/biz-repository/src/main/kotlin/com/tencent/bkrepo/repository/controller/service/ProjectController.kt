@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -39,7 +39,7 @@ import com.tencent.bkrepo.repository.pojo.project.ProjectCreateRequest
 import com.tencent.bkrepo.repository.pojo.project.ProjectInfo
 import com.tencent.bkrepo.repository.pojo.project.ProjectMetricsInfo
 import com.tencent.bkrepo.repository.pojo.project.ProjectRangeQueryRequest
-import com.tencent.bkrepo.repository.service.repo.ProjectService
+import com.tencent.bkrepo.common.metadata.service.project.ProjectService
 import org.springframework.web.bind.annotation.RestController
 
 /**
@@ -68,5 +68,17 @@ class ProjectController(
 
     override fun getProjectMetrics(name: String): Response<ProjectMetricsInfo?> {
         return ResponseBuilder.success(projectService.getProjectMetricsInfo(name))
+    }
+
+    override fun isProjectEnabled(name: String): Response<Boolean> {
+        return ResponseBuilder.success(projectService.isProjectEnabled(name))
+    }
+
+    override fun setProjectShareEnabled(name: String, enabled: Boolean): Response<Boolean> {
+        return ResponseBuilder.success(projectService.setProjectShareEnabled(name, enabled))
+    }
+
+    override fun isProjectShareEnabled(name: String): Response<Boolean> {
+        return ResponseBuilder.success(projectService.isProjectShareEnabled(name))
     }
 }

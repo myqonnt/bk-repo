@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2024 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2024 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -33,6 +33,13 @@ rootProject.name = "bk-repo-proxy"
 
 pluginManagement {
     repositories {
+        maven {
+            name = "Central Portal Snapshots"
+            url = java.net.URI("https://central.sonatype.com/repository/maven-snapshots/")
+            mavenContent {
+                snapshotsOnly()
+            }
+        }
         if (System.getenv("GITHUB_WORKFLOW") == null) {
             maven(url = "https://mirrors.tencent.com/nexus/repository/gradle-plugins/")
             maven(url = "https://mirrors.tencent.com/nexus/repository/maven-public")

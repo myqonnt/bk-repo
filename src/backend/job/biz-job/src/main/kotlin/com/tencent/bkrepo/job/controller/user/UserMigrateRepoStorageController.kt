@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2024 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2024 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -27,24 +27,35 @@
 
 package com.tencent.bkrepo.job.controller.user
 
+import com.tencent.bkrepo.common.api.constant.DEFAULT_PAGE_NUMBER
+import com.tencent.bkrepo.common.api.constant.DEFAULT_PAGE_SIZE
+import com.tencent.bkrepo.common.api.exception.BadRequestException
+import com.tencent.bkrepo.common.api.message.CommonMessageCode
+import com.tencent.bkrepo.common.api.pojo.Page
 import com.tencent.bkrepo.common.api.pojo.Response
+import com.tencent.bkrepo.common.mongo.util.Pages
 import com.tencent.bkrepo.common.security.permission.Principal
 import com.tencent.bkrepo.common.security.permission.PrincipalType
 import com.tencent.bkrepo.common.security.util.SecurityUtils
 import com.tencent.bkrepo.common.service.util.ResponseBuilder
+import com.tencent.bkrepo.job.migrate.MigrateFailedNodeService
 import com.tencent.bkrepo.job.migrate.MigrateRepoStorageService
 import com.tencent.bkrepo.job.migrate.pojo.CreateMigrateRepoStorageTaskRequest
 import com.tencent.bkrepo.job.migrate.pojo.MigrateRepoStorageTask
+import org.springframework.web.bind.annotation.DeleteMapping
+import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 
 @RestController
 @RequestMapping("/api/job/migrate")
 @Principal(type = PrincipalType.ADMIN)
 class UserMigrateRepoStorageController(
-    private val migrateRepoStorageService: MigrateRepoStorageService
+    private val migrateRepoStorageService: MigrateRepoStorageService,
+    private val migrateFailedNodeService: MigrateFailedNodeService,
 ) {
     @PostMapping
     fun migrate(
@@ -52,5 +63,78 @@ class UserMigrateRepoStorageController(
     ): Response<MigrateRepoStorageTask> {
         val task = migrateRepoStorageService.createTask(request.copy(operator = SecurityUtils.getUserId()))
         return ResponseBuilder.success(task)
+    }
+
+    @GetMapping("/tasks")
+    fun tasks(
+        @RequestParam(required = false) state: String? = null,
+        @RequestParam(required = false, defaultValue = "$DEFAULT_PAGE_NUMBER") pageNumber: Int = DEFAULT_PAGE_NUMBER,
+        @RequestParam(required = false, defaultValue = "$DEFAULT_PAGE_SIZE") pageSize: Int = DEFAULT_PAGE_SIZE,
+    ): Response<Page<MigrateRepoStorageTask>> {
+        val page = migrateRepoStorageService.findTask(state, Pages.ofRequest(pageNumber, pageSize))
+        return ResponseBuilder.success(page)
+    }
+
+    @DeleteMapping("/failed/node")
+    fun removeFailedNode(
+        @RequestParam projectId: String,
+        @RequestParam repoName: String,
+        @RequestParam(required = false) failedNodeId: String? = null
+    ) {
+        migrateFailedNodeService.removeFailedNode(projectId, repoName, failedNodeId)
+    }
+
+    @PostMapping("/failed/node/reset")
+    fun resetFailedNodeRetryCount(
+        @RequestParam projectId: String,
+        @RequestParam repoName: String,
+        @RequestParam(required = false) failedNodeId: String? = null
+    ) {
+        migrateFailedNodeService.resetRetryCount(projectId, repoName, failedNodeId)
+    }
+
+    @PostMapping("/failed/node/autofix")
+    fun autoFix(
+        @RequestParam(required = false) projectId: String? = null,
+        @RequestParam(required = false) repoName: String? = null,
+    ) {
+        if (projectId.isNullOrEmpty() && repoName.isNullOrEmpty()) {
+            migrateFailedNodeService.autoFix()
+        } else if (!projectId.isNullOrEmpty() && !repoName.isNullOrEmpty()) {
+            migrateFailedNodeService.autoFix(projectId, repoName)
+        } else {
+            throw BadRequestException(CommonMessageCode.PARAMETER_INVALID, "miss projectId or repoName")
+        }
+    }
+
+    /**
+     * 校正整块存储迁移结束后引用计数错误
+     */
+    @PostMapping("/failed/ref/correct")
+    fun correctMigratedStorageFileReference(
+        @RequestParam(required = false) srcCredentialKey: String? = null,
+        @RequestParam(required = false) dstCredentialKey: String? = null,
+    ) {
+        migrateFailedNodeService.correctMigratedStorageFileReference(srcCredentialKey, dstCredentialKey)
+    }
+
+    /**
+     * 修复缺失的失败节点
+     */
+    @PostMapping("/failed/node/fix/missing")
+    fun fixMissingFailedNode() {
+        migrateFailedNodeService.fixMissingFailedNode()
+    }
+
+    /**
+     * 更新node归档状态
+     */
+    @PostMapping("/archive/node/update")
+    fun updateNodeArchiveStatus(
+        @RequestParam projectId: String,
+        @RequestParam nodeId: String,
+        @RequestParam(required = false, defaultValue = "true") archived: Boolean = true
+    ) {
+        migrateFailedNodeService.updateNodeArchiveStatus(projectId, nodeId, archived)
     }
 }

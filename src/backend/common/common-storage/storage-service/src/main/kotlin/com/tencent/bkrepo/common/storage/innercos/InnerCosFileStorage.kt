@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -31,20 +31,24 @@
 
 package com.tencent.bkrepo.common.storage.innercos
 
+import com.tencent.bkrepo.common.api.constant.StringPool
 import com.tencent.bkrepo.common.artifact.stream.Range
 import com.tencent.bkrepo.common.storage.core.AbstractEncryptorFileStorage
 import com.tencent.bkrepo.common.storage.credentials.InnerCosCredentials
 import com.tencent.bkrepo.common.storage.innercos.client.CosClient
 import com.tencent.bkrepo.common.storage.innercos.request.CheckObjectExistRequest
-import com.tencent.bkrepo.common.storage.innercos.request.CopyObjectRequest
 import com.tencent.bkrepo.common.storage.innercos.request.DeleteObjectRequest
 import com.tencent.bkrepo.common.storage.innercos.request.GetObjectRequest
+import com.tencent.bkrepo.common.storage.innercos.request.ListObjectsRequest
 import com.tencent.bkrepo.common.storage.innercos.request.MigrateObjectRequest
 import com.tencent.bkrepo.common.storage.innercos.request.RestoreObjectRequest
 import org.slf4j.LoggerFactory
 import java.io.File
 import java.io.IOException
 import java.io.InputStream
+import java.nio.file.Path
+import java.nio.file.Paths
+import java.util.stream.Stream
 
 /**
  * 内部cos文件存储实现类
@@ -88,15 +92,7 @@ open class InnerCosFileStorage : AbstractEncryptorFileStorage<InnerCosCredential
     }
 
     override fun copy(path: String, name: String, fromClient: CosClient, toClient: CosClient) {
-        val sameCos = fromClient.credentials.region == toClient.credentials.region &&
-            fromClient.credentials.secretId == toClient.credentials.secretId &&
-            fromClient.credentials.secretKey == toClient.credentials.secretKey &&
-            fromClient.credentials.encrypt == toClient.credentials.encrypt
-        if (sameCos) {
-            toClient.copyObject(CopyObjectRequest(fromClient.credentials.bucket, name, name))
-        } else {
-            toClient.migrateObject(MigrateObjectRequest(fromClient, name))
-        }
+        toClient.migrateObject(MigrateObjectRequest(fromClient, name))
     }
 
     override fun checkRestore(path: String, name: String, client: CosClient): Boolean {
@@ -107,6 +103,12 @@ open class InnerCosFileStorage : AbstractEncryptorFileStorage<InnerCosCredential
     override fun restore(path: String, name: String, days: Int, tier: String, client: CosClient) {
         val restoreRequest = RestoreObjectRequest(name, days, tier)
         client.restoreObject(restoreRequest)
+    }
+
+    override fun listAll(path: String, client: CosClient): Stream<Path> {
+        val keyPrefix = if (path == StringPool.ROOT) null else path
+        val listObjectsRequest = ListObjectsRequest(prefix = keyPrefix)
+        return client.listObjects(listObjectsRequest).map { Paths.get(it) }
     }
 
     override fun onCreateClient(credentials: InnerCosCredentials): CosClient {

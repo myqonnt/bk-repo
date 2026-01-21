@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -28,27 +28,31 @@
 package com.tencent.bkrepo.replication.replica.replicator.standalone
 
 import com.google.common.base.Throwables
-import com.tencent.bkrepo.common.api.constant.HttpStatus
-import com.tencent.bkrepo.common.api.constant.retry
+import com.google.common.cache.CacheBuilder
+import com.tencent.bkrepo.common.api.constant.StringPool
 import com.tencent.bkrepo.common.artifact.constant.SOURCE_TYPE
 import com.tencent.bkrepo.common.artifact.exception.NodeNotFoundException
 import com.tencent.bkrepo.common.artifact.resolve.response.ArtifactChannel
+import com.tencent.bkrepo.common.metadata.model.TBlockNode
 import com.tencent.bkrepo.common.service.cluster.ClusterInfo
 import com.tencent.bkrepo.replication.config.ReplicationProperties
 import com.tencent.bkrepo.replication.constant.DEFAULT_VERSION
-import com.tencent.bkrepo.replication.constant.DELAY_IN_SECONDS
-import com.tencent.bkrepo.replication.constant.RETRY_COUNT
-import com.tencent.bkrepo.replication.enums.WayOfPushArtifact
-import com.tencent.bkrepo.replication.exception.ArtifactPushException
 import com.tencent.bkrepo.replication.manager.LocalDataManager
+import com.tencent.bkrepo.replication.pojo.request.BlockNodeCreateFinishRequest
+import com.tencent.bkrepo.replication.pojo.request.PackageVersionDeleteSummary
+import com.tencent.bkrepo.replication.replica.context.ReplicaContext
+import com.tencent.bkrepo.replication.replica.executor.ClusterBlockFileThreadPoolExecutor
+import com.tencent.bkrepo.replication.replica.replicator.base.AbstractFileReplicator
 import com.tencent.bkrepo.replication.replica.replicator.base.internal.ClusterArtifactReplicationHandler
 import com.tencent.bkrepo.replication.replica.repository.internal.PackageNodeMappings
-import com.tencent.bkrepo.replication.replica.context.FilePushContext
-import com.tencent.bkrepo.replication.replica.context.ReplicaContext
-import com.tencent.bkrepo.replication.replica.replicator.Replicator
+import com.tencent.bkrepo.repository.pojo.blocknode.service.BlockNodeCreateRequest
+import com.tencent.bkrepo.repository.pojo.metadata.MetadataDeleteRequest
 import com.tencent.bkrepo.repository.pojo.metadata.MetadataModel
+import com.tencent.bkrepo.repository.pojo.metadata.MetadataSaveRequest
 import com.tencent.bkrepo.repository.pojo.node.NodeInfo
 import com.tencent.bkrepo.repository.pojo.node.service.NodeCreateRequest
+import com.tencent.bkrepo.repository.pojo.node.service.NodeMoveCopyRequest
+import com.tencent.bkrepo.repository.pojo.node.service.NodeRenameRequest
 import com.tencent.bkrepo.repository.pojo.packages.PackageSummary
 import com.tencent.bkrepo.repository.pojo.packages.PackageVersion
 import com.tencent.bkrepo.repository.pojo.packages.request.PackageVersionCreateRequest
@@ -60,7 +64,6 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Component
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
-import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 
 /**
@@ -69,15 +72,18 @@ import java.util.concurrent.TimeUnit
  */
 @Component
 class ClusterReplicator(
-    private val localDataManager: LocalDataManager,
-    private val artifactReplicationHandler: ClusterArtifactReplicationHandler,
-    private val replicationProperties: ReplicationProperties
-) : Replicator {
+    localDataManager: LocalDataManager,
+    artifactReplicationHandler: ClusterArtifactReplicationHandler,
+    replicationProperties: ReplicationProperties,
+) : AbstractFileReplicator(artifactReplicationHandler, replicationProperties, localDataManager) {
 
     @Value("\${spring.application.version:$DEFAULT_VERSION}")
     private var version: String = DEFAULT_VERSION
 
-    private val remoteRepoCache = ConcurrentHashMap<String, RepositoryDetail>()
+    private val blockNodeExecutor = ClusterBlockFileThreadPoolExecutor.instance
+
+    private val remoteRepoCache = CacheBuilder.newBuilder().maximumSize(50)
+        .expireAfterWrite(60, TimeUnit.SECONDS).build<String, RepositoryDetail>()
 
     override fun checkVersion(context: ReplicaContext) {
         with(context) {
@@ -109,7 +115,7 @@ class ClusterReplicator(
             if (remoteProjectId.isNullOrBlank() || remoteRepoName.isNullOrBlank()) return
             val localRepo = localDataManager.findRepoByName(localProjectId, localRepoName, localRepoType.name)
             val key = buildRemoteRepoCacheKey(cluster, remoteProjectId, remoteRepoName)
-            context.remoteRepo = remoteRepoCache.getOrPut(key) {
+            remoteRepoCache.getIfPresent(key) ?: let {
                 val request = RepoCreateRequest(
                     projectId = remoteProjectId,
                     name = remoteRepoName,
@@ -120,19 +126,21 @@ class ClusterReplicator(
                     configuration = localRepo.configuration,
                     operator = localRepo.createdBy
                 )
-                artifactReplicaClient!!.replicaRepoCreateRequest(request).data!!
+                remoteRepoCache.put(key, artifactReplicaClient!!.replicaRepoCreateRequest(request).data!!)
             }
+            context.remoteRepo = remoteRepoCache.getIfPresent(key)
         }
     }
 
     override fun replicaPackage(context: ReplicaContext, packageSummary: PackageSummary) {
         // do nothing
+
     }
 
     override fun replicaPackageVersion(
         context: ReplicaContext,
         packageSummary: PackageSummary,
-        packageVersion: PackageVersion
+        packageVersion: PackageVersion,
     ): Boolean {
         with(context) {
             // 外部集群仓库没有project/repoName
@@ -180,68 +188,118 @@ class ClusterReplicator(
         return true
     }
 
-    override fun replicaFile(context: ReplicaContext, node: NodeInfo): Boolean {
-        with(context) {
-            var type: String = replicationProperties.pushType
-            var downGrade = false
-            val remoteRepositoryType = context.remoteRepoType
-            retry(times = RETRY_COUNT, delayInSeconds = DELAY_IN_SECONDS) { retry ->
-                return buildNodeCreateRequest(this, node)?.let {
-                    if (blobReplicaClient!!.check(
-                            it.sha256!!,
-                            remoteRepo?.storageCredentials?.key,
-                            remoteRepositoryType
-                        ).data != true
-                    ) {
-                        // 1. 同步文件数据
-                        logger.info(
-                            "The file [${node.fullPath}] with sha256 [${node.sha256}] " +
-                                "will be pushed to the remote server ${cluster.name}, try the $retry time!"
-                        )
-                        try {
-                            artifactReplicationHandler.blobPush(
-                                filePushContext = FilePushContext(
-                                    context = context,
-                                    name = it.fullPath,
-                                    size = it.size,
-                                    sha256 = it.sha256,
-                                    md5 = it.md5
-                                ),
-                                pushType = type,
-                                downGrade = downGrade
-                            )
-                        } catch (throwable: Throwable) {
-                            logger.warn(
-                                "File replica push error $throwable, trace is " +
-                                    "${Throwables.getStackTraceAsString(throwable)}!"
-                            )
-                            // 当不支持分块上传时，降级为普通上传
-                            // 兼容接口不存在时，会返回401
-                            if (
-                                throwable is ArtifactPushException &&
-                                (
-                                    throwable.code == HttpStatus.METHOD_NOT_ALLOWED.value ||
-                                        throwable.code == HttpStatus.UNAUTHORIZED.value
-                                    )
-                            ) {
-                                type = WayOfPushArtifact.PUSH_WITH_DEFAULT.value
-                                downGrade = true
-                            }
-                            throw throwable
-                        }
-                        // 再次确认下文件是否已经可见(cfs可见性问题)
-                        doubleCheck(context, it.sha256!!)
-                    }
+    override fun replicaDeletedPackage(
+        context: ReplicaContext,
+        packageVersionDeleteSummary: PackageVersionDeleteSummary
+    ): Boolean {
+        return true
+    }
 
-                    logger.info(
-                        "The node [${node.fullPath}] will be pushed to the remote server!"
-                    )
-                    // 2. 同步节点信息
-                    artifactReplicaClient!!.replicaNodeCreateRequest(it)
-                    true
-                } ?: false
-            }
+    override fun replicaFile(context: ReplicaContext, node: NodeInfo): Boolean {
+        var fileReplicaStatus = true
+        if (unNormalNode(node)) {
+            fileReplicaStatus = handleBlockNodeReplication(context, node)
         }
+        if (fileReplicaStatus) {
+            fileReplicaStatus = handleNormalNodeReplication(context, node)
+        }
+        return fileReplicaStatus
+    }
+
+    private fun handleBlockNodeReplication(context: ReplicaContext, node: NodeInfo): Boolean {
+        with(context) {
+            val blockNodeList = validateAndGetBlockNodeList(context, node) ?: return false
+            if (blockNodeList.isEmpty()) return true
+            val uploadId = "${StringPool.uniqueId()}/${node.id}"
+
+            // 并发传输文件，每个文件传输完成后创建对应的blocknode
+            val success = executeBlockFileTransfer(
+                blockNodeExecutor = blockNodeExecutor,
+                context = context,
+                node = node,
+                blockNodeList = blockNodeList,
+                pushBlockFile = { ctx, blockNode ->
+                    pushBlockFileToCluster(ctx, blockNode, uploadId)
+                },
+                handleError = { ctx, nodeInfo, throwable -> handleBlockFileTransferError(ctx, nodeInfo, throwable) }
+            )
+
+            // 所有文件传输完成并创建blocknode后，调用finish请求
+            if (success) {
+                artifactReplicaClient!!.replicaBlockNodeCreateFinishRequest(
+                    BlockNodeCreateFinishRequest(
+                        projectId = remoteProjectId!!,
+                        repoName = remoteRepoName!!,
+                        uploadId = uploadId,
+                        fullPath = node.fullPath
+                    )
+                )
+            }
+
+            return success
+        }
+    }
+
+    /**
+     * 推送块文件到集群
+     */
+    private fun pushBlockFileToCluster(context: ReplicaContext, blockNode: TBlockNode, uploadId: String) {
+        executeFilePush(
+            context = context,
+            node = blockNode,
+            logPrefix = "[Cluster-Block] ",
+            afterCompletion = { ctx, _ ->
+                logger.info(
+                    "The block node ${blockNode.id} of [${blockNode.nodeFullPath}] " +
+                        "will be pushed to the remote server!"
+                )
+                // 文件传输完成后，创建该blocknode的元数据
+                buildBlockNodeCreateRequest(ctx, blockNode, uploadId)?.let { blockNodeCreateRequest ->
+                    ctx.artifactReplicaClient!!.replicaBlockNodeCreateRequest(blockNodeCreateRequest)
+                }
+            }
+        )
+    }
+
+    /**
+     * 处理块文件传输错误
+     */
+    private fun handleBlockFileTransferError(context: ReplicaContext, node: NodeInfo, throwable: Throwable) {
+        logger.warn(
+            "replica block file of ${node.fullPath} with sha256 ${node.sha256} in repo " +
+                "${node.projectId}|${node.repoName} failed, error is ${Throwables.getStackTraceAsString(throwable)}"
+        )
+    }
+
+    private fun handleNormalNodeReplication(context: ReplicaContext, node: NodeInfo): Boolean {
+        val nodeCreateRequest = buildNodeCreateRequest(context, node) ?: return false
+        executeNormalNodePush(context, node, nodeCreateRequest)
+        return true
+    }
+
+    private fun executeNormalNodePush(
+        context: ReplicaContext,
+        node: NodeInfo,
+        nodeCreateRequest: NodeCreateRequest
+    ) {
+        if (unNormalNode(node)) {
+            context.artifactReplicaClient!!.replicaNodeCreateRequest(nodeCreateRequest)
+            return
+        }
+        executeFilePush(
+            context = context,
+            node = node,
+            logPrefix = "[Cluster] ",
+            postPush = { ctx, _ ->
+                // 再次确认下文件是否已经可见(cfs可见性问题)
+                doubleCheck(ctx, node.sha256!!)
+            },
+            afterCompletion = { ctx, _ ->
+                logger.info("The node [${node.fullPath}] will be pushed to the remote server!")
+                // 同步节点信息
+                context.artifactReplicaClient!!.replicaNodeCreateRequest(nodeCreateRequest)
+            }
+        )
     }
 
     private fun doubleCheck(context: ReplicaContext, sha256: String) {
@@ -252,9 +310,9 @@ class ClusterReplicator(
         val remoteRepositoryType = context.remoteRepoType
         while (!checkResult && costTime < STORAGE_CONSISTENCY_CHECK_TIME_OUT) {
             if (context.blobReplicaClient!!.check(
-                    sha256,
-                    context.remoteRepo?.storageCredentials?.key,
-                    remoteRepositoryType
+                    sha256 = sha256,
+                    storageKey = context.remoteRepo?.storageCredentials?.key,
+                    repoType = remoteRepositoryType
                 ).data == true
             ) {
                 checkResult = true
@@ -262,8 +320,10 @@ class ClusterReplicator(
                 TimeUnit.SECONDS.sleep(1)
                 costTime++
             }
-            logger.info("the result of storage consistency check for $sha256 is $checkResult," +
-                            " costTime: $costTime seconds")
+            logger.info(
+                "the result of storage consistency check for $sha256 is $checkResult," +
+                    " costTime: $costTime seconds"
+            )
         }
     }
 
@@ -273,6 +333,30 @@ class ClusterReplicator(
                 artifactReplicaClient!!.replicaNodeCreateRequest(it)
             }
         }
+    }
+
+    override fun replicaDeletedNode(context: ReplicaContext, node: NodeInfo): Boolean {
+        return true
+    }
+
+    override fun replicaNodeMove(context: ReplicaContext, moveOrCopyRequest: NodeMoveCopyRequest): Boolean {
+        return true
+    }
+
+    override fun replicaNodeCopy(context: ReplicaContext, moveOrCopyRequest: NodeMoveCopyRequest): Boolean {
+        return true
+    }
+
+    override fun replicaNodeRename(context: ReplicaContext, nodeRenameRequest: NodeRenameRequest): Boolean {
+        return true
+    }
+
+    override fun replicaMetadataSave(context: ReplicaContext, metadataSaveRequest: MetadataSaveRequest): Boolean {
+        return true
+    }
+
+    override fun replicaMetadataDelete(context: ReplicaContext, metadataDeleteRequest: MetadataDeleteRequest): Boolean {
+        return true
     }
 
     private fun buildNodeCreateRequest(context: ReplicaContext, node: NodeInfo): NodeCreateRequest? {
@@ -290,12 +374,39 @@ class ClusterReplicator(
                 size = node.size,
                 sha256 = node.sha256!!,
                 md5 = node.md5!!,
+                crc64ecma = node.crc64ecma,
                 nodeMetadata = metadata,
                 operator = node.createdBy,
                 createdBy = node.createdBy,
                 createdDate = LocalDateTime.parse(node.createdDate, DateTimeFormatter.ISO_DATE_TIME),
                 lastModifiedBy = node.lastModifiedBy,
                 lastModifiedDate = LocalDateTime.parse(node.lastModifiedDate, DateTimeFormatter.ISO_DATE_TIME)
+            )
+        }
+    }
+
+    private fun buildBlockNodeCreateRequest(
+        context: ReplicaContext,
+        blockNode: TBlockNode,
+        uploadId: String
+    ): BlockNodeCreateRequest? {
+        with(context) {
+            // 外部集群仓库没有project/repoName
+            if (remoteProjectId.isNullOrBlank() || remoteRepoName.isNullOrBlank()) return null
+            return BlockNodeCreateRequest(
+                projectId = remoteProjectId,
+                repoName = remoteRepoName,
+                fullPath = blockNode.nodeFullPath,
+                expireDate = blockNode.expireDate,
+                size = blockNode.size,
+                sha256 = blockNode.sha256,
+                crc64ecma = blockNode.crc64ecma,
+                startPos = blockNode.startPos,
+                endPos = blockNode.endPos,
+                createdBy = blockNode.createdBy,
+                createdDate = blockNode.createdDate,
+                uploadId = uploadId,
+                deleted = blockNode.deleted
             )
         }
     }

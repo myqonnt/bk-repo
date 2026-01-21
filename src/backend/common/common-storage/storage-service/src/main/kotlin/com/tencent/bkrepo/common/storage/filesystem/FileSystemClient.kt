@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2021 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2021 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -33,12 +33,14 @@ import org.slf4j.LoggerFactory
 import java.io.File
 import java.io.IOException
 import java.io.InputStream
+import java.io.RandomAccessFile
 import java.nio.channels.FileChannel
 import java.nio.channels.ReadableByteChannel
 import java.nio.file.FileAlreadyExistsException
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
+import java.util.stream.Stream
 
 /**
  * 本地文件存储客户端
@@ -73,10 +75,15 @@ class FileSystemClient(val root: String) {
         }
         if (!Files.exists(filePath)) {
             val file = filePath.createFile()
-            FileLockExecutor.executeInLock(inputStream) { input ->
-                FileLockExecutor.executeInLock(file) { output ->
-                    transfer(input, output, size)
+            try {
+                FileLockExecutor.executeInLock(inputStream) { input ->
+                    FileLockExecutor.executeInLock(file) { output ->
+                        transfer(input, output, size)
+                    }
                 }
+            } catch (e: Exception) {
+                Files.deleteIfExists(filePath)
+                throw e
             }
         }
         return filePath.toFile()
@@ -139,20 +146,29 @@ class FileSystemClient(val root: String) {
      * 使用channel拷贝
      * */
     private fun copyByChannel(src: Path, target: Path) {
-
         if (!Files.exists(src)) {
             throw IOException("src[$src] file not exist")
         }
+        var create = false
         val targetFile = if (!Files.exists(target)) {
+            create = true
             target.createFile()
         } else {
             target.toFile()
         }
-        val file = src.toFile()
-        FileLockExecutor.executeInLock(file.inputStream()) { input ->
-            FileLockExecutor.executeInLock(targetFile) { output ->
-                transfer(input, output, file.length())
+        try {
+            val file = src.toFile()
+            FileLockExecutor.executeInLock(file.inputStream()) { input ->
+                FileLockExecutor.executeInLock(targetFile) { output ->
+                    transfer(input, output, file.length())
+                }
             }
+        } catch (e: Exception) {
+            // 为保证文件安全，写入失败后需要删除不完整的写入文件
+            if (create) {
+                Files.deleteIfExists(target)
+            }
+            throw e
         }
     }
 
@@ -220,6 +236,33 @@ class FileSystemClient(val root: String) {
     }
 
     /**
+     * 从指定开始位置追加文件内容
+     * @param dir 目录
+     * @param filename 文件名
+     * @param inputStream 输入流
+     * @param size 输入流数据大小
+     * @param start 写入开始位置, 当为空时追加到文件末尾
+     * @return 当前文件总大小
+     */
+    fun appendAt(
+        dir: String, filename: String, inputStream: InputStream,
+        size: Long, start: Long, totalLength: Long
+    ) {
+        val filePath = Paths.get(this.root, dir, filename)
+        val file = filePath.toFile()
+        if (!file.exists()) {
+            val raf = RandomAccessFile(file, "rw")
+            raf.setLength(totalLength)
+            raf.close()
+        }
+        FileLockExecutor.executeInLock(inputStream) { input ->
+            FileLockExecutor.executeInLock(file) { output ->
+                transfer(input, output, size, false, start)
+            }
+        }
+    }
+
+    /**
      * 创建目录
      * @param dir 父目录
      * @param name 要创建的目录名称
@@ -269,7 +312,8 @@ class FileSystemClient(val root: String) {
      *
      * @return 合并后的文件
      */
-    fun mergeFiles(fileList: List<File>, outputFile: File): File {
+    fun mergeFiles(fileList: List<File>, outputFile: File, mergeFileFlag: Boolean): File {
+        if (outputFile.exists() && !mergeFileFlag) return outputFile
         if (!outputFile.exists()) {
             if (!outputFile.createNewFile()) {
                 throw IOException("Failed to create file [$outputFile]!")
@@ -308,8 +352,18 @@ class FileSystemClient(val root: String) {
         return Files.size(filePath)
     }
 
-    private fun transfer(input: ReadableByteChannel, output: FileChannel, size: Long, append: Boolean = false) {
-        val startPosition: Long = if (append) output.size() else 0L
+    fun walk(path: String): Stream<Path> {
+        return Files.walk(Paths.get(root, path))
+    }
+
+    private fun transfer(
+        input: ReadableByteChannel,
+        output: FileChannel,
+        size: Long,
+        appendAtEnd: Boolean = false,
+        start: Long = 0
+    ) {
+        val startPosition: Long = if (appendAtEnd) output.size() else start
         var bytesCopied: Long
         var totalCopied = 0L
         var count: Long

@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -34,9 +34,10 @@ import com.google.common.util.concurrent.UncheckedExecutionException
 import com.mongodb.client.result.DeleteResult
 import com.tencent.bkrepo.common.api.constant.CharPool
 import com.tencent.bkrepo.common.artifact.exception.RepoNotFoundException
+import com.tencent.bkrepo.common.metadata.constant.FAKE_SHA256
+import com.tencent.bkrepo.common.metadata.service.repo.StorageCredentialService
 import com.tencent.bkrepo.common.mongo.constant.ID
-import com.tencent.bkrepo.common.service.cluster.ClusterProperties
-import com.tencent.bkrepo.fs.server.constant.FAKE_SHA256
+import com.tencent.bkrepo.common.service.cluster.properties.ClusterProperties
 import com.tencent.bkrepo.job.DELETED_DATE
 import com.tencent.bkrepo.job.NAME
 import com.tencent.bkrepo.job.PROJECT
@@ -48,10 +49,9 @@ import com.tencent.bkrepo.job.batch.context.DeletedNodeCleanupJobContext
 import com.tencent.bkrepo.job.batch.utils.MongoShardingUtils
 import com.tencent.bkrepo.job.batch.utils.TimeUtils
 import com.tencent.bkrepo.job.config.properties.DeletedNodeCleanupJobProperties
+import com.tencent.bkrepo.job.config.properties.MigrateRepoStorageJobProperties
 import com.tencent.bkrepo.job.migrate.MigrateRepoStorageService
-import com.tencent.bkrepo.repository.api.StorageCredentialsClient
 import org.slf4j.LoggerFactory
-import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.data.mongodb.core.findOne
 import org.springframework.data.mongodb.core.query.Criteria
 import org.springframework.data.mongodb.core.query.Query
@@ -67,13 +67,13 @@ import kotlin.reflect.KClass
 /**
  * 清理被标记为删除的node，同时减少文件引用
  */
-@Component("JobServiceDeletedNodeCleanupJob")
-@EnableConfigurationProperties(DeletedNodeCleanupJobProperties::class)
+@Component
 class DeletedNodeCleanupJob(
     private val properties: DeletedNodeCleanupJobProperties,
+    private val migrateProperties: MigrateRepoStorageJobProperties,
     private val clusterProperties: ClusterProperties,
     private val migrateRepoStorageService: MigrateRepoStorageService,
-    private val storageCredentialsClient: StorageCredentialsClient
+    private val storageCredentialService: StorageCredentialService,
 ) : DefaultContextMongoDbJob<DeletedNodeCleanupJob.Node>(properties) {
 
     data class Node(
@@ -133,12 +133,11 @@ class DeletedNodeCleanupJob(
 
     override fun run(row: Node, collectionName: String, context: JobContext) {
         require(context is DeletedNodeCleanupJobContext)
-        // 仓库正在迁移时删除node会导致迁移任务分页查询数据重复或缺失，需要等迁移完后再执行清理
-        if (migrateRepoStorageService.migrating(row.projectId, row.repoName)) {
+        // 仓库正在迁移时删除node会导致迁移任务分页查询数据重复或缺失，且无法确认修改哪个存储的引用数，需要等迁移完后再执行清理
+        if (migrateProperties.enabled && migrateRepoStorageService.migrating(row.projectId, row.repoName)) {
             logger.info("repo[${row.projectId}/${row.repoName}] storage was migrating, skip clean node[${row.sha256}]")
             return
         }
-
         if (row.folder) {
             cleanupFolderNode(context, row.id, collectionName)
         } else {
@@ -165,17 +164,9 @@ class DeletedNodeCleanupJob(
         val query = Query.query(Criteria.where(ID).isEqualTo(node.id))
         var result: DeleteResult? = null
         try {
-            if (node.sha256.isNullOrEmpty() || node.sha256 == FAKE_SHA256) return
-            try {
-                val credentialsKey = getCredentialsKey(node.projectId, node.repoName)
-                if (!decrementFileReferences(node.sha256, credentialsKey)) {
-                    logger.warn("Clean up node fail collection[$collectionName], node[$node]")
-                    return
-                }
-            } catch (e: UncheckedExecutionException) {
-                require(e.cause is RepoNotFoundException)
-                logger.warn("repo ${node.projectId}|${node.repoName} was deleted!")
-                handleNodeWithUnknownRepo(node.sha256)
+            if (!decrementFileReferences(node)) {
+                logger.warn("Clean up node fail collection[$collectionName], node[$node]")
+                return
             }
             result = mongoTemplate.remove(query, collectionName)
         } catch (ignored: Exception) {
@@ -185,7 +176,27 @@ class DeletedNodeCleanupJob(
         context.fileCount.addAndGet(result?.deletedCount ?: 0)
     }
 
-    private fun decrementFileReferences(sha256: String, credentialsKey: String?): Boolean {
+    private fun decrementFileReferences(node: Node): Boolean {
+        if (node.sha256.isNullOrEmpty() || node.sha256 == FAKE_SHA256) {
+            return true
+        }
+
+        try {
+            val credentialsKey = getCredentialsKey(node.projectId, node.repoName)
+            val deletedDays = node.deleted?.let { Duration.between(it, LocalDateTime.now()).toDays() } ?: 0
+            val keepRefLostNode = deletedDays < properties.keepRefLostNodeDays
+            // 需要保留Node用于排查问题时不补偿创建引用，避免引用创建后node记录可以被正常删除
+            val createIfNotExists = !keepRefLostNode
+            return decrementFileReferences(node.sha256, credentialsKey, createIfNotExists)
+        } catch (e: UncheckedExecutionException) {
+            require(e.cause is RepoNotFoundException)
+            logger.warn("repo ${node.projectId}|${node.repoName} was deleted!")
+            handleNodeWithUnknownRepo(node.sha256)
+            return true
+        }
+    }
+
+    private fun decrementFileReferences(sha256: String, credentialsKey: String?, createIfNotExists: Boolean): Boolean {
         val collectionName = COLLECTION_FILE_REFERENCE + MongoShardingUtils.shardingSequence(sha256, SHARDING_COUNT)
         val criteria = buildCriteria(sha256, credentialsKey)
         criteria.and(FileReference::count.name).gt(0)
@@ -201,6 +212,13 @@ class DeletedNodeCleanupJob(
         val newQuery = Query(buildCriteria(sha256, credentialsKey))
         mongoTemplate.findOne<FileReference>(newQuery, collectionName) ?: run {
             logger.error("Failed to decrement reference of file [$sha256] on credentialsKey [$credentialsKey]")
+            if (createIfNotExists) {
+                /* 早期FileReferenceCleanupJob在最终存储不存在时，不会判断对应的node是否存在而是直接删除引用，
+                 * 导致出现node存在而引用不存在的情况，此处为这些引用缺失的数据补偿创建引用以清理对应的node及存储
+                 */
+                mongoTemplate.upsert(newQuery, Update().inc(FileReference::count.name, 0), collectionName)
+                return true
+            }
             return false
         }
 
@@ -242,8 +260,8 @@ class DeletedNodeCleanupJob(
     }
 
     private fun handleNodeWithUnknownRepo(sha256: String) {
-        val credentials = storageCredentialsClient.list().data
-        val defaultCredentials = storageCredentialsClient.findByKey().data
+        val credentials = storageCredentialService.list()
+        val defaultCredentials = storageCredentialService.findByKey(null)
         if (credentials.isNullOrEmpty() && defaultCredentials == null) return
         val keySet = mutableSetOf<String?>()
         if (!credentials.isNullOrEmpty()) {
@@ -253,7 +271,9 @@ class DeletedNodeCleanupJob(
             keySet.add(defaultCredentials.key)
         }
         keySet.forEach {
-            decrementFileReferences(sha256, it)
+            // 由于不确定node在哪个存储，此处无法确定为丢失引用的node创建哪个存储的引用，因此引用丢失时不补偿创建引用
+            // StorageReconcileJob中会为缺少引用的存储文件补偿创建引用
+            decrementFileReferences(sha256, it, false)
         }
     }
 

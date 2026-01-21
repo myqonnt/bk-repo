@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2021 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2021 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -27,24 +27,47 @@
 
 package com.tencent.bkrepo.replication.manager
 
+import com.tencent.bkrepo.common.api.util.EscapeUtils
+import com.tencent.bkrepo.common.artifact.api.ArtifactInfo
+import com.tencent.bkrepo.common.artifact.constant.PROJECT_ID
+import com.tencent.bkrepo.common.artifact.constant.REPO_NAME
 import com.tencent.bkrepo.common.artifact.exception.ArtifactNotFoundException
 import com.tencent.bkrepo.common.artifact.exception.NodeNotFoundException
 import com.tencent.bkrepo.common.artifact.exception.PackageNotFoundException
 import com.tencent.bkrepo.common.artifact.exception.ProjectNotFoundException
 import com.tencent.bkrepo.common.artifact.exception.RepoNotFoundException
 import com.tencent.bkrepo.common.artifact.exception.VersionNotFoundException
+import com.tencent.bkrepo.common.artifact.manager.resource.RemoteNodeResource
+import com.tencent.bkrepo.common.artifact.path.PathUtils
 import com.tencent.bkrepo.common.artifact.stream.Range
+import com.tencent.bkrepo.common.metadata.model.TBlockNode
+import com.tencent.bkrepo.common.metadata.model.TNode
+import com.tencent.bkrepo.common.metadata.service.blocknode.BlockNodeService
+import com.tencent.bkrepo.common.metadata.service.node.NodeSearchService
+import com.tencent.bkrepo.common.metadata.service.node.NodeService
+import com.tencent.bkrepo.common.metadata.service.packages.PackageService
+import com.tencent.bkrepo.common.metadata.service.project.ProjectService
+import com.tencent.bkrepo.common.metadata.service.repo.RepositoryService
+import com.tencent.bkrepo.common.metadata.service.repo.StorageCredentialService
+import com.tencent.bkrepo.common.mongo.api.util.sharding.HashShardingUtils
+import com.tencent.bkrepo.common.mongo.constant.ID
+import com.tencent.bkrepo.common.mongo.dao.util.Pages
+import com.tencent.bkrepo.common.service.cluster.ClusterInfo
+import com.tencent.bkrepo.common.storage.config.StorageProperties
 import com.tencent.bkrepo.common.storage.core.StorageService
+import com.tencent.bkrepo.common.storage.credentials.StorageCredentials
 import com.tencent.bkrepo.common.storage.pojo.FileInfo
+import com.tencent.bkrepo.replication.constant.FEDERATED
 import com.tencent.bkrepo.replication.constant.MD5
 import com.tencent.bkrepo.replication.constant.NODE_FULL_PATH
 import com.tencent.bkrepo.replication.constant.SIZE
-import com.tencent.bkrepo.repository.api.NodeClient
-import com.tencent.bkrepo.repository.api.PackageClient
-import com.tencent.bkrepo.repository.api.ProjectClient
-import com.tencent.bkrepo.repository.api.RepositoryClient
+import com.tencent.bkrepo.replication.service.ClusterNodeService
+import com.tencent.bkrepo.repository.constant.NAME
+import com.tencent.bkrepo.repository.constant.SHARDING_COUNT
+import com.tencent.bkrepo.repository.pojo.metadata.MetadataModel
 import com.tencent.bkrepo.repository.pojo.node.NodeDetail
 import com.tencent.bkrepo.repository.pojo.node.NodeInfo
+import com.tencent.bkrepo.repository.pojo.node.NodeListOption
 import com.tencent.bkrepo.repository.pojo.packages.PackageListOption
 import com.tencent.bkrepo.repository.pojo.packages.PackageSummary
 import com.tencent.bkrepo.repository.pojo.packages.PackageVersion
@@ -52,8 +75,14 @@ import com.tencent.bkrepo.repository.pojo.packages.VersionListOption
 import com.tencent.bkrepo.repository.pojo.project.ProjectInfo
 import com.tencent.bkrepo.repository.pojo.repo.RepositoryDetail
 import com.tencent.bkrepo.repository.pojo.search.NodeQueryBuilder
+import org.springframework.data.mongodb.core.MongoTemplate
+import org.springframework.data.mongodb.core.query.Criteria
+import org.springframework.data.mongodb.core.query.Query
+import org.springframework.data.mongodb.core.query.isEqualTo
 import org.springframework.stereotype.Component
 import java.io.InputStream
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
 
 /**
  * 本地数据管理类
@@ -61,27 +90,97 @@ import java.io.InputStream
  */
 @Component
 class LocalDataManager(
-    private val projectClient: ProjectClient,
-    private val repositoryClient: RepositoryClient,
-    private val nodeClient: NodeClient,
-    private val packageClient: PackageClient,
-    private val storageService: StorageService
+    private val projectService: ProjectService,
+    private val repositoryService: RepositoryService,
+    private val nodeService: NodeService,
+    private val nodeSearchService: NodeSearchService,
+    private val packageService: PackageService,
+    private val storageService: StorageService,
+    private val storageCredentialService: StorageCredentialService,
+    private val storageProperties: StorageProperties,
+    private val mongoTemplate: MongoTemplate,
+    private val blockNodeService: BlockNodeService,
+    private val clusterNodeService: ClusterNodeService
 ) {
 
     /**
      * 获取blob文件数据
      */
-    fun getBlobData(sha256: String, length: Long, repoInfo: RepositoryDetail): InputStream {
-        return storageService.load(sha256, Range.full(length), repoInfo.storageCredentials)
-            ?: throw ArtifactNotFoundException(sha256)
+    fun getBlobData(
+        sha256: String,
+        length: Long,
+        repoInfo: RepositoryDetail,
+        federatedSource: String? = null
+    ): InputStream {
+        val range = Range.full(length)
+        return getBlobDataByRange(
+            sha256 = sha256,
+            range = range,
+            repoInfo = repoInfo,
+            federatedSource = federatedSource
+        )
     }
 
     /**
      * 获取blob文件数据
      */
-    fun getBlobDataByRange(sha256: String, range: Range, repoInfo: RepositoryDetail): InputStream {
+    fun getBlobDataByRange(
+        sha256: String,
+        range: Range,
+        repoInfo: RepositoryDetail,
+        federatedSource: String? = null
+    ): InputStream {
         return storageService.load(sha256, range, repoInfo.storageCredentials)
-            ?: throw ArtifactNotFoundException(sha256)
+            ?: loadFromOtherStorage(sha256, range, repoInfo.storageCredentials)
+            ?: loadFromFederatedSource(sha256, range, repoInfo, federatedSource)
+    }
+
+    private fun loadFromFederatedSource(
+        sha256: String,
+        range: Range,
+        repoInfo: RepositoryDetail,
+        federatedSource: String? = null
+    ): InputStream {
+        if (federatedSource.isNullOrEmpty()) throw ArtifactNotFoundException(sha256)
+        val clusterInfo = clusterNodeService.getByClusterName(federatedSource)?.let {
+            ClusterInfo(
+                url = it.url,
+                certificate = it.certificate.orEmpty(),
+                appId = it.appId,
+                accessKey = it.accessKey,
+                secretKey = it.secretKey,
+                username = it.username,
+                password = it.password,
+            )
+        } ?: throw ArtifactNotFoundException(sha256)
+        val remoteNodeResource = RemoteNodeResource(
+            sha256 = sha256,
+            range = range,
+            storageCredentials = repoInfo.storageCredentials,
+            centerClusterInfo = clusterInfo,
+            storageService = storageService
+        )
+        return remoteNodeResource.getArtifactInputStream() ?: throw ArtifactNotFoundException(sha256)
+    }
+
+    /**
+     * 节点可能是从其他仓库复制过来，仓库存储不一样，对应文件还没有复制
+     */
+    private fun loadFromOtherStorage(
+        sha256: String, range: Range,
+        currentStorageCredentials: StorageCredentials?
+    ): InputStream? {
+        val allCredentials = storageCredentialService.list() + storageProperties.defaultStorageCredentials()
+        var result: InputStream? = null
+        for (credential in allCredentials) {
+            val key = credential.key
+            if (key == currentStorageCredentials?.key) continue
+            result = storageService.load(sha256, range, credential)
+            if (result != null) {
+                break
+            }
+        }
+        return result
     }
 
     /**
@@ -89,7 +188,7 @@ class LocalDataManager(
      * 项目不存在抛异常
      */
     fun findProjectById(projectId: String): ProjectInfo {
-        return projectClient.getProjectInfo(projectId).data
+        return projectService.getProjectInfo(projectId)
             ?: throw ProjectNotFoundException(projectId)
     }
 
@@ -97,7 +196,7 @@ class LocalDataManager(
      * 判断项目是否存在
      */
     fun existProject(projectId: String): Boolean {
-        return projectClient.getProjectInfo(projectId).data != null
+        return projectService.getProjectInfo(projectId) != null
     }
 
     /**
@@ -105,7 +204,7 @@ class LocalDataManager(
      * 仓库不存在抛异常
      */
     fun findRepoByName(projectId: String, repoName: String, type: String? = null): RepositoryDetail {
-        return repositoryClient.getRepoDetail(projectId, repoName, type).data
+        return repositoryService.getRepoDetail(projectId, repoName, type)
             ?: throw RepoNotFoundException(repoName)
     }
 
@@ -113,14 +212,14 @@ class LocalDataManager(
      * 判断仓库是否存在
      */
     fun existRepo(projectId: String, repoName: String, type: String? = null): Boolean {
-        return repositoryClient.getRepoDetail(projectId, repoName, type).data != null
+        return repositoryService.getRepoDetail(projectId, repoName, type) != null
     }
 
     /**
      * 根据packageKey查找包信息
      */
     fun findPackageByKey(projectId: String, repoName: String, packageKey: String): PackageSummary {
-        return packageClient.findPackageByKey(projectId, repoName, packageKey).data
+        return packageService.findPackageByKey(projectId, repoName, packageKey)
             ?: throw PackageNotFoundException(packageKey)
     }
 
@@ -133,15 +232,14 @@ class LocalDataManager(
         packageKey: String,
         option: VersionListOption
     ): List<PackageVersion> {
-        return packageClient.listAllVersion(projectId, repoName, packageKey, option).data
-            ?: throw PackageNotFoundException(packageKey)
+        return packageService.listAllVersion(projectId, repoName, packageKey, option)
     }
 
     /**
      * 查询指定版本
      */
     fun findPackageVersion(projectId: String, repoName: String, packageKey: String, version: String): PackageVersion {
-        return packageClient.findVersionByName(projectId, repoName, packageKey, version).data
+        return packageService.findVersionByName(projectId, repoName, packageKey, version)
             ?: throw VersionNotFoundException(packageKey)
     }
 
@@ -153,6 +251,25 @@ class LocalDataManager(
             ?: throw NodeNotFoundException(fullPath)
     }
 
+    fun findRegexNodeDetail(
+        projectId: String,
+        repoName: String,
+        fullPath: String,
+        pageNumber: Int,
+        pageSize: Int,
+    ): List<NodeInfo> {
+        val path = PathUtils.resolveParent(fullPath)
+        val name = PathUtils.resolveName(fullPath)
+        val escapedValue = EscapeUtils.escapeRegexExceptWildcard(name)
+        val regexPattern = escapedValue.replace("*", ".*")
+        val criteria = Criteria.where(PROJECT_ID).isEqualTo(projectId)
+            .and(REPO_NAME).isEqualTo(repoName)
+            .and(NODE_PATH).isEqualTo(path)
+            .and(NAME).regex("^$regexPattern$")
+            .and(DELETED).isEqualTo(null)
+            .and(FOLDER).isEqualTo(false)
+        return queryNodes(projectId, criteria, pageNumber, pageSize)
+    }
 
     /**
      * 查找package对应version下的节点
@@ -161,19 +278,37 @@ class LocalDataManager(
         projectId: String, repoName: String, fullPath: String
     ): NodeDetail {
         return findNode(projectId, repoName, fullPath) ?: findDeletedNodeDetail(projectId, repoName, fullPath)
-            ?: throw NodeNotFoundException(fullPath)
+        ?: throw NodeNotFoundException(fullPath)
     }
+
     fun findDeletedNodeDetail(
         projectId: String, repoName: String, fullPath: String
     ): NodeDetail? {
-        return nodeClient.getDeletedNodeDetail(projectId, repoName, fullPath).data?.firstOrNull()
+        return nodeService.getDeletedNodeDetail(ArtifactInfo(projectId, repoName, fullPath)).firstOrNull()
+    }
+
+    fun findDeletedNodeDetail(
+        projectId: String, repoName: String, fullPath: String, deleted: LocalDateTime
+    ): NodeDetail? {
+        return nodeService.getDeletedNodeDetail(projectId, repoName, fullPath, deleted)
     }
 
     /**
      * 查找节点
      */
     fun findNode(projectId: String, repoName: String, fullPath: String): NodeDetail? {
-        return nodeClient.getNodeDetail(projectId, repoName, fullPath).data
+        return nodeService.getNodeDetail(ArtifactInfo(projectId, repoName, fullPath))
+    }
+
+    /**
+     * 通过id查询node
+     */
+    fun findNodeById(projectId: String, nodeId: String): NodeInfo? {
+        val collectionName = "node_" + HashShardingUtils.shardingSequenceFor(projectId, SHARDING_COUNT)
+        val criteria = Criteria.where(PROJECT_ID).isEqualTo(projectId)
+            .and(ID).isEqualTo(nodeId)
+        val query = Query(criteria)
+        return convert(mongoTemplate.findOne(query, Node::class.java, collectionName))
     }
 
     /**
@@ -185,35 +320,33 @@ class LocalDataManager(
         sha256: String
     ): FileInfo {
         val queryModel = NodeQueryBuilder()
-            .select(NODE_FULL_PATH, SIZE, MD5)
+            .select(NODE_FULL_PATH, SIZE, MD5, TNode::crc64ecma.name)
             .projectId(projectId)
             .repoName(repoName)
             .sha256(sha256)
             .page(1, 1)
             .sortByAsc(NODE_FULL_PATH)
-        val result = nodeClient.queryWithoutCount(queryModel.build()).data
-        if (result == null || result.records.isEmpty()) {
+        val result = nodeSearchService.searchWithoutCount(queryModel.build())
+        if (result.records.isEmpty()) {
             throw NodeNotFoundException(sha256)
         }
         return FileInfo(
             sha256 = sha256,
             md5 = result.records[0][MD5].toString(),
-            size = result.records[0][SIZE].toString().toLong()
+            size = result.records[0][SIZE].toString().toLong(),
+            crc64ecma = result.records[0][TNode::crc64ecma.name]?.toString(),
         )
     }
 
-/**
+    /**
      * 分页查询包
      */
     fun listPackagePage(projectId: String, repoName: String, option: PackageListOption): List<PackageSummary> {
-        val packages = packageClient.listPackagePage(
+        val packages = packageService.listPackagePage(
             projectId = projectId,
             repoName = repoName,
             option = option
-        ).data?.records
-        if (packages.isNullOrEmpty()) {
-            return emptyList()
-        }
+        ).records
         return packages
     }
 
@@ -221,13 +354,10 @@ class LocalDataManager(
      * 查询目录下的文件列表
      */
     fun listNode(projectId: String, repoName: String, fullPath: String): List<NodeInfo> {
-        val nodes = nodeClient.listNode(
-            projectId = projectId,
-            repoName = repoName,
-            path = fullPath,
-            includeFolder = true,
-            deep = false
-        ).data
+        val nodes = nodeService.listNode(
+            ArtifactInfo(projectId, repoName, fullPath),
+            NodeListOption(includeFolder = true, deep = false)
+        )
         if (nodes.isNullOrEmpty()) {
             throw NodeNotFoundException("$projectId/$repoName")
         }
@@ -235,28 +365,94 @@ class LocalDataManager(
     }
 
     /**
+     * 查询目录下的文件列表
+     */
+    fun listNodePage(
+        projectId: String,
+        repoName: String,
+        fullPath: String,
+        pageNumber: Int,
+        pageSize: Int,
+        includeDeleted: Boolean = false
+    ): List<NodeInfo> {
+        val collectionName = "node_" + HashShardingUtils.shardingSequenceFor(projectId, SHARDING_COUNT)
+        val nodePath = PathUtils.toPath(fullPath)
+        val criteria = Criteria.where(PROJECT_ID).isEqualTo(projectId)
+            .and(REPO_NAME).isEqualTo(repoName)
+            .and(NODE_PATH).isEqualTo(nodePath)
+            .apply {
+                if (!includeDeleted) {
+                    and(DELETED).isEqualTo(null)
+                }
+            }
+        return queryNodes(projectId, criteria, pageNumber, pageSize)
+    }
+
+    private fun queryNodes(
+        projectId: String,
+        criteria: Criteria,
+        pageNumber: Int,
+        pageSize: Int
+    ): List<NodeInfo> {
+        val collectionName = "node_" + HashShardingUtils.shardingSequenceFor(projectId, SHARDING_COUNT)
+        val query = Query(criteria).with(Pages.ofRequest(pageNumber, pageSize))
+        return mongoTemplate.find(query, Node::class.java, collectionName).mapNotNull { convert(it) }
+    }
+
+    /**
+     * 根据节点信息获取所有block node
+     */
+    fun listBlockNode(nodeInfo: NodeInfo): List<TBlockNode> {
+        with(nodeInfo) {
+            if (deleted != null) {
+                return blockNodeService.listDeletedBlocks(
+                    projectId = projectId,
+                    repoName = repoName,
+                    fullPath = fullPath,
+                    nodeCreateDate = LocalDateTime.parse(createdDate, DateTimeFormatter.ISO_DATE_TIME),
+                    nodeDeleteDate = LocalDateTime.parse(deleted!!, DateTimeFormatter.ISO_DATE_TIME),
+                )
+            } else {
+                return blockNodeService.listAllBlocks(projectId, repoName, fullPath, createdDate)
+            }
+        }
+    }
+
+    /**
      * 根据节点信息读取节点的数据流
      */
     fun loadInputStream(nodeInfo: NodeDetail): InputStream {
         with(nodeInfo) {
-            return loadInputStream(sha256!!, size, projectId, repoName)
+            return loadInputStream(sha256!!, size, projectId, repoName, federatedSource(nodeInfo.nodeInfo))
         }
     }
 
     /**
      * 根据项目、仓库、sha256、size读取对应节点的数据流
      */
-    fun loadInputStream(sha256: String, size: Long, projectId: String, repoName: String): InputStream {
+    fun loadInputStream(
+        sha256: String,
+        size: Long,
+        projectId: String,
+        repoName: String,
+        federatedSource: String? = null
+    ): InputStream {
         val repo = findRepoByName(projectId, repoName)
-        return getBlobData(sha256, size, repo)
+        return getBlobData(sha256, size, repo, federatedSource)
     }
 
     /**
      * 根据项目、仓库、sha256、range读取对应节点的数据流
      */
-    fun loadInputStreamByRange(sha256: String, range: Range, projectId: String, repoName: String): InputStream {
+    fun loadInputStreamByRange(
+        sha256: String,
+        range: Range,
+        projectId: String,
+        repoName: String,
+        federatedSource: String? = null
+    ): InputStream {
         val repo = findRepoByName(projectId, repoName)
-        return getBlobDataByRange(sha256, range, repo)
+        return getBlobDataByRange(sha256, range, repo, federatedSource)
     }
 
 
@@ -265,7 +461,156 @@ class LocalDataManager(
      */
     fun getRepoMetricInfo(projectId: String, repoName: String): Long {
         findRepoByName(projectId, repoName)
-        val projectMetrics = projectClient.getProjectMetrics(projectId).data ?: return 0
+        val projectMetrics = projectService.getProjectMetricsInfo(projectId) ?: return 0
         return projectMetrics.repoMetrics.firstOrNull { it.repoName == repoName }?.size ?: 0
+    }
+
+    data class Node(
+        var createdBy: String,
+        var createdDate: LocalDateTime,
+        var lastModifiedBy: String,
+        var lastModifiedDate: LocalDateTime,
+        var lastAccessDate: LocalDateTime? = null,
+
+        var folder: Boolean,
+        var path: String,
+        var name: String,
+        var fullPath: String,
+        var size: Long,
+        var expireDate: LocalDateTime? = null,
+        var sha256: String? = null,
+        var md5: String? = null,
+        var crc64ecma: String? = null,
+        var deleted: LocalDateTime? = null,
+        var copyFromCredentialsKey: String? = null,
+        var copyIntoCredentialsKey: String? = null,
+        var metadata: MutableList<MetadataModel>? = null,
+        var clusterNames: Set<String>? = null,
+        var nodeNum: Long? = null,
+        var archived: Boolean? = null,
+        var compressed: Boolean? = null,
+        var projectId: String,
+        var repoName: String,
+        var id: String? = null,
+        var federatedSource: String? = null,
+    )
+
+    private fun convert(node: Node?): NodeInfo? {
+        return node?.let {
+            NodeInfo(
+                id = it.id,
+                createdBy = it.createdBy,
+                createdDate = it.createdDate.format(DateTimeFormatter.ISO_DATE_TIME),
+                lastModifiedBy = it.lastModifiedBy,
+                lastModifiedDate = it.lastModifiedDate.format(DateTimeFormatter.ISO_DATE_TIME),
+                projectId = it.projectId,
+                repoName = it.repoName,
+                folder = it.folder,
+                path = it.path,
+                name = it.name,
+                fullPath = it.fullPath,
+                size = if (it.size < 0L) 0L else it.size,
+                nodeNum = it.nodeNum?.let { nodeNum ->
+                    if (nodeNum < 0L) 0L else nodeNum
+                },
+                sha256 = it.sha256,
+                md5 = it.md5,
+                crc64ecma = it.crc64ecma,
+                metadata = toMap(it.metadata),
+                nodeMetadata = it.metadata,
+                copyFromCredentialsKey = it.copyFromCredentialsKey,
+                copyIntoCredentialsKey = it.copyIntoCredentialsKey,
+                deleted = it.deleted?.format(DateTimeFormatter.ISO_DATE_TIME),
+                lastAccessDate = it.lastAccessDate?.format(DateTimeFormatter.ISO_DATE_TIME),
+                clusterNames = it.clusterNames,
+                archived = it.archived,
+                compressed = it.compressed,
+            )
+        }
+    }
+
+    /**
+     * 遍历正则路径匹配的所有节点
+     * @param projectId 项目ID
+     * @param repoName 仓库名称
+     * @param fullPath 完整路径（支持正则表达式）
+     * @param nodeProcessor 节点处理函数
+     * @param throwIfEmpty 如果没有找到节点是否抛出异常，默认为true
+     */
+    fun processRegexPathNodes(
+        projectId: String,
+        repoName: String,
+        fullPath: String,
+        nodeProcessor: (NodeInfo) -> Unit,
+        throwIfEmpty: Boolean = true
+    ) {
+        var pageNumber = 1
+        var nodes = findRegexNodeDetail(
+            projectId = projectId,
+            repoName = repoName,
+            fullPath = fullPath,
+            pageNumber = pageNumber,
+            pageSize = 1000
+        )
+        if (nodes.isEmpty() && throwIfEmpty) {
+            throw NodeNotFoundException(fullPath)
+        }
+
+        while (nodes.isNotEmpty()) {
+            nodes.forEach(nodeProcessor)
+            pageNumber++
+            nodes = findRegexNodeDetail(
+                projectId = projectId,
+                repoName = repoName,
+                fullPath = fullPath,
+                pageNumber = pageNumber,
+                pageSize = 1000
+            )
+        }
+    }
+
+    /**
+     * 计算正则路径匹配的所有节点的总大小
+     * @param projectId 项目ID
+     * @param repoName 仓库名称
+     * @param fullPath 完整路径（支持正则表达式）
+     * @return 总大小
+     */
+    fun computeRegexPathNodesSize(
+        projectId: String,
+        repoName: String,
+        fullPath: String
+    ): Long {
+        var totalSize = 0L
+        processRegexPathNodes(
+            projectId = projectId,
+            repoName = repoName,
+            fullPath = fullPath,
+            nodeProcessor = { node ->
+                totalSize += node.size
+            },
+            throwIfEmpty = false
+        )
+        return totalSize
+    }
+
+    private fun toMap(metadataList: List<MetadataModel>?): Map<String, Any> {
+        return metadataList?.associate { it.key to it.value }.orEmpty()
+    }
+
+    companion object {
+        private const val DELETED = "deleted"
+        private const val NODE_PATH = "path"
+        private const val FOLDER = "folder"
+
+        fun federatedSource(node: NodeInfo): String? {
+            val federatedMetadata = node.nodeMetadata?.firstOrNull { it.key == FEDERATED }
+            val federated = federatedMetadata?.value as? Boolean ?: true
+            return if (!node.federatedSource.isNullOrEmpty() && !federated) {
+                node.federatedSource
+            } else {
+                null
+            }
+        }
     }
 }

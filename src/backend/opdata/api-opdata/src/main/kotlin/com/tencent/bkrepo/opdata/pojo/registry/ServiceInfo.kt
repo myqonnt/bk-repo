@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2021 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2021 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -28,14 +28,14 @@
 package com.tencent.bkrepo.opdata.pojo.registry
 
 import com.fasterxml.jackson.annotation.JsonInclude
-import io.swagger.annotations.ApiModel
-import io.swagger.annotations.ApiModelProperty
+import io.swagger.v3.oas.annotations.media.Schema
 
-@ApiModel("服务信息")
+
+@Schema(title = "服务信息")
 @JsonInclude(JsonInclude.Include.NON_EMPTY)
 data class ServiceInfo(
-    @ApiModelProperty("服务名")
+    @get:Schema(title = "服务名")
     val name: String,
-    @ApiModelProperty("服务实例信息")
+    @get:Schema(title = "服务实例信息")
     val instances: List<InstanceInfo>
 )

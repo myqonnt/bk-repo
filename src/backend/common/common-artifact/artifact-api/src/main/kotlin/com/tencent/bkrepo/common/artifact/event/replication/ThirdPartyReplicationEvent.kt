@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -38,9 +38,11 @@ class ThirdPartyReplicationEvent(
     val version: String? = null,
     val sha256: String? = null,
     val fullPath: String,
+    val isFat: Boolean = false,
     override val projectId: String,
     override val repoName: String,
-    override val userId: String
+    override val userId: String,
+    override val eventId: String? = generateEventId(),
 ) : ArtifactEvent(
     type = EventType.REPLICATION_THIRD_PARTY,
     projectId = projectId,
@@ -48,10 +50,12 @@ class ThirdPartyReplicationEvent(
     resourceKey = fullPath,
     userId = userId,
     data = mutableMapOf(
-        "packageName" to packageName
+        "packageName" to packageName,
+        "isFat" to isFat
     ).apply {
         version?.let { this["version"] = version }
         sha256?.let { this["sha256"] = sha256 }
-    }
+    },
+    eventId = eventId
 )
 

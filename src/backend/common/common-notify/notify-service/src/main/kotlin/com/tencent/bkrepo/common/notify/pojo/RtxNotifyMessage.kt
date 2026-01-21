@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -33,9 +33,9 @@ package com.tencent.bkrepo.common.notify.pojo
 
 import com.tencent.bkrepo.common.notify.pojo.enums.EnumNotifyPriority
 import com.tencent.bkrepo.common.notify.pojo.enums.EnumNotifySource
-import io.swagger.annotations.ApiModel
+import io.swagger.v3.oas.annotations.media.Schema
 
-@ApiModel("rtx消息/企业微信")
+@Schema(title = "rtx消息/企业微信")
 open class RtxNotifyMessage(
     var receivers: Set<String> = setOf(),
     var body: String = "",

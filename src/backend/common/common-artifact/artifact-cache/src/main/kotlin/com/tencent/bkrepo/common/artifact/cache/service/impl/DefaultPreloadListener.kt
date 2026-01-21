@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2024 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2024 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -29,22 +29,31 @@ package com.tencent.bkrepo.common.artifact.cache.service.impl
 
 import com.tencent.bkrepo.common.artifact.cache.dao.ArtifactPreloadPlanDao
 import com.tencent.bkrepo.common.artifact.cache.pojo.ArtifactPreloadPlan
-import com.tencent.bkrepo.common.artifact.cache.pojo.ArtifactPreloadPlan.Companion.STATUS_EXECUTING
 import com.tencent.bkrepo.common.artifact.cache.service.PreloadListener
+import com.tencent.bkrepo.common.artifact.constant.DEFAULT_STORAGE_KEY
+import com.tencent.bkrepo.common.artifact.metrics.ArtifactCacheMetrics
+import com.tencent.bkrepo.common.storage.monitor.Throughput
 
-class DefaultPreloadListener(private val preloadPlanDao: ArtifactPreloadPlanDao) : PreloadListener {
+class DefaultPreloadListener(
+    private val preloadPlanDao: ArtifactPreloadPlanDao,
+    private val cacheMetrics: ArtifactCacheMetrics,
+) : PreloadListener {
     override fun onPreloadStart(plan: ArtifactPreloadPlan) {
         // 使用乐观锁尝试更新计划执行状态
-        if (preloadPlanDao.updateStatus(plan.id!!, STATUS_EXECUTING, plan.lastModifiedDate).modifiedCount != 1L) {
-            throw RuntimeException("update plan status failed, maybe plan was executed by other thread")
+        if (preloadPlanDao.remove(plan.id!!).deletedCount != 1L) {
+            throw RuntimeException("remove plan failed, maybe plan was executed by other thread")
         }
     }
 
-    override fun onPreloadSuccess(plan: ArtifactPreloadPlan) = Unit
-    override fun onPreloadFailed(plan: ArtifactPreloadPlan) = Unit
+    override fun onPreloadSuccess(plan: ArtifactPreloadPlan, throughput: Throughput?) {
+        record(plan, true, throughput?.bytes ?: 0L)
+    }
+    override fun onPreloadFailed(plan: ArtifactPreloadPlan) = record(plan, false)
+    override fun onPreloadFinished(plan: ArtifactPreloadPlan) = Unit
 
-    override fun onPreloadFinished(plan: ArtifactPreloadPlan) {
-        // 执行结束后删除预加载计划
-        preloadPlanDao.removeById(plan.id!!)
+    private fun record(plan: ArtifactPreloadPlan, success: Boolean, size: Long = 0L) {
+        val storageKey = plan.credentialsKey ?: DEFAULT_STORAGE_KEY
+        val projectId = plan.projectId ?: "unknown"
+        cacheMetrics.recordPreload(storageKey, projectId, size, success)
     }
 }

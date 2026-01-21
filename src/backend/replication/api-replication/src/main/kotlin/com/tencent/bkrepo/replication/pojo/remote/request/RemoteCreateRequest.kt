@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -27,14 +27,14 @@
 
 package com.tencent.bkrepo.replication.pojo.remote.request
 
-import io.swagger.annotations.ApiModel
-import io.swagger.annotations.ApiModelProperty
+import io.swagger.v3.oas.annotations.media.Schema
+
 
 /**
  * 添加远端集群请求
  */
-@ApiModel("添加远端集群请求")
+@Schema(title = "添加远端集群请求")
 data class RemoteCreateRequest(
-    @ApiModelProperty("配置列表", required = true)
+    @get:Schema(title = "配置列表", required = true)
     val configs: List<RemoteConfigCreateRequest>
 )

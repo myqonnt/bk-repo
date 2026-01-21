@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -27,8 +27,8 @@
 
 package com.tencent.bkrepo.replication.replica.replicator.commitedge
 
-import com.tencent.bkrepo.common.service.cluster.ClusterProperties
-import com.tencent.bkrepo.common.service.cluster.CommitEdgeCenterCondition
+import com.tencent.bkrepo.common.service.cluster.condition.CommitEdgeCenterCondition
+import com.tencent.bkrepo.common.service.cluster.properties.ClusterProperties
 import com.tencent.bkrepo.replication.config.ReplicationProperties
 import com.tencent.bkrepo.replication.manager.LocalDataManager
 import com.tencent.bkrepo.replication.replica.context.ReplicaContext
@@ -39,6 +39,7 @@ import com.tencent.bkrepo.repository.pojo.node.NodeDetail
 import com.tencent.bkrepo.repository.pojo.node.NodeInfo
 import com.tencent.bkrepo.repository.pojo.packages.PackageSummary
 import com.tencent.bkrepo.repository.pojo.packages.PackageVersion
+import org.slf4j.LoggerFactory
 import org.springframework.context.annotation.Conditional
 import org.springframework.stereotype.Component
 import java.time.temporal.ChronoUnit
@@ -48,12 +49,16 @@ import java.time.temporal.ChronoUnit
 class CenterClusterReplicator(
     localDataManager: LocalDataManager,
     clusterArtifactReplicationHandler: ClusterArtifactReplicationHandler,
-    private val replicationProperties: ReplicationProperties,
+    replicationProperties: ReplicationProperties,
     private val clusterProperties: ClusterProperties,
     private val edgeReplicaTaskRecordService: EdgeReplicaTaskRecordService
-): ClusterReplicator(localDataManager, clusterArtifactReplicationHandler, replicationProperties) {
+) : ClusterReplicator(localDataManager, clusterArtifactReplicationHandler, replicationProperties) {
 
     override fun replicaFile(context: ReplicaContext, node: NodeInfo): Boolean {
+        if (unNormalNode(node) && !blockNode(node)) {
+            logger.warn("Node ${node.fullPath} in repo ${node.projectId}|${node.repoName} is link node.")
+            return false
+        }
         node.clusterNames?.firstOrNull { it != clusterProperties.self.name }
             ?: return super.replicaFile(context, node)
         val edgeReplicaTaskRecord = edgeReplicaTaskRecordService.createNodeReplicaTaskRecord(
@@ -62,7 +67,7 @@ class CenterClusterReplicator(
         )
         EdgeReplicaContextHolder.setEdgeReplicaTask(edgeReplicaTaskRecord)
         val estimateTime = EdgeReplicaContextHolder.getEstimatedTime(
-            timoutCheckHosts = replicationProperties.timoutCheckHosts,
+            timoutCheckHosts = super.replicationProperties.timoutCheckHosts,
             url = context.remoteCluster.url,
             size = node.size
         )
@@ -84,11 +89,15 @@ class CenterClusterReplicator(
         )
         EdgeReplicaContextHolder.setEdgeReplicaTask(edgeReplicaTaskRecord)
         val estimateTime = EdgeReplicaContextHolder.getEstimatedTime(
-            timoutCheckHosts = replicationProperties.timoutCheckHosts,
+            timoutCheckHosts = super.replicationProperties.timoutCheckHosts,
             url = context.remoteCluster.url,
             size = packageVersion.size
         )
         edgeReplicaTaskRecordService.waitTaskFinish(edgeReplicaTaskRecord.id!!, estimateTime, ChronoUnit.SECONDS)
         return true
+    }
+
+    companion object {
+        private val logger = LoggerFactory.getLogger(CenterClusterReplicator::class.java)
     }
 }

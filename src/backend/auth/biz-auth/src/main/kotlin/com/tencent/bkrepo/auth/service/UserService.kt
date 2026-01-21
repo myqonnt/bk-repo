@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -51,7 +51,7 @@ interface UserService {
 
     fun createUserToRepo(request: CreateUserToRepoRequest): Boolean
 
-    fun listUser(rids: List<String>): List<User>
+    fun listUser(rids: List<String>, tenantId: String?): List<User>
 
     fun deleteById(userId: String): Boolean
 
@@ -67,6 +67,8 @@ interface UserService {
 
     fun createToken(userId: String): Token?
 
+    fun createOrUpdateUser(userId: String, name: String, tenantId: String?)
+
     fun addUserToken(userId: String, name: String, expiredAt: String?): Token?
 
     fun listUserToken(userId: String): List<TokenResult>
@@ -80,6 +82,8 @@ interface UserService {
     fun userPage(pageNumber: Int, pageSize: Int, userName: String?, admin: Boolean?, locked: Boolean?): Page<UserInfo>
 
     fun getUserInfoById(userId: String): UserInfo?
+
+    fun getUserInfoByToken(token: String): UserInfo?
 
     fun getUserPwdById(userId: String): String?
 
@@ -96,4 +100,6 @@ interface UserService {
     fun validateEntityUser(userId: String): Boolean
 
     fun getRelatedUserById(userId: String): List<UserInfo>
+
+    fun listAdminUsers(): List<String>
 }

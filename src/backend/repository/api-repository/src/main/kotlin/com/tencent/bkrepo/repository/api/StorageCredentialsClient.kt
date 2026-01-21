@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -42,8 +42,9 @@ import org.springframework.web.bind.annotation.RequestParam
 /**
  * 存储凭证服务接口
  */
-@FeignClient(REPOSITORY_SERVICE_NAME, contextId = "StorageCredentialsClient")
+@FeignClient(REPOSITORY_SERVICE_NAME, contextId = "StorageCredentialsClient", primary = false)
 @RequestMapping("/service/storage/credentials")
+@Deprecated("replace by StorageCredentialsService")
 interface StorageCredentialsClient {
 
     /**

@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -27,21 +27,23 @@
 
 package com.tencent.bkrepo.auth.pojo.user
 
-import io.swagger.annotations.ApiModelProperty
+import io.swagger.v3.oas.annotations.media.Schema
 
 data class UpdateUserRequest(
-    @ApiModelProperty("用户名")
-    val name: String? = null,
-    @ApiModelProperty("密码")
+    @get:Schema(title = "用户名")
+    var name: String? = null,
+    @get:Schema(title = "密码")
     val pwd: String? = null,
-    @ApiModelProperty("绑定用户")
+    @get:Schema(title = "绑定用户")
     val asstUsers: List<String> = emptyList(),
-    @ApiModelProperty("lock状态")
+    @get:Schema(title = "lock状态")
     val locked: Boolean? = null,
-    @ApiModelProperty("email")
+    @get:Schema(title = "email")
     val email: String? = null,
-    @ApiModelProperty("联系电话")
+    @get:Schema(title = "联系电话")
     val phone: String? = null,
-    @ApiModelProperty("是否管理员")
-    val admin: Boolean? = null
+    @get:Schema(title = "是否管理员")
+    val admin: Boolean? = null,
+    @get:Schema(title = "租户ID")
+    var tenantId: String? = null
 )

@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -31,14 +31,14 @@
 
 package com.tencent.bkrepo.repository.pojo.metadata
 
-import io.swagger.annotations.ApiModel
-import io.swagger.annotations.ApiModelProperty
+import io.swagger.v3.oas.annotations.media.Schema
+
 
 /**
  * 元数据删除请求
  */
-@ApiModel("元数据删除请求")
+@Schema(title = "元数据删除请求")
 data class UserMetadataDeleteRequest(
-    @ApiModelProperty("待删除的元数据key列表", required = true)
+    @get:Schema(title = "待删除的元数据key列表", required = true)
     val keyList: Set<String>
 )

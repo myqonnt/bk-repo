@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -33,11 +33,20 @@ rootProject.name = "bk-repo-backend"
 
 pluginManagement {
     repositories {
+        val snapshotsRepo = maven {
+            name = "Central Portal Snapshots"
+            url = java.net.URI("https://central.sonatype.com/repository/maven-snapshots/")
+            mavenContent {
+                snapshotsOnly()
+            }
+        }
         if (System.getenv("GITHUB_WORKFLOW") == null) {
+            snapshotsRepo
             maven(url = "https://mirrors.tencent.com/nexus/repository/gradle-plugins/")
             maven(url = "https://mirrors.tencent.com/nexus/repository/maven-public")
             maven(url = "https://repo.spring.io/milestone")
         } else {
+            snapshotsRepo
             mavenCentral()
             maven(url = "https://repo.spring.io/milestone")
             gradlePluginPortal()
@@ -62,31 +71,38 @@ includeAll(":common:common-storage")
 includeAll(":common:common-query")
 includeAll(":common:common-artifact")
 includeAll(":common:common-notify")
-includeAll(":common:common-operate")
-includeAll(":composer")
-includeAll(":generic")
-includeAll(":helm")
-includeAll(":maven")
-includeAll(":npm")
-includeAll(":nuget")
+includeAll(":core:generic")
+includeAll(":core:composer")
+includeAll(":core:helm")
+includeAll(":core:maven")
+includeAll(":core:npm")
+includeAll(":core:pypi")
+includeAll(":core:rpm")
+includeAll(":core:oci")
+includeAll(":core:ddc")
+includeAll(":core:nuget")
+includeAll(":core:s3")
+includeAll(":core:conan")
+includeAll(":core:cargo")
+includeAll(":core:huggingface")
+includeAll(":core:git")
+includeAll(":core:lfs")
+includeAll(":core:svn")
 includeAll(":opdata")
-includeAll(":pypi")
 includeAll(":replication")
 includeAll(":repository")
-includeAll(":rpm")
-includeAll(":git")
-includeAll(":oci")
 includeAll(":webhook")
 includeAll(":job")
 includeAll(":analyst")
 includeAll(":analysis-executor")
 includeAll(":common:common-checker")
-includeAll(":conan")
-includeAll(":fs")
+includeAll(":driver")
 includeAll(":config")
-includeAll(":lfs")
-includeAll(":ddc")
-includeAll(":svn")
 includeAll(":archive")
-includeAll(":s3")
-includeAll(":router-controller")
+includeAll(":media")
+includeAll(":common:common-metadata")
+includeAll(":common:common-service")
+includeAll(":preview")
+includeAll(":websocket")
+includeAll(":common:common-archive")
+includeAll(":common:common-metrics")

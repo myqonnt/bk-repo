@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2024 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2024 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -30,22 +30,28 @@ package com.tencent.bkrepo.common.artifact.cache.service.impl
 import com.tencent.bkrepo.common.api.constant.StringPool
 import com.tencent.bkrepo.common.artifact.api.ArtifactFile
 import com.tencent.bkrepo.common.artifact.api.FileSystemArtifactFile
+import com.tencent.bkrepo.common.artifact.cache.NoopObservationRegistry
 import com.tencent.bkrepo.common.artifact.cache.config.ArtifactPreloadConfiguration
 import com.tencent.bkrepo.common.artifact.cache.config.ArtifactPreloadProperties
+import com.tencent.bkrepo.common.artifact.metrics.ArtifactMetricsConfiguration
+import com.tencent.bkrepo.common.metadata.service.node.NodeService
+import com.tencent.bkrepo.common.metadata.service.repo.RepositoryService
+import com.tencent.bkrepo.common.metadata.service.repo.StorageCredentialService
 import com.tencent.bkrepo.common.storage.StorageAutoConfiguration
-import com.tencent.bkrepo.common.storage.core.StorageProperties
+import com.tencent.bkrepo.common.storage.config.StorageProperties
 import com.tencent.bkrepo.common.storage.core.StorageService
 import com.tencent.bkrepo.common.storage.core.cache.CacheStorageService
 import com.tencent.bkrepo.common.storage.core.locator.FileLocator
 import com.tencent.bkrepo.common.storage.credentials.StorageCredentials
-import com.tencent.bkrepo.repository.api.StorageCredentialsClient
+import io.micrometer.core.instrument.MeterRegistry
 import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.TestInstance
 import org.springframework.boot.autoconfigure.ImportAutoConfiguration
 import org.springframework.boot.autoconfigure.task.TaskExecutionAutoConfiguration
 import org.springframework.boot.test.autoconfigure.data.mongo.DataMongoTest
-import org.springframework.boot.test.mock.mockito.MockBean
+import org.springframework.context.annotation.Import
 import org.springframework.test.context.TestPropertySource
+import org.springframework.test.context.bean.override.mockito.MockitoBean
 import java.io.File
 import java.nio.file.Path
 import java.nio.file.Paths
@@ -54,18 +60,32 @@ import kotlin.contracts.ExperimentalContracts
 @ExperimentalContracts
 @DataMongoTest
 @ImportAutoConfiguration(
-    ArtifactPreloadConfiguration::class, StorageAutoConfiguration::class, TaskExecutionAutoConfiguration::class
+    ArtifactPreloadConfiguration::class,
+    StorageAutoConfiguration::class,
+    TaskExecutionAutoConfiguration::class,
+    ArtifactMetricsConfiguration::class
 )
 @TestPropertySource(locations = ["classpath:bootstrap-ut.properties", "classpath:application-test.properties"])
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+@Import(NoopObservationRegistry::class)
 open class ArtifactPreloadBaseServiceTest(
     protected val properties: ArtifactPreloadProperties,
     protected val storageService: StorageService,
     protected val fileLocator: FileLocator,
     protected val storageProperties: StorageProperties,
 ) {
-    @MockBean
-    protected lateinit var storageCredentialsClient: StorageCredentialsClient
+
+    @MockitoBean
+    protected lateinit var nodeService: NodeService
+
+    @MockitoBean
+    protected lateinit var repositoryService: RepositoryService
+
+    @MockitoBean
+    protected lateinit var storageCredentialService: StorageCredentialService
+
+    @MockitoBean
+    protected lateinit var meterRegistry: MeterRegistry
 
     protected fun createTempArtifactFile(size: Long): ArtifactFile {
         val tempFile = File.createTempFile("preload-", ".tmp")

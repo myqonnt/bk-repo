@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2019 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2019 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -29,28 +29,30 @@ package com.tencent.bkrepo.common.artifact.manager
 
 import com.tencent.bkrepo.archive.api.ArchiveClient
 import com.tencent.bkrepo.common.api.exception.ErrorCodeException
+import com.tencent.bkrepo.common.api.pojo.ClusterArchitecture
 import com.tencent.bkrepo.common.api.pojo.ClusterNodeType
 import com.tencent.bkrepo.common.artifact.manager.resource.FsNodeResource
 import com.tencent.bkrepo.common.artifact.manager.resource.LocalNodeResource
 import com.tencent.bkrepo.common.artifact.manager.resource.NodeResource
 import com.tencent.bkrepo.common.artifact.manager.resource.RemoteNodeResource
 import com.tencent.bkrepo.common.artifact.stream.Range
+import com.tencent.bkrepo.common.metadata.service.blocknode.BlockNodeService
+import com.tencent.bkrepo.common.metadata.service.repo.StorageCredentialService
 import com.tencent.bkrepo.common.service.cluster.ClusterInfo
-import com.tencent.bkrepo.common.service.cluster.ClusterProperties
+import com.tencent.bkrepo.common.service.cluster.properties.ClusterProperties
 import com.tencent.bkrepo.common.storage.core.StorageService
 import com.tencent.bkrepo.common.storage.credentials.StorageCredentials
-import com.tencent.bkrepo.fs.server.api.FsNodeClient
 import com.tencent.bkrepo.fs.server.constant.FS_ATTR_KEY
 import com.tencent.bkrepo.replication.api.ClusterNodeClient
+import com.tencent.bkrepo.replication.constant.FEDERATED
 import com.tencent.bkrepo.replication.exception.ReplicationMessageCode
-import com.tencent.bkrepo.repository.api.StorageCredentialsClient
 import com.tencent.bkrepo.repository.pojo.node.NodeInfo
 
 class NodeResourceFactoryImpl(
     private val clusterProperties: ClusterProperties,
     private val storageService: StorageService,
-    private val storageCredentialsClient: StorageCredentialsClient,
-    private val fsNodeClient: FsNodeClient,
+    private val storageCredentialService: StorageCredentialService,
+    private val blockNodeService: BlockNodeService,
     private val clusterNodeClient: ClusterNodeClient,
     private val archiveClient: ArchiveClient,
 ) : NodeResourceFactory {
@@ -69,11 +71,29 @@ class NodeResourceFactoryImpl(
         storageCredentials: StorageCredentials?,
     ): NodeResource {
         val digest = nodeInfo.sha256.orEmpty()
-        if (clusterProperties.role == ClusterNodeType.EDGE) {
-            return RemoteNodeResource(digest, range, storageCredentials, centerClusterInfo, storageService)
-        }
         if (isFsFile(nodeInfo)) {
-            return FsNodeResource(nodeInfo, fsNodeClient, range, storageService, storageCredentials)
+            val (isFederating, clusterInfo) = if (isFederating(nodeInfo)) {
+                val clusterInfo = getClusterInfo(nodeInfo.federatedSource!!)
+                    ?: throw ErrorCodeException(
+                        ReplicationMessageCode.CLUSTER_NODE_NOT_FOUND, nodeInfo.federatedSource!!
+                    )
+                Pair(true, clusterInfo)
+            } else {
+                Pair(false, null)
+            }
+            return FsNodeResource(
+                nodeInfo, blockNodeService, range, storageService, storageCredentials,
+                storageCredentialService, isFederating, clusterInfo
+            )
+        }
+        if (isFederating(nodeInfo)) {
+            val clusterInfo = getClusterInfo(nodeInfo.federatedSource!!)
+                ?: throw ErrorCodeException(ReplicationMessageCode.CLUSTER_NODE_NOT_FOUND, nodeInfo.federatedSource!!)
+            return RemoteNodeResource(digest, range, storageCredentials, clusterInfo, storageService)
+        }
+        if (clusterProperties.role == ClusterNodeType.EDGE &&
+            clusterProperties.architecture != ClusterArchitecture.COMMIT_EDGE) {
+            return RemoteNodeResource(digest, range, storageCredentials, centerClusterInfo, storageService)
         }
         val clusterName = getClusterName(nodeInfo)
         if (!inLocal(nodeInfo) && clusterName != null) {
@@ -86,9 +106,15 @@ class NodeResourceFactoryImpl(
             range,
             storageCredentials,
             storageService,
-            storageCredentialsClient,
+            storageCredentialService,
             archiveClient,
         )
+    }
+
+    private fun isFederating(node: NodeInfo): Boolean {
+        val federatedMetadata = node.nodeMetadata?.firstOrNull { it.key == FEDERATED }
+        val federated = federatedMetadata?.value as? Boolean ?: true
+        return !node.federatedSource.isNullOrEmpty() && !federated
     }
 
     private fun isFsFile(node: NodeInfo): Boolean {
@@ -104,7 +130,7 @@ class NodeResourceFactoryImpl(
     }
 
     private fun getClusterInfo(name: String): ClusterInfo? {
-        return clusterNodeClient.getCluster(name).data?.let {
+        return clusterNodeClient.getClusterInfo(name).data?.let {
             ClusterInfo(
                 url = it.url,
                 certificate = it.certificate.orEmpty(),

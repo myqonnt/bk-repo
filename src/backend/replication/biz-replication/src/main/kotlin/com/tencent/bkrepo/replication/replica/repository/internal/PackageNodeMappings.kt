@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -33,6 +33,7 @@ import com.tencent.bkrepo.replication.replica.repository.internal.type.DockerPac
 import com.tencent.bkrepo.replication.replica.repository.internal.type.HelmPackageNodeMapper
 import com.tencent.bkrepo.replication.replica.repository.internal.type.MavenPackageNodeMapper
 import com.tencent.bkrepo.replication.replica.repository.internal.type.NpmPackageNodeMapper
+import com.tencent.bkrepo.replication.replica.repository.internal.type.NugetPackageNodeMapper
 import com.tencent.bkrepo.replication.replica.repository.internal.type.PackageNodeMapper
 import com.tencent.bkrepo.repository.pojo.packages.PackageSummary
 import com.tencent.bkrepo.repository.pojo.packages.PackageVersion
@@ -49,6 +50,7 @@ object PackageNodeMappings {
         addMapper(NpmPackageNodeMapper())
         addMapper(SpringContextUtils.getBean(HelmPackageNodeMapper::class.java))
         addMapper(SpringContextUtils.getBean(DockerPackageNodeMapper::class.java))
+        addMapper(SpringContextUtils.getBean(NugetPackageNodeMapper::class.java))
     }
 
     private fun addMapper(mapper: PackageNodeMapper) {

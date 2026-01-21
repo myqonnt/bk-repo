@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -31,29 +31,31 @@
 
 package com.tencent.bkrepo.repository.pojo.project
 
-import io.swagger.annotations.ApiModel
-import io.swagger.annotations.ApiModelProperty
+import io.swagger.v3.oas.annotations.media.Schema
 
-@ApiModel("项目信息")
+
+@Schema(title = "项目信息")
 data class ProjectInfo(
-    @ApiModelProperty("名称")
+    @get:Schema(title = "名称")
     val name: String,
-    @ApiModelProperty("显示名称")
+    @get:Schema(title = "显示名称")
     val displayName: String,
-    @ApiModelProperty("描述")
+    @get:Schema(title = "描述")
     val description: String,
-    @ApiModelProperty("创建者")
+    @get:Schema(title = "创建者")
     val createdBy: String,
-    @ApiModelProperty("创建日期")
+    @get:Schema(title = "创建日期")
     val createdDate: String,
-    @ApiModelProperty("上次修改者")
+    @get:Schema(title = "上次修改者")
     val lastModifiedBy: String,
-    @ApiModelProperty("上次修改日期")
+    @get:Schema(title = "上次修改日期")
     val lastModifiedDate: String,
-    @ApiModelProperty("是否已生成蓝鲸v3-rbac默认项目组")
+    @get:Schema(title = "是否已生成蓝鲸v3-rbac默认项目组")
     val rbacFlag: Boolean = false,
-    @ApiModelProperty("项目元数据")
+    @get:Schema(title = "项目元数据")
     val metadata: List<ProjectMetadata> = emptyList(),
-    @ApiModelProperty("项目新建仓库默认使用的存储")
+    @get:Schema(title = "项目新建仓库默认使用的存储")
     val credentialsKey: String? = null,
+    @get:Schema(title = "租户ID")
+    val tenantId: String?,
 )

@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2019 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2019 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -56,4 +56,20 @@ open class BatchJobProperties(
      * 任务分布式锁名
      */
     var lockName: String? = null,
+
+    // ----v2 job----
+    /**
+     * 是否在新调度框架下开启任务
+     * */
+    open var enabledV2: Boolean = false,
+
+    /**
+     * 工作组名称，为空则使用默认工作组
+     * */
+    open var workerGroup: String = "",
+
+    /**
+     * 任务是否动态分片
+     * */
+    open var sharding: Boolean = false,
 )

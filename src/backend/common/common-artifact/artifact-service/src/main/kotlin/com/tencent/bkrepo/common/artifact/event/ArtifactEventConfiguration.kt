@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -34,6 +34,7 @@ package com.tencent.bkrepo.common.artifact.event
 import com.tencent.bkrepo.common.artifact.event.listener.ArtifactDownloadListener
 import com.tencent.bkrepo.common.artifact.event.listener.ArtifactTransferListener
 import com.tencent.bkrepo.common.artifact.event.listener.ArtifactWebHookListener
+import com.tencent.bkrepo.common.artifact.properties.ArtifactEventProperties
 import com.tencent.bkrepo.common.artifact.webhook.WebHookService
 import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Configuration

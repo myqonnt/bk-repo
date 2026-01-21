@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -41,8 +41,9 @@ import com.tencent.bkrepo.common.storage.core.operation.HealthCheckOperation
 import com.tencent.bkrepo.common.storage.core.operation.OverlayOperation
 import com.tencent.bkrepo.common.storage.credentials.StorageCredentials
 import com.tencent.bkrepo.common.storage.filesystem.check.SynchronizeResult
+import java.io.FileNotFoundException
 import java.nio.file.Path
-import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.jvm.Throws
 
 /**
  * 存储服务接口
@@ -61,13 +62,15 @@ interface StorageService :
         digest: String,
         artifactFile: ArtifactFile,
         storageCredentials: StorageCredentials?,
-        cancel: AtomicBoolean? = null,
         storageClass: String? = null,
     ): Int
 
     /**
      * 在存储实例[storageCredentials]上加载摘要为[digest]的文件
      * 当文件未找到时，会尝试去默认存储实例上查找文件
+     *
+     * 注意：该方法只会从指定存储[storageCredentials]中加载文件，如果文件正在迁移中还在旧存储或者存在于其他集群该方法会加载失败，
+     * 此时需要考虑使用[com.tencent.bkrepo.common.artifact.manager.StorageManager]中加载方法
      */
     fun load(digest: String, range: Range, storageCredentials: StorageCredentials?): ArtifactInputStream?
 
@@ -87,6 +90,7 @@ interface StorageService :
      * 若B中已经存在相同文件则立即返回
      * 若A == B，立即返回
      */
+    @Throws(FileNotFoundException::class)
     fun copy(digest: String, fromCredentials: StorageCredentials?, toCredentials: StorageCredentials?)
 
     /**

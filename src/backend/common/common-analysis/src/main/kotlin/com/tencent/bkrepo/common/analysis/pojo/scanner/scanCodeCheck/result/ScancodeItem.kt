@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -27,17 +27,17 @@
 
 package com.tencent.bkrepo.common.analysis.pojo.scanner.scanCodeCheck.result
 
-import io.swagger.annotations.ApiModel
-import io.swagger.annotations.ApiModelProperty
+import io.swagger.v3.oas.annotations.media.Schema
 
-@ApiModel("ScancodeItem许可信息")
+
+@Schema(title = "ScancodeItem许可信息")
 data class ScancodeItem(
-    @ApiModelProperty("许可简称")
+    @get:Schema(title = "许可简称")
     val licenseId: String,
-    @ApiModelProperty("依赖路径")
+    @get:Schema(title = "依赖路径")
     val dependentPath: String,
     // 风险等级暂时没有
-    @ApiModelProperty("风险等级")
+    @get:Schema(title = "风险等级")
     var riskLevel: String? = null,
 ) {
     companion object {

@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2021 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2021 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -27,20 +27,21 @@
 
 package com.tencent.bkrepo.opdata.pojo.registry
 
-import io.swagger.annotations.ApiModelProperty
+import io.swagger.v3.oas.annotations.media.Schema
+
 
 /**
  * 服务节点详细信息
  */
 data class InstanceDetail(
-    @ApiModelProperty("正在下载的请求数量", required = true)
+    @get:Schema(title = "正在下载的请求数量", required = true)
     val downloadingCount:Long,
-    @ApiModelProperty("正在上传的请求数量", required = true)
+    @get:Schema(title = "正在上传的请求数量", required = true)
     val uploadingCount: Long,
-    @ApiModelProperty("从缓存异步上传到实际存储的任务数量，不使用缓存时为-1", required = true)
+    @get:Schema(title = "从缓存异步上传到实际存储的任务数量，不使用缓存时为-1", required = true)
     val asyncTaskActiveCount: Long,
-    @ApiModelProperty("从缓存异步上传到实际存储的任务队列大小，不使用缓存时为-1", required = true)
+    @get:Schema(title = "从缓存异步上传到实际存储的任务队列大小，不使用缓存时为-1", required = true)
     val asyncTaskQueueSize: Long,
-    @ApiModelProperty("已加载的插件", required = true)
+    @get:Schema(title = "已加载的插件", required = true)
     val loadedPlugins: List<String>? = null
 )

@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2021 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2021 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -38,12 +38,20 @@ class MetadataSavedEvent(
     override val repoName: String,
     override val resourceKey: String,
     override val userId: String,
-    val metadata: Map<String, Any>
+    override val source: String?,
+    val metadata: Map<String, Any>,
+    val replace: Boolean = false,
+    override val eventId: String? = generateEventId(),
 ) : ArtifactEvent(
     type = EventType.METADATA_SAVED,
     projectId = projectId,
     repoName = repoName,
     resourceKey = resourceKey,
     userId = userId,
-    data = mapOf("metadata" to metadata)
+    data = mapOf(
+        "metadata" to metadata,
+        "replace" to replace
+    ),
+    source = source,
+    eventId = eventId
 )

@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -55,14 +55,14 @@ object HumanReadable {
         return size(speed.toLong()) + "/s"
     }
 
-    fun time(nano: Long): String {
+    fun time(nano: Long, format: String = "%.4g"): String {
         val unit = chooseUnit(nano)
         val value = nano.toDouble() / TimeUnit.NANOSECONDS.convert(1, unit)
-        return String.format(Locale.ROOT, "%.4g", value) + " " + abbreviate(unit)
+        return String.format(Locale.ROOT, format, value) + " " + abbreviate(unit)
     }
 
-    fun time(time: Long, unit: TimeUnit): String {
-        return time(unit.toNanos(time))
+    fun time(time: Long, unit: TimeUnit, format: String = "%.4g"): String {
+        return time(unit.toNanos(time), format)
     }
 
     private fun chooseUnit(nano: Long): TimeUnit {

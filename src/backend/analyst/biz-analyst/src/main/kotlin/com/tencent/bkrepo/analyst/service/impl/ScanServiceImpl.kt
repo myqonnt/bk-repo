@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -73,9 +73,9 @@ import com.tencent.bkrepo.common.api.exception.ErrorCodeException
 import com.tencent.bkrepo.common.api.exception.NotFoundException
 import com.tencent.bkrepo.common.api.message.CommonMessageCode
 import com.tencent.bkrepo.common.lock.service.LockOperation
+import com.tencent.bkrepo.common.metadata.service.project.ProjectService
 import com.tencent.bkrepo.common.security.util.SecurityUtils
 import com.tencent.bkrepo.common.service.util.HttpContextHolder
-import com.tencent.bkrepo.repository.api.ProjectClient
 import com.tencent.bkrepo.repository.pojo.project.ProjectRangeQueryRequest
 import com.tencent.bkrepo.statemachine.Event
 import com.tencent.bkrepo.statemachine.StateMachine
@@ -102,7 +102,7 @@ class ScanServiceImpl @Autowired constructor(
     private val redisTemplate: RedisTemplate<String, String>,
     private val reportExporter: ReportExporter,
     private val scannerProperties: ScannerProperties,
-    private val projectClient: ProjectClient,
+    private val projectService: ProjectService,
     private val lockOperation: LockOperation,
 ) : ScanService {
 
@@ -116,9 +116,9 @@ class ScanServiceImpl @Autowired constructor(
                 // projectId需要在第一层
                 var projectIds = RuleUtil.getProjectIds(rule)
                 if (projectMetadata.isNotEmpty()) {
-                    val metadataProjectIds = projectClient.rangeQuery(
+                    val metadataProjectIds = projectService.rangeQuery(
                         ProjectRangeQueryRequest(emptyList(), projectMetadata = projectMetadata)
-                    ).data?.records?.map { it?.name!! } ?: emptyList()
+                    ).records.map { it?.name!! }
                     projectIds = projectIds + metadataProjectIds
                 }
                 val scanRequest = ScanRequest(

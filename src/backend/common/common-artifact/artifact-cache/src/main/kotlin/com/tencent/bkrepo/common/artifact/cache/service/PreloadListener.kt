@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2024 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2024 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -28,10 +28,11 @@
 package com.tencent.bkrepo.common.artifact.cache.service
 
 import com.tencent.bkrepo.common.artifact.cache.pojo.ArtifactPreloadPlan
+import com.tencent.bkrepo.common.storage.monitor.Throughput
 
 interface PreloadListener {
     fun onPreloadStart(plan: ArtifactPreloadPlan)
-    fun onPreloadSuccess(plan: ArtifactPreloadPlan)
+    fun onPreloadSuccess(plan: ArtifactPreloadPlan, throughput: Throughput? = null)
     fun onPreloadFailed(plan: ArtifactPreloadPlan)
     fun onPreloadFinished(plan: ArtifactPreloadPlan)
 }

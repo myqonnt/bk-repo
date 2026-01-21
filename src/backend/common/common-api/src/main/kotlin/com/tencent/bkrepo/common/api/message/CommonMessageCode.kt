@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -60,6 +60,13 @@ enum class CommonMessageCode(private val key: String) : MessageCode {
     OPERATION_CROSS_CLUSTER_NOT_ALLOWED("operation.cross-cluster.not-allowed"),
     MEDIA_TYPE_UNACCEPTABLE("system.media-type.unacceptable"),
     TOO_MANY_REQUESTS("too.many.requests"),
+    PIPELINE_NOT_RUNNING("pipeline.not-running"),
+    INVALID_CONFIG("system.config.invalid"),
+    ACQUIRE_LOCK_FAILED("acquire.lock.failed"),
+    RATE_LIMITER_OVERLOAD("rate.limiter.overload"),
+    REQUEST_URL_NOT_FOUND("request.url.not-found"),
+    PARAMETER_VALIDATION_FAILED("parameter.validation.failed"),
+    CLIENT_BROKEN("client.broken")
     ;
 
     override fun getBusinessCode() = ordinal + 1

@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -249,6 +249,11 @@ class PlanArtifactLatestSubScanTaskDao(
         return planArtifactCountMap
     }
 
+    fun deleteByLatestSubtasks(latestSubScanTaskIds: List<String>): List<TPlanArtifactLatestSubScanTask> {
+        val query = Query(TPlanArtifactLatestSubScanTask::latestSubScanTaskId.inValues(latestSubScanTaskIds))
+        return determineMongoTemplate().findAllAndRemove(query, TPlanArtifactLatestSubScanTask::class.java)
+    }
+
     /**
      * 更新扫描方案预览结果
      */
@@ -272,24 +277,8 @@ class PlanArtifactLatestSubScanTaskDao(
             return
         }
 
-        // 统计每个扫描方案需要更新的结果预览值
-        val planOverviewMap = HashMap<String, MutableMap<String, Long>>()
-        oldSubtasks.forEach {
-            val planOverview = planOverviewMap.getOrPut(it.planId!!) { HashMap() }
-            updateOverview(planOverview, it.scanResultOverview)
-        }
-        scanPlanDao.decrementScanResultOverview(planOverviewMap)
-    }
-
-    private fun updateOverview(planOverview: MutableMap<String, Long>, artifactOverview: Map<String, Number>?) {
-        if (artifactOverview == null) {
-            return
-        }
-
-        for (entry in artifactOverview) {
-            val planOverviewValue = planOverview.getOrDefault(entry.key, 0L)
-            planOverview[entry.key] = planOverviewValue + entry.value.toLong()
-        }
+        // 减少旧子任务对应的扫描方案预览值
+        scanPlanDao.decrementScanResultOverview(oldSubtasks)
     }
 
     private fun buildCriteria(projectId: String, repoName: String, fullPath: String, planId: String?): Criteria {

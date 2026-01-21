@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2024 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2024 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -29,9 +29,19 @@ package com.tencent.bkrepo.common.artifact.cache.service
 
 import com.tencent.bkrepo.common.api.pojo.Page
 import com.tencent.bkrepo.common.artifact.cache.pojo.ArtifactPreloadPlan
+import com.tencent.bkrepo.common.artifact.cache.pojo.ArtifactPreloadPlanCreateRequest
 import org.springframework.data.domain.PageRequest
 
 interface ArtifactPreloadPlanService {
+    /**
+     * 创建预加载执行计划
+     *
+     * @param request 创建请求
+     *
+     * @return 创建完成的预加载执行计划
+     */
+    fun createPlan(request: ArtifactPreloadPlanCreateRequest): ArtifactPreloadPlan
+
     /**
      * 根据预加载策略创建执行计划
      *

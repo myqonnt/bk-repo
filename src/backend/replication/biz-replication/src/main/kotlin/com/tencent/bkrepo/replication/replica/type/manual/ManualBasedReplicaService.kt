@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -27,7 +27,7 @@
 
 package com.tencent.bkrepo.replication.replica.type.manual
 
-import com.tencent.bkrepo.common.service.otel.util.AsyncUtils.trace
+import com.tencent.bkrepo.common.api.util.TraceUtils.trace
 import com.tencent.bkrepo.replication.config.ReplicationProperties
 import com.tencent.bkrepo.replication.manager.LocalDataManager
 import com.tencent.bkrepo.replication.pojo.request.ReplicaObjectType
@@ -35,6 +35,7 @@ import com.tencent.bkrepo.replication.pojo.task.objects.PackageConstraint
 import com.tencent.bkrepo.replication.pojo.task.objects.PathConstraint
 import com.tencent.bkrepo.replication.replica.context.ReplicaContext
 import com.tencent.bkrepo.replication.replica.executor.ManualThreadPoolExecutor
+import com.tencent.bkrepo.replication.dao.ReplicaFailureRecordDao
 import com.tencent.bkrepo.replication.replica.type.AbstractReplicaService
 import com.tencent.bkrepo.replication.service.ReplicaRecordService
 import org.springframework.stereotype.Component
@@ -49,8 +50,9 @@ import java.util.concurrent.Semaphore
 class ManualBasedReplicaService(
     replicaRecordService: ReplicaRecordService,
     localDataManager: LocalDataManager,
+    replicaFailureRecordDao: ReplicaFailureRecordDao,
     private val replicationProperties: ReplicationProperties
-) : AbstractReplicaService(replicaRecordService, localDataManager) {
+) : AbstractReplicaService(replicaRecordService, localDataManager, replicaFailureRecordDao) {
     private val executor = ManualThreadPoolExecutor.instance
     override fun replica(context: ReplicaContext) {
         replicaTaskObjects(context)
@@ -95,7 +97,7 @@ class ManualBasedReplicaService(
             semaphore.acquire()
             futureList.add(
                 executor.submit(
-                    Callable{
+                    Callable {
                         try {
                             replicaTaskObject(context, taskObject)
                         } finally {

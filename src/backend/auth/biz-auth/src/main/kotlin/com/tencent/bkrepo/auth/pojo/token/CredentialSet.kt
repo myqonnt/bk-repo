@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -29,20 +29,19 @@ package com.tencent.bkrepo.auth.pojo.token
 
 import com.tencent.bkrepo.auth.pojo.enums.CredentialStatus
 import com.tencent.bkrepo.auth.pojo.oauth.AuthorizationGrantType
-import io.swagger.annotations.ApiModel
-import io.swagger.annotations.ApiModelProperty
+import io.swagger.v3.oas.annotations.media.Schema
 import java.time.LocalDateTime
 
-@ApiModel("账户认证信息")
+@Schema(title = "账户认证信息")
 data class CredentialSet(
-    @ApiModelProperty("accessKey")
+    @get:Schema(title = "accessKey")
     val accessKey: String,
-    @ApiModelProperty("secretKey")
+    @get:Schema(title = "secretKey")
     var secretKey: String,
-    @ApiModelProperty("创建时间")
+    @get:Schema(title = "创建时间")
     val createdAt: LocalDateTime,
-    @ApiModelProperty("状态")
+    @get:Schema(title = "状态")
     val status: CredentialStatus,
-    @ApiModelProperty("认证授权方式")
+    @get:Schema(title = "认证授权方式")
     val authorizationGrantType: AuthorizationGrantType? = AuthorizationGrantType.PLATFORM
 )

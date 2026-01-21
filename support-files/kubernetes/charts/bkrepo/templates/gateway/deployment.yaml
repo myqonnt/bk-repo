@@ -61,6 +61,14 @@ spec:
           resources: {{- toYaml .Values.gateway.resources | nindent 12 }}
           {{- end }}
           env:
+            - name: BK_REPO_REDIS_HOST
+              value: {{ .Values.redis.host | default "localhost" | quote  }}
+            - name: BK_REPO_REDIS_PORT
+              value: {{ .Values.redis.port | default "6379" | quote }}
+            - name: BK_REPO_REDIS_ADMIN_PASSWORD
+              value: {{ .Values.redis.password | default "" | quote }}
+            - name: BK_REPO_REDIS_DATABASE
+              value: {{ .Values.redis.database | default "0" | quote }}
             - name: NAMESPACE
               value: {{ .Release.Namespace }}
             - name: BK_REPO_SERVICE_PREFIX
@@ -77,6 +85,8 @@ spec:
               value: {{ include "bkrepo.authorization" . }}
             - name: BK_REPO_DEPLOY_MODE
               value: {{ .Values.gateway.deployMode }}
+            - name: BK_REPO_RELEASE_MODE
+              value: {{ .Values.gateway.releaseMode }}
             - name: BK_REPO_AUTH_MODE
               value: {{ .Values.gateway.authMode }}
             - name: BK_CI_HOST
@@ -93,6 +103,8 @@ spec:
               value: {{ .Values.gateway.helmHost }}
             - name: BK_REPO_PAAS_FQDN
               value: {{ .Values.gateway.bkPaasUrl }}
+            - name: BK_REPO_DOCS_FQDN
+              value: {{ .Values.bkDocsCenterUrl }}
             - name: BK_REPO_PAAS_LOGIN_URL
               value: {{ .Values.gateway.bkLoginUrl }}
             - name: BK_REPO_SSM_IP0
@@ -107,12 +119,18 @@ spec:
               value: {{ .Values.gateway.ssmEnv }}
             - name: BK_APIGW_URL
               value: {{ .Values.gateway.bkApigwUrl }}
+            - name: BK_REPO_ENABLE_MULTI_TENANT_MODE
+              value: {{ default "false" .Values.gateway.enableMultiTenantMode | quote }}
+            - name: BK_REPO_OP_TENANT_ID
+              value: {{ default "system" .Values.gateway.oPTenantId | quote }}
             - name: BK_REPO_APP_CODE
               value: {{ .Values.gateway.appCode }}
             - name: BK_REPO_APP_TOKEN
               value: {{ .Values.gateway.appToken }}
             - name: BK_REPO_EXT_IP
               value: {{ default "[::]" .Values.gateway.extIp | quote }}
+            - name: BK_REPO_SUBPATH
+              value: {{ include "bkrepo.webSubPath" . }}
           ports:
             - name: http
               containerPort: 80

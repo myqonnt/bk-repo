@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -28,15 +28,17 @@
 package com.tencent.bkrepo.job.config.properties
 
 import org.springframework.boot.context.properties.ConfigurationProperties
+import org.springframework.stereotype.Component
 
+@Component
 @ConfigurationProperties(value = "job.artifact-cleanup")
-data class ArtifactCleanupJobProperties(
-    override var enabled: Boolean = false,
+class ArtifactCleanupJobProperties: MongodbJobProperties() {
+    override var enabled: Boolean = false
     // 如配置项目，则不清理该项目下的仓库
-    var projectList: List<String> = listOf(),
+    var projectList: List<String> = listOf()
     // 如配置仓库，则不清理改清理该仓库下的仓库
-    var repoList: List<String> = listOf(),
+    var repoList: List<String> = listOf()
     // 微服务调用超时后等待时间， 防止并发过大导致db压力过大
-    var sleepSeconds: Long = 20,
+    var sleepSeconds: Long = 20
     override var cron: String = "0 0 0 * * ?"
-): MongodbJobProperties()
+}

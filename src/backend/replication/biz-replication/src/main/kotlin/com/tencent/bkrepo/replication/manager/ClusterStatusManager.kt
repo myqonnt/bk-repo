@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2021 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2021 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -29,7 +29,7 @@ package com.tencent.bkrepo.replication.manager
 
 import com.tencent.bkrepo.common.api.exception.ErrorCodeException
 import com.tencent.bkrepo.common.api.pojo.ClusterNodeType
-import com.tencent.bkrepo.common.service.cluster.ClusterProperties
+import com.tencent.bkrepo.common.service.cluster.properties.ClusterProperties
 import com.tencent.bkrepo.common.service.cluster.StandaloneJob
 import com.tencent.bkrepo.replication.pojo.cluster.ClusterNodeInfo
 import com.tencent.bkrepo.replication.pojo.cluster.ClusterNodeStatus
@@ -50,7 +50,7 @@ class ClusterStatusManager(
     private val clusterNodeService: ClusterNodeService,
     private val clusterProperties: ClusterProperties
 ) {
-    @Scheduled(initialDelay = 30 * 1000L, fixedDelay = 30 * 1000L) // 每隔30s检测一次
+    @Scheduled(initialDelay = 600 * 1000L, fixedDelay = 600 * 1000L) // 每隔10min检测一次
     @StandaloneJob
     fun start() {
         val clusterNodeList = clusterNodeService.listClusterNodes(name = null, type = null)
@@ -62,7 +62,7 @@ class ClusterStatusManager(
         }
     }
 
-    private fun ping(it: ClusterNodeInfo) {
+    fun ping(it: ClusterNodeInfo) {
         try {
             clusterNodeService.tryConnect(it)
             if (it.status == ClusterNodeStatus.UNHEALTHY) {

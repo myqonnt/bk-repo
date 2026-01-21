@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -107,6 +107,11 @@ class StandardResultManager(
 
             else -> throw BadRequestException(CommonMessageCode.PARAMETER_INVALID, arguments.reportType)
         }
+    }
+
+    override fun clean(credentialsKey: String?, sha256: String, scannerName: String, batchSize: Int?): Long {
+        val resultItemDaoList = listOf(securityResultDao, licenseResultDao, sensitiveResultDao)
+        return clean(resultItemDaoList, credentialsKey, sha256, scannerName, batchSize)
     }
 
     private fun loadLicenseResults(

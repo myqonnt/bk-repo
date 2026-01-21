@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2019 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2019 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -28,6 +28,7 @@
 package com.tencent.bkrepo.common.mongo.dao.sharding
 
 import com.mongodb.client.result.DeleteResult
+import com.tencent.bkrepo.common.mongo.api.util.MongoDaoHelper.shardingValuesOf
 import org.bson.Document
 import org.springframework.data.domain.Sort
 import org.springframework.data.mongodb.core.aggregation.Aggregation
@@ -72,6 +73,7 @@ abstract class RangeShardingMongoDao<E> : ShardingMongoDao<E>() {
         if (logger.isDebugEnabled) {
             logger.debug("Mongo Dao find: [$query], ${query.limit}, ${query.skip}")
         }
+        val shardingField = shardingFields.values.first()
         val list = mutableListOf<T>()
         var collectionNames = determineCollectionNames(query)
         if (!queryWithPage(query)) {
@@ -109,8 +111,16 @@ abstract class RangeShardingMongoDao<E> : ShardingMongoDao<E>() {
         return list
     }
 
+    /**
+     * 只支持指定表删除
+     */
     override fun remove(query: Query): DeleteResult {
-        throw UnsupportedOperationException()
+        val shardingValue = shardingValuesOf(query.queryObject, shardingFields)?.firstOrNull()
+        if (shardingValue is Document && shardingValue.size > 1) {
+            throw IllegalArgumentException("Remove only works on particular table!")
+        }
+        val collectionName = determineCollectionName(query)
+        return determineMongoTemplate().remove(query, collectionName)
     }
 
     override fun count(query: Query): Long {
@@ -170,10 +180,11 @@ abstract class RangeShardingMongoDao<E> : ShardingMongoDao<E>() {
     }
 
     fun determineCollectionNames(query: Query): List<String> {
-        val shardingValue = determineCollectionName(query.queryObject)
+        val shardingValues = shardingValuesOf(query.queryObject, shardingFields)
+        val shardingValue = shardingValues?.firstOrNull()
         require(shardingValue is Document && shardingValue.size == 2) { "Sharding value can not empty !" }
 
-        return shardingUtils.shardingSequencesFor(shardingValue, shardingCount).map { collectionName + "_" + it }
+        return shardingUtils.shardingSequencesFor(shardingValues, shardingCount).map { collectionName + "_" + it }
     }
 
     @Suppress("UNCHECKED_CAST")

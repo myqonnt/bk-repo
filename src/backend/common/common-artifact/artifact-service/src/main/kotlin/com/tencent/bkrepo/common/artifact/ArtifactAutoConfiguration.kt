@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -31,18 +31,20 @@
 
 package com.tencent.bkrepo.common.artifact
 
+import com.tencent.bkrepo.common.artifact.audit.BkAuditConfiguration
 import com.tencent.bkrepo.common.artifact.cluster.ArtifactClusterConfiguration
 import com.tencent.bkrepo.common.artifact.cns.CnsConfiguration
+import com.tencent.bkrepo.common.artifact.crypt.ArtifactCryptConfiguration
 import com.tencent.bkrepo.common.artifact.event.ArtifactEventConfiguration
 import com.tencent.bkrepo.common.artifact.exception.ArtifactExceptionConfiguration
 import com.tencent.bkrepo.common.artifact.health.ArtifactHealthConfiguration
-import com.tencent.bkrepo.common.artifact.interceptor.ArtifactDownloadInterceptorConfiguration
 import com.tencent.bkrepo.common.artifact.manager.ArtifactManagerConfiguration
 import com.tencent.bkrepo.common.artifact.metrics.ArtifactMetricsConfiguration
 import com.tencent.bkrepo.common.artifact.permission.ArtifactPermissionConfiguration
 import com.tencent.bkrepo.common.artifact.repository.ArtifactContextConfiguration
 import com.tencent.bkrepo.common.artifact.resolve.ArtifactResolverConfiguration
 import com.tencent.bkrepo.common.artifact.router.ArtifactRouterControllerConfiguration
+import com.tencent.bkrepo.common.artifact.sign.SignProperties
 import com.tencent.bkrepo.common.artifact.view.ArtifactViewModelConfiguration
 import com.tencent.bkrepo.common.artifact.view.ViewModelProperties
 import org.springframework.boot.actuate.autoconfigure.metrics.export.influx.InfluxMetricsExportAutoConfiguration
@@ -56,7 +58,10 @@ import org.springframework.context.annotation.PropertySource
 @Configuration
 @PropertySource("classpath:common-artifact.properties")
 @AutoConfigureAfter(InfluxMetricsExportAutoConfiguration::class)
-@EnableConfigurationProperties(ViewModelProperties::class)
+@EnableConfigurationProperties(
+    ViewModelProperties::class,
+    SignProperties::class
+)
 @ConditionalOnWebApplication
 @Import(
     ArtifactContextConfiguration::class,
@@ -68,9 +73,10 @@ import org.springframework.context.annotation.PropertySource
     ArtifactResolverConfiguration::class,
     ArtifactViewModelConfiguration::class,
     ArtifactHealthConfiguration::class,
-    ArtifactDownloadInterceptorConfiguration::class,
     ArtifactClusterConfiguration::class,
     CnsConfiguration::class,
     ArtifactRouterControllerConfiguration::class,
+    BkAuditConfiguration::class,
+    ArtifactCryptConfiguration::class,
 )
 class ArtifactAutoConfiguration

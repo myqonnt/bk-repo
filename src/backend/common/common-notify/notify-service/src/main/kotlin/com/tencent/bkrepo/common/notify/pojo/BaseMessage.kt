@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -31,17 +31,17 @@
 
 package com.tencent.bkrepo.common.notify.pojo
 
-import io.swagger.annotations.ApiModel
-import io.swagger.annotations.ApiModelProperty
+import io.swagger.v3.oas.annotations.media.Schema
 
-@ApiModel("基础消息类型")
+
+@Schema(title = "基础消息类型")
 open class BaseMessage {
-    @ApiModelProperty("频率限制，单位分钟，即 frequencyLimit 分钟内限制不重发相同内容的消息")
+    @get:Schema(title = "频率限制，单位分钟，即 frequencyLimit 分钟内限制不重发相同内容的消息")
     var frequencyLimit: Int = 0
 
-    @ApiModelProperty("源系统id")
+    @get:Schema(title = "源系统id")
     var fromSysId: String = ""
 
-    @ApiModelProperty("tof系统id")
+    @get:Schema(title = "tof系统id")
     var tofSysId: String = ""
 }

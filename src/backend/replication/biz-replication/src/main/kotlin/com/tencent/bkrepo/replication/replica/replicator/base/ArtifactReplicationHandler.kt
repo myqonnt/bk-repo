@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -37,6 +37,7 @@ import com.tencent.bkrepo.common.artifact.util.http.StreamRequestBody
 import com.tencent.bkrepo.common.storage.pojo.FileInfo
 import com.tencent.bkrepo.replication.config.ReplicationProperties
 import com.tencent.bkrepo.replication.constant.CHUNKED_UPLOAD
+import com.tencent.bkrepo.replication.constant.FEDERATED_SOURCE
 import com.tencent.bkrepo.replication.constant.MD5
 import com.tencent.bkrepo.replication.constant.REPOSITORY_INFO
 import com.tencent.bkrepo.replication.constant.SHA256
@@ -81,7 +82,7 @@ abstract class ArtifactReplicationHandler(
             val clusterName = context.cluster.name
             logger.info(
                 "Will try to push $name file $digest or $sha256 " +
-                    "in repo ${context.localProjectId}|${context.localRepo} to remote cluster $clusterName."
+                    "in repo ${context.localProjectId}|${context.localRepoName} to remote cluster $clusterName."
             )
             logger.info("Will try to obtain uuid from remote cluster $clusterName for blob $name|$digest")
 
@@ -178,6 +179,7 @@ abstract class ArtifactReplicationHandler(
         location: String?,
         filePushContext: FilePushContext
     ): DefaultHandlerResult? {
+        var realLocation: String? = location
         var startPosition: Long = 0
         var chunkedHandlerResult: DefaultHandlerResult? = null
         val (params, ignoredFailureCode) = buildChunkUploadRequestInfo(fileInfo.sha256, filePushContext)
@@ -200,13 +202,17 @@ abstract class ArtifactReplicationHandler(
             )
             val range = Range(startPosition, startPosition + byteCount - 1, fileInfo.size)
             val input = localDataManager.loadInputStreamByRange(
-                fileInfo.sha256, range, filePushContext.context.localProjectId, filePushContext.context.localRepoName
+                sha256 = fileInfo.sha256,
+                range = range,
+                projectId = filePushContext.context.localProjectId,
+                repoName = filePushContext.context.localRepoName,
+                federatedSource = filePushContext.federatedSource
             )
             val rateLimitInputStream = input.rateLimit(
                 replicationProperties.rateLimit.toBytes()
             )
             val patchBody: RequestBody = StreamRequestBody(rateLimitInputStream, byteCount)
-            val patchHeader = Headers.Builder()
+            val patchHeaderBuilder = Headers.Builder()
                 .add(HttpHeaders.CONTENT_TYPE, MediaTypes.APPLICATION_OCTET_STREAM)
                 .add(HttpHeaders.CONTENT_RANGE, contentRange)
                 .add(HttpHeaders.CONTENT_LENGTH, "$byteCount")
@@ -218,13 +224,17 @@ abstract class ArtifactReplicationHandler(
                 .add(SHA256, fileInfo.sha256)
                 .add(SIZE, fileInfo.size.toString())
                 .add(MD5, fileInfo.md5)
-                .build()
+
+            if (!filePushContext.federatedSource.isNullOrEmpty()) {
+                patchHeaderBuilder.add(FEDERATED_SOURCE, filePushContext.federatedSource)
+            }
+            val patchHeader = patchHeaderBuilder.build()
             val property = RequestProperty(
                 requestBody = patchBody,
                 authorizationCode = filePushContext.token,
                 requestMethod = RequestMethod.PATCH,
                 headers = patchHeader,
-                requestUrl = location,
+                requestUrl = realLocation,
                 requestTag = buildRequestTag(filePushContext.context, fileInfo.sha256 + range, byteCount),
                 params = params
             )
@@ -237,6 +247,7 @@ abstract class ArtifactReplicationHandler(
             if (!chunkedHandlerResult.isSuccess) {
                 return chunkedHandlerResult
             }
+            realLocation = buildRequestUrl(filePushContext.context.cluster.url, chunkedHandlerResult.location)
             startPosition += byteCount
         }
         return chunkedHandlerResult
@@ -305,7 +316,11 @@ abstract class ArtifactReplicationHandler(
             logger.info("Will upload blob ${fileInfo.sha256} in a single patch request")
             val params = buildBlobUploadWithSingleChunkRequestParam(fileInfo.sha256, filePushContext)
             val inputStream = localDataManager.loadInputStream(
-                fileInfo.sha256, fileInfo.size, context.localProjectId, context.localRepoName
+                sha256 = fileInfo.sha256,
+                size = fileInfo.size,
+                projectId = context.localProjectId,
+                repoName = context.localRepoName,
+                federatedSource = federatedSource
             )
             val rateLimitInputStream = inputStream.rateLimit(
                 replicationProperties.rateLimit.toBytes()
@@ -314,7 +329,7 @@ abstract class ArtifactReplicationHandler(
                 rateLimitInputStream,
                 fileInfo.size
             )
-            val patchHeader = Headers.Builder()
+            val patchHeaderBuilder = Headers.Builder()
                 .add(HttpHeaders.CONTENT_TYPE, MediaTypes.APPLICATION_OCTET_STREAM)
                 .add(HttpHeaders.CONTENT_RANGE, "0-${0 + fileInfo.size - 1}")
                 .add(REPOSITORY_INFO, "${context.localProjectId}|${context.localRepoName}")
@@ -322,7 +337,10 @@ abstract class ArtifactReplicationHandler(
                 .add(HttpHeaders.CONTENT_LENGTH, fileInfo.size.toString())
                 .add(CHUNKED_UPLOAD, CHUNKED_UPLOAD)
                 .add(SIZE, fileInfo.size.toString())
-                .build()
+            if (!federatedSource.isNullOrEmpty()) {
+                patchHeaderBuilder.add(FEDERATED_SOURCE, federatedSource)
+            }
+            val patchHeader = patchHeaderBuilder.build()
             val property = RequestProperty(
                 requestBody = patchBody,
                 authorizationCode = token,

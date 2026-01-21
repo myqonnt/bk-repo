@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -32,9 +32,9 @@
 package com.tencent.bkrepo.auth.pojo.permission
 
 import com.tencent.bkrepo.auth.pojo.ResourceBaseRequest
-import io.swagger.annotations.ApiModel
+import io.swagger.v3.oas.annotations.media.Schema
 
-@ApiModel("校验权限请求")
+@Schema(title = "校验权限请求")
 data class CheckPermissionRequest(
     val uid: String,
     override var resourceType: String,
@@ -42,6 +42,6 @@ data class CheckPermissionRequest(
     override var projectId: String? = null,
     override var repoName: String? = null,
     override var path: String? = null,
-    val role: String? = null,
-    val appId: String? = null
+    val appId: String? = null,
+    var requestSource: String? = null,
 ) : ResourceBaseRequest(resourceType, projectId, repoName, path)

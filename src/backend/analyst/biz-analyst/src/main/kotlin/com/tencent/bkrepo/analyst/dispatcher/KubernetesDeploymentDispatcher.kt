@@ -53,29 +53,31 @@ class KubernetesDeploymentDispatcher(
     )
 
     override fun dispatch() {
-        val runningTaskCount = subScanTaskDao.countTaskByStatusIn(RUNNING_STATUS, executionCluster.name).toInt()
-        if (runningTaskCount != 0) {
-            // 创建deployment
-            createOrScaleDeployment(runningTaskCount)
+        val targetReplicas = targetReplicas()
+        if (targetReplicas <= 0) {
+            logger.info("target replicas is $targetReplicas, skip create deployment[${executionCluster.name}]")
+            return
+        }
+
+        // 创建deployment
+        try {
+            createOrScaleDeploymentIfNotExists(targetReplicas)
+        } catch (e: ApiException) {
+            logger.error(e.string())
+            throw e
         }
     }
 
     override fun clean(subtask: SubScanTask, subtaskStatus: String): Boolean {
-        val runningTaskCount = subScanTaskDao.countTaskByStatusIn(RUNNING_STATUS, executionCluster.name).toInt()
-        if (runningTaskCount > 0) {
-            // 尝试减少deployment的副本数量
-            scale(targetReplicas(runningTaskCount))
-        }
-
         deleteDeploymentIfNoTask()
         return true
     }
 
     private fun deleteDeploymentIfNoTask() {
         // 不存在属于该分发器的任务时直接删除对应的Deployment
-        if (subScanTaskDao.countTaskByStatusIn(null, executionCluster.name) == 0L) {
+        if (!subScanTaskDao.existsTaskByStatusIn(null, executionCluster.name)) {
             lock.withLock {
-                if (subScanTaskDao.countTaskByStatusIn(null, executionCluster.name) == 0L) {
+                if (!subScanTaskDao.existsTaskByStatusIn(null, executionCluster.name)) {
                     val deploymentName = deploymentName()
                     try {
                         api!!.deleteNamespacedDeployment(
@@ -95,24 +97,19 @@ class KubernetesDeploymentDispatcher(
         }
     }
 
-    private fun createOrScaleDeployment(runningTaskCount: Int): V1Deployment {
-        val targetReplicas = targetReplicas(runningTaskCount)
-
-        // 创建deployment
-        val scanner = scannerService.get(executionCluster.scanner)
-        require(scanner is StandardScanner)
-        val deployment = try {
-            createOrScaleDeploymentIfNotExists(executionCluster.kubernetesProperties, scanner, targetReplicas)
-        } catch (e: ApiException) {
-            logger.error(e.string())
-            throw e
-        }
-        return deployment
-    }
-
-    private fun scale(targetReplicas: Int) {
-        lock.withLock {
-            getDeployment()?.let { doScale(it, targetReplicas) }
+    private fun createOrScaleDeploymentIfNotExists(targetReplicas: Int): V1Deployment {
+        return lock.withLock {
+            var deployment = getDeployment()
+            if (deployment == null) {
+                logger.info("try to create deployment[${executionCluster.name}]")
+                val scanner = scannerService.get(executionCluster.scanner)
+                require(scanner is StandardScanner)
+                deployment = createDeployment(executionCluster.kubernetesProperties, scanner, targetReplicas)
+            } else {
+                logger.info("try to scale deployment[${executionCluster.name}]")
+                doScale(deployment, targetReplicas)
+            }
+            deployment
         }
     }
 
@@ -130,7 +127,7 @@ class KubernetesDeploymentDispatcher(
                     deployment.metadata!!.name!!,
                     deployment.metadata!!.namespace!!,
                     deployment,
-                    null, null, null
+                    null, null, null, null
                 )
                 logger.info("scale deployment[${deployment.metadata!!.name}] success")
             } catch (e: ApiException) {
@@ -148,30 +145,12 @@ class KubernetesDeploymentDispatcher(
                 deploymentName(),
                 executionCluster.kubernetesProperties.namespace,
                 null,
-                null,
-                null
             )
         } catch (e: ApiException) {
             if (e.code == HttpStatus.NOT_FOUND.value()) {
                 return null
             }
             throw e
-        }
-    }
-
-    private fun createOrScaleDeploymentIfNotExists(
-        k8sProps: KubernetesExecutionClusterProperties,
-        scanner: StandardScanner,
-        targetReplicas: Int
-    ): V1Deployment {
-        return lock.withLock {
-            var deployment = getDeployment()
-            if (deployment == null) {
-                deployment = createDeployment(k8sProps, scanner, targetReplicas)
-            } else {
-                doScale(deployment, targetReplicas)
-            }
-            deployment
         }
     }
 
@@ -183,6 +162,7 @@ class KubernetesDeploymentDispatcher(
         val deploymentName = deploymentName()
         val token = tokenService.createExecutionClusterToken(executionCluster.name)
         val cmd = buildCommand(scanner.cmd, token)
+        val resReq = ResourceRequirements.calculate(scanner, executionCluster.kubernetesProperties)
         val body = v1Deployment {
             apiVersion = "apps/v1"
             kind = "Deployment"
@@ -219,14 +199,14 @@ class KubernetesDeploymentDispatcher(
                             addImagePullSecretsItemIfNeed(scanner, k8sProps)
                             resources {
                                 limits(
-                                    cpu = k8sProps.limitCpu,
-                                    memory = k8sProps.limitMem,
-                                    ephemeralStorage = k8sProps.limitStorage
+                                    cpu = resReq.limitCpu,
+                                    memory = resReq.limitMem,
+                                    ephemeralStorage = resReq.limitStorage
                                 )
                                 requests(
-                                    cpu = k8sProps.requestCpu,
-                                    memory = k8sProps.requestMem,
-                                    ephemeralStorage = k8sProps.requestStorage
+                                    cpu = resReq.requestCpu,
+                                    memory = resReq.requestMem,
+                                    ephemeralStorage = resReq.requestStorage
                                 )
                             }
                         }
@@ -234,7 +214,7 @@ class KubernetesDeploymentDispatcher(
                 }
             }
         }
-        val deployment = api!!.createNamespacedDeployment(k8sProps.namespace, body, null, null, null)
+        val deployment = api!!.createNamespacedDeployment(k8sProps.namespace, body, null, null, null, null)
         logger.info("create deployment[$deploymentName] success")
         return deployment
     }
@@ -253,14 +233,34 @@ class KubernetesDeploymentDispatcher(
         command.add("--keep-running")
         command.add("--heartbeat")
         command.add((scannerProperties.heartbeatTimeout.seconds / 2L).toString())
+        scannerProperties.username?.let {
+            command.add("--username")
+            command.add(it)
+        }
+        scannerProperties.password?.let {
+            command.add("--password")
+            command.add(it)
+        }
         return command
     }
 
     /**
-     * minReplicas <= targetReplicas <= maxReplicas
+     * minReplicas <= targetReplicas <= maxReplicas，当不存在任务时返回0
      */
-    private fun targetReplicas(runningTaskCount: Int) =
-        maxOf(minOf(runningTaskCount, executionCluster.maxReplicas), executionCluster.minReplicas)
+    private fun targetReplicas(): Int {
+        val limitedRunningTaskCount = subScanTaskDao.limitCountTaskByStatusIn(
+            RUNNING_STATUS, executionCluster.name, executionCluster.maxReplicas
+        ).toInt()
+
+        if (limitedRunningTaskCount == 0) {
+            return 0
+        }
+
+        return maxOf(
+            minOf(limitedRunningTaskCount, executionCluster.maxReplicas),
+            executionCluster.minReplicas
+        )
+    }
 
     private fun deploymentName() = "bkrepo-analyst-${executionCluster.name}-${executionCluster.scanner}"
 

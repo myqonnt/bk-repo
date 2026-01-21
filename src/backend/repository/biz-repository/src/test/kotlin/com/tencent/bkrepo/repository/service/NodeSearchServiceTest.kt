@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -35,36 +35,42 @@ import com.tencent.bkrepo.auth.pojo.permission.ListPathResult
 import com.tencent.bkrepo.common.artifact.path.PathUtils.ROOT
 import com.tencent.bkrepo.common.artifact.pojo.RepositoryCategory
 import com.tencent.bkrepo.common.artifact.pojo.RepositoryType
+import com.tencent.bkrepo.common.metadata.dao.file.FileReferenceDao
+import com.tencent.bkrepo.common.metadata.dao.node.NodeDao
+import com.tencent.bkrepo.common.metadata.search.common.LocalDatetimeRuleInterceptor
+import com.tencent.bkrepo.common.metadata.search.common.RepoNameRuleInterceptor
+import com.tencent.bkrepo.common.metadata.search.common.RepoTypeRuleInterceptor
+import com.tencent.bkrepo.common.metadata.search.node.NodeQueryInterpreter
+import com.tencent.bkrepo.common.metadata.service.node.NodeSearchService
+import com.tencent.bkrepo.common.metadata.service.node.NodeService
+import com.tencent.bkrepo.common.metadata.service.project.ProjectService
+import com.tencent.bkrepo.common.metadata.service.repo.RepositoryService
 import com.tencent.bkrepo.common.query.enums.OperationType
 import com.tencent.bkrepo.common.query.model.QueryModel
 import com.tencent.bkrepo.common.query.model.Rule
 import com.tencent.bkrepo.common.query.model.Sort
+import com.tencent.bkrepo.common.service.util.HttpContextHolder
 import com.tencent.bkrepo.common.service.util.ResponseBuilder
 import com.tencent.bkrepo.repository.UT_PROJECT_ID
 import com.tencent.bkrepo.repository.UT_REPO_NAME
 import com.tencent.bkrepo.repository.UT_USER
-import com.tencent.bkrepo.repository.dao.FileReferenceDao
-import com.tencent.bkrepo.repository.dao.NodeDao
 import com.tencent.bkrepo.repository.pojo.metadata.MetadataModel
 import com.tencent.bkrepo.repository.pojo.node.NodeInfo
 import com.tencent.bkrepo.repository.pojo.node.service.NodeCreateRequest
 import com.tencent.bkrepo.repository.pojo.repo.RepoCreateRequest
 import com.tencent.bkrepo.repository.pojo.search.NodeQueryBuilder
-import com.tencent.bkrepo.repository.search.common.LocalDatetimeRuleInterceptor
-import com.tencent.bkrepo.repository.search.common.RepoNameRuleInterceptor
-import com.tencent.bkrepo.repository.search.common.RepoTypeRuleInterceptor
-import com.tencent.bkrepo.repository.search.node.NodeQueryInterpreter
-import com.tencent.bkrepo.repository.service.node.NodeSearchService
-import com.tencent.bkrepo.repository.service.node.NodeService
-import com.tencent.bkrepo.repository.service.repo.ProjectService
-import com.tencent.bkrepo.repository.service.repo.RepositoryService
+import io.mockk.every
+import io.mockk.mockkObject
+import jakarta.servlet.http.HttpServletRequest
 import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
+import org.junit.jupiter.api.assertThrows
 import org.mockito.ArgumentMatchers.anyString
+import org.mockito.Mockito.mock
 import org.mockito.kotlin.isNull
 import org.mockito.kotlin.whenever
 import org.springframework.beans.factory.annotation.Autowired
@@ -73,6 +79,7 @@ import org.springframework.context.annotation.Import
 import java.time.LocalDateTime
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
+
 
 @DisplayName("节点自定义查询测试")
 @DataMongoTest
@@ -248,6 +255,8 @@ class NodeSearchServiceTest @Autowired constructor(
 
     @Test
     fun testNoPermissionPathSearch() {
+        mockkObject(HttpContextHolder)
+        every {HttpContextHolder.getRequestOrNull() } returns mock(HttpServletRequest::class.java)
         val utRepoName2 = "$UT_REPO_NAME-2"
         val utRepoName3 = "$UT_REPO_NAME-3"
         whenever(servicePermissionClient.listPermissionPath(anyString(), anyString(), anyString())).thenReturn(
@@ -308,6 +317,51 @@ class NodeSearchServiceTest @Autowired constructor(
         queryModel = QueryModel(sort = null, select = null, rule = Rule.NestedRule(rules))
         result = nodeSearchService.search(queryModel)
         Assertions.assertEquals(4, result.totalRecords)
+    }
+
+    @Test
+    fun testHasPermissionPathSearch() {
+        mockkObject(HttpContextHolder)
+        every {HttpContextHolder.getRequestOrNull() } returns mock(HttpServletRequest::class.java)
+        whenever(servicePermissionClient.listPermissionPath(anyString(), anyString(), anyString())).thenReturn(
+            ResponseBuilder.success(
+                ListPathResult(status = true, path = mapOf(OperationType.IN to listOf("/a/a1.txt")))
+            )
+        )
+        whenever(servicePermissionClient.listPermissionRepo(anyString(), anyString(), isNull())).thenReturn(
+            ResponseBuilder.success(listOf(UT_REPO_NAME))
+        )
+
+        // 创建node
+        val createNodeRequest = createRequest("/a/a1.txt", false)
+        nodeService.createNode(createNodeRequest)
+        nodeService.createNode(createNodeRequest.copy(fullPath = "/b/b1.txt"))
+        nodeService.createNode(createNodeRequest.copy(fullPath = "/c/c1.txt"))
+
+        // 查询
+        val queryModel = createQueryBuilder().build()
+        val result = nodeSearchService.search(queryModel)
+        Assertions.assertEquals(2, result.totalRecords)
+
+        // 测试所有路径均无权限
+        whenever(servicePermissionClient.listPermissionPath(anyString(), anyString(), anyString())).thenReturn(
+            ResponseBuilder.success(ListPathResult(status = true, path = mapOf(OperationType.IN to emptyList())))
+        )
+        Assertions.assertEquals(0, nodeSearchService.search(queryModel).totalRecords)
+
+        // 测试同时存在NIN与IN
+        whenever(servicePermissionClient.listPermissionPath(anyString(), anyString(), anyString())).thenReturn(
+            ResponseBuilder.success(
+                ListPathResult(
+                    status = true,
+                    path = mapOf(
+                        OperationType.IN to listOf("/a"),
+                        OperationType.NIN to listOf("/b"),
+                    )
+                )
+            )
+        )
+        assertThrows<IllegalArgumentException> { nodeSearchService.search(queryModel) }
     }
 
     private fun testLocalDateTimeOperation(

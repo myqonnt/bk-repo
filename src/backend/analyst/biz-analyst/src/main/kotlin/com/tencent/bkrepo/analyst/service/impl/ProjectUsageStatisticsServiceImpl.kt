@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2023 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2023 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -28,20 +28,18 @@
 package com.tencent.bkrepo.analyst.service.impl
 
 import com.tencent.bkrepo.common.api.pojo.Page
-import com.tencent.bkrepo.common.operate.api.ProjectUsageStatisticsService
-import com.tencent.bkrepo.common.operate.api.pojo.ProjectUsageStatistics
-import com.tencent.bkrepo.common.operate.api.pojo.ProjectUsageStatisticsListOption
-import com.tencent.bkrepo.repository.api.ProjectUsageStatisticsClient
-import org.springframework.beans.factory.ObjectProvider
+import com.tencent.bkrepo.common.metadata.pojo.project.ProjectUsageStatistics
+import com.tencent.bkrepo.common.metadata.pojo.project.ProjectUsageStatisticsListOption
+import com.tencent.bkrepo.common.metadata.service.project.ProjectUsageStatisticsService
 import org.springframework.scheduling.annotation.Async
 
 open class ProjectUsageStatisticsServiceImpl(
-    private val projectUsageStatisticsClient: ObjectProvider<ProjectUsageStatisticsClient>
+    private val projectUsageStatisticsService: ProjectUsageStatisticsService
 ) : ProjectUsageStatisticsService {
 
     @Async
     override fun inc(projectId: String, reqCount: Long, receivedBytes: Long, responseBytes: Long) {
-        projectUsageStatisticsClient.ifAvailable?.inc(projectId, reqCount, receivedBytes, responseBytes)
+        projectUsageStatisticsService.inc(projectId, reqCount, receivedBytes, responseBytes)
     }
 
     override fun page(options: ProjectUsageStatisticsListOption): Page<ProjectUsageStatistics> {

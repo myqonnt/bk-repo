@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2020 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -33,29 +33,20 @@ package com.tencent.bkrepo.common.artifact.util
 
 import com.tencent.bkrepo.common.api.constant.StringPool
 import com.tencent.bkrepo.common.artifact.pojo.RepositoryType
+import com.tencent.bkrepo.repository.constant.PACKAGE_KEY_SEPARATOR
+import com.tencent.bkrepo.repository.pojo.packages.PackageType
+import java.util.Locale
 
 /**
  * 包唯一id工具类
  */
 object PackageKeys {
 
-    private const val DOCKER = "docker"
-    private const val NPM = "npm"
-    private const val HELM = "helm"
-    private const val RPM = "rpm"
-    private const val PYPI = "pypi"
-    private const val COMPOSER = "composer"
-    private const val NUGET = "nuget"
-    private const val MAVEN = "gav"
-    private const val OCI = "oci"
-    private const val CONAN = "conan"
-    private const val SEPARATOR = "://"
-
     /**
      * 生成gav格式key
      */
     fun ofGav(groupId: String, artifactId: String): String {
-        return StringBuilder(MAVEN).append(SEPARATOR).append(groupId)
+        return StringBuilder(PackageType.MAVEN.schema).append(PACKAGE_KEY_SEPARATOR).append(groupId)
             .append(StringPool.COLON)
             .append(artifactId)
             .toString()
@@ -64,13 +55,10 @@ object PackageKeys {
     /**
      * 生成conan格式key
      *
-     * 例子: conan://username:name
+     * 例子: conan://name
      */
-    fun ofConan(name: String, userName: String): String {
-        return StringBuilder(CONAN).append(SEPARATOR).append(userName)
-            .append(StringPool.COLON)
-            .append(name)
-            .toString()
+    fun ofConan(name: String): String {
+        return ofName(PackageType.CONAN.schema, name)
     }
 
     /**
@@ -79,7 +67,7 @@ object PackageKeys {
      * 例子: docker://test
      */
     fun ofDocker(name: String): String {
-        return ofName(DOCKER, name)
+        return ofName(PackageType.DOCKER.schema, name)
     }
 
     /**
@@ -88,7 +76,7 @@ object PackageKeys {
      * 例子: oci://test
      */
     fun ofOci(name: String): String {
-        return ofName(OCI, name)
+        return ofName(PackageType.OCI.schema, name)
     }
 
     /**
@@ -97,7 +85,16 @@ object PackageKeys {
      * 例子: npm://test
      */
     fun ofNpm(name: String): String {
-        return ofName(NPM, name)
+        return ofName(PackageType.NPM.schema, name)
+    }
+
+    /**
+     * 生成ohpm格式key
+     *
+     * 例子: ohpm://test
+     */
+    fun ofOhpm(name: String): String {
+        return ofName(PackageType.OHPM.schema, name)
     }
 
     /**
@@ -106,7 +103,7 @@ object PackageKeys {
      * 例子: helm://test
      */
     fun ofHelm(name: String): String {
-        return ofName(HELM, name)
+        return ofName(PackageType.HELM.schema, name)
     }
 
 
@@ -116,12 +113,12 @@ object PackageKeys {
      */
     fun ofRpm(path: String, name: String): String {
         return if (path.isNotBlank()) {
-            StringBuilder(RPM).append(SEPARATOR).append(path)
+            StringBuilder(PackageType.RPM.schema).append(PACKAGE_KEY_SEPARATOR).append(path)
                 .append(StringPool.SLASH)
                 .append(name)
                 .toString()
         } else {
-            StringBuilder(RPM).append(SEPARATOR)
+            StringBuilder(PackageType.RPM.schema).append(PACKAGE_KEY_SEPARATOR)
                 .append(name)
                 .toString()
         }
@@ -132,7 +129,7 @@ object PackageKeys {
      * 例子: pypi://test
      */
     fun ofPypi(name: String): String {
-        return ofName(PYPI, name)
+        return ofName(PackageType.PYPI.schema, name)
     }
 
     /**
@@ -140,21 +137,38 @@ object PackageKeys {
      * 例子: composer://test
      */
     fun ofComposer(name: String): String {
-        return ofName(COMPOSER, name)
+        return ofName(PackageType.COMPOSER.schema, name)
     }
+
     /**
      * 生成nuget格式key
      * 例子: nuget://test
      */
     fun ofNuget(name: String): String {
-        return ofName(NUGET, name)
+        return ofName(PackageType.NUGET.schema, name)
+    }
+
+    /**
+     * 生成huggingface格式key
+     * 例子：huggingface://model/test
+     */
+    fun ofHuggingface(type: String, name: String): String {
+        return ofName(PackageType.HUGGINGFACE.schema, "$type/$name")
+    }
+
+    /**
+     * 生成cargo格式key
+     * 例子: cargo://test
+     */
+    fun ofCargo(name: String): String {
+        return ofName(PackageType.CARGO.schema, name)
     }
 
     /**
      * 生成gav格式key
      */
     fun resolveGav(gavKey: String): String {
-        return resolveName(MAVEN, gavKey)
+        return resolveName(PackageType.MAVEN.schema, gavKey)
     }
 
     /**
@@ -163,7 +177,16 @@ object PackageKeys {
      * 例子: npm://test  ->  test
      */
     fun resolveNpm(npmKey: String): String {
-        return resolveName(NPM, npmKey)
+        return resolveName(PackageType.NPM.schema, npmKey)
+    }
+
+    /**
+     * 解析ohpm格式的key
+     *
+     * 例子: ohpm://test  ->  test
+     */
+    fun resolveOhpm(ohpmKey: String): String {
+        return resolveName(PackageType.OHPM.schema, ohpmKey)
     }
 
     /**
@@ -172,7 +195,7 @@ object PackageKeys {
      * 例子: helm://test  ->  test
      */
     fun resolveHelm(helmKey: String): String {
-        return resolveName(HELM, helmKey)
+        return resolveName(PackageType.HELM.schema, helmKey)
     }
 
     /**
@@ -181,7 +204,7 @@ object PackageKeys {
      * 例子: docker://test  ->  test
      */
     fun resolveDocker(dockerKey: String): String {
-        return resolveName(DOCKER, dockerKey)
+        return resolveName(PackageType.DOCKER.schema, dockerKey)
     }
 
     /**
@@ -190,7 +213,7 @@ object PackageKeys {
      * 例子: conan://test  ->  test
      */
     fun resolveConan(conanKey: String): String {
-        return resolveName(CONAN, conanKey)
+        return resolveName(PackageType.CONAN.schema, conanKey)
     }
 
     /**
@@ -199,7 +222,7 @@ object PackageKeys {
      * 例子: oci://test  ->  test
      */
     fun resolveOci(ociKey: String): String {
-        return resolveName(OCI, ociKey)
+        return resolveName(PackageType.OCI.schema, ociKey)
     }
 
     /**
@@ -207,7 +230,7 @@ object PackageKeys {
      * 例子: rpm://test  ->  test
      */
     fun resolveRpm(rpmKey: String): String {
-        return resolveName(RPM, rpmKey)
+        return resolveName(PackageType.RPM.schema, rpmKey)
     }
 
     /**
@@ -216,7 +239,7 @@ object PackageKeys {
      * 例子: pypi://test  ->  test
      */
     fun resolvePypi(pypiKey: String): String {
-        return resolveName(PYPI, pypiKey)
+        return resolveName(PackageType.PYPI.schema, pypiKey)
     }
 
     /**
@@ -225,7 +248,27 @@ object PackageKeys {
      * 例子: composer://test  ->  test
      */
     fun resolveComposer(composerKey: String): String {
-        return resolveName(COMPOSER, composerKey)
+        return resolveName(PackageType.COMPOSER.schema, composerKey)
+    }
+
+    /**
+     * 解析cargo格式的key
+     *
+     * 例子: cargo://test  ->  test
+     */
+    fun resolveCargo(cargoKey: String): String {
+        return resolveName(PackageType.CARGO.schema, cargoKey)
+    }
+
+    /**
+     * 解析huggingface格式的key
+     *
+     * 例子：huggingface://model/test -> model,test
+     */
+    fun resolveHuggingface(huggingfaceKey: String): Pair<String, String> {
+        val key = resolveName(PackageType.HUGGINGFACE.schema, huggingfaceKey)
+        val (type, name) = key.split(StringPool.SLASH, limit = 2)
+        return Pair(type, name)
     }
 
     /**
@@ -234,7 +277,7 @@ object PackageKeys {
      * 例子: {schema}://test
      */
     fun ofName(schema: String, name: String): String {
-        return StringBuilder(schema).append(SEPARATOR).append(name).toString()
+        return StringBuilder(schema).append(PACKAGE_KEY_SEPARATOR).append(name).toString()
     }
 
     /**
@@ -248,11 +291,22 @@ object PackageKeys {
      * @return package key
      */
     fun ofName(repositoryType: RepositoryType, name: String): String {
-        val schema = when(repositoryType) {
-            RepositoryType.MAVEN -> MAVEN
-            else -> repositoryType.name.toLowerCase()
-        }
-        return ofName(schema, name)
+        return ofName(getScheme(repositoryType), name)
+    }
+
+    /**
+     * 获取packageKey对应的packageName
+     *
+     * 例子：npm://test -> test
+     *      gav://test -> test
+     *
+     * @param repositoryType 仓库类型
+     * @param key package key
+     *
+     * @return package name
+     */
+    fun resolve(repositoryType: RepositoryType, key: String): String {
+        return resolveName(getScheme(repositoryType), key)
     }
 
     /**
@@ -261,7 +315,7 @@ object PackageKeys {
      * 例子: nuget://test  ->  test
      */
     fun resolveNuget(nugetKey: String): String {
-        return resolveName(NUGET, nugetKey)
+        return resolveName(PackageType.NUGET.schema, nugetKey)
     }
 
     /**
@@ -270,7 +324,15 @@ object PackageKeys {
      * 例子: {schema}://test  ->  test
      */
     fun resolveName(schema: String, nameKey: String): String {
-        val prefix = StringBuilder(schema).append(SEPARATOR).toString()
+        val prefix = StringBuilder(schema).append(PACKAGE_KEY_SEPARATOR).toString()
         return nameKey.substringAfter(prefix)
+    }
+
+    /**
+     * 获取仓库类型对应的协议名
+     */
+    fun getScheme(repositoryType: RepositoryType) = when (repositoryType) {
+        RepositoryType.MAVEN -> PackageType.MAVEN.schema
+        else -> repositoryType.name.lowercase(Locale.getDefault())
     }
 }

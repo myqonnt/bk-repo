@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2021 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2021 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -89,7 +89,7 @@ interface FileBlockOperation {
      * 列出分块文件
      * blockId: 分块存储id
      */
-    fun listBlock(blockId: String, storageCredentials: StorageCredentials?): List<Pair<Long, String>>
+    fun listBlock(blockId: String, storageCredentials: StorageCredentials?): List<Triple<Long, String, Int>>
 
     /**
      * 存储分块文件
@@ -106,8 +106,27 @@ interface FileBlockOperation {
     )
 
     /**
+     * 将分块文件追加到指定位置
+     * blockId: 分块存储id
+     * sequence: 序列id，从1开始
+     */
+    fun storeBlockWithRandomPosition(
+        blockId: String,
+        sequence: Int,
+        digest: String,
+        artifactFile: ArtifactFile,
+        overwrite: Boolean,
+        storageCredentials: StorageCredentials?,
+        startPosition: Long,
+        totalLength: Long
+    )
+
+    /**
      * 合并分块文件
      * blockId: 分块存储id
      */
-    fun mergeBlock(blockId: String, storageCredentials: StorageCredentials?): FileInfo
+    fun mergeBlock(
+        blockId: String, storageCredentials: StorageCredentials?,
+        fileInfo: FileInfo? = null, mergeFileFlag: Boolean = true
+    ): FileInfo
 }

@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2019 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2019 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -39,12 +39,14 @@ class WebHookTestEvent(
     override val repoName: String,
     override val resourceKey: String,
     override val userId: String,
-    val webHook: WebHook
+    val webHook: WebHook,
+    override val eventId: String? = generateEventId(),
 ) : ArtifactEvent(
     type = EventType.WEBHOOK_TEST,
     projectId = projectId,
     repoName = repoName,
     resourceKey = resourceKey,
     userId = userId,
-    data = mapOf("webHook" to webHook)
+    data = mapOf("webHook" to webHook),
+    eventId = eventId
 )

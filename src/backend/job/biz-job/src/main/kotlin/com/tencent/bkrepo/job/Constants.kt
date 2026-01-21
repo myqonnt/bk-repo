@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2019 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2019 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -27,6 +27,9 @@
 
 package com.tencent.bkrepo.job
 
+import com.tencent.bkrepo.common.api.constant.CLOSED_SOURCE_PREFIX
+import com.tencent.bkrepo.common.api.constant.CODE_PROJECT_PREFIX
+
 /**
  * 分表数量
  */
@@ -36,6 +39,11 @@ const val SHARDING_COUNT = 256
  * 一次处理数据量
  */
 const val BATCH_SIZE = 1000
+
+/**
+ * 最大并发线程限制数
+ */
+const val CONCURRENT_THREAD_LIMIT = 1024
 
 /**
  * 数据库字段
@@ -60,6 +68,9 @@ const val RECORD_RESERVE_DAYS = "recordReserveDays"
 const val REPLICA_TYPE = "replicaType"
 const val NAME = "name"
 const val SIZE = "size"
+const val NODE_NUM = "nodeNum"
+const val PACKAGE_ID = "packageId"
+
 
 /**
  * 缓存类型
@@ -72,21 +83,39 @@ const val MEMORY_CACHE_TYPE = "memory"
  */
 const val TAG_STATUS = "status"
 const val TAG_NAME = "name"
-const val JOB_ASYNC_TASK_ACTIVE_COUNT = "job.async.task.active.count"
-const val JOB_ASYNC_TASK_ACTIVE_COUNT_DESC = "异步任务实时数量"
 
-const val JOB_ASYNC_TASK_QUEUE_SIZE = "job.async.task.queue.size"
-const val JOB_ASYNC_TASK_QUEUE_SIZE_DESC = "异步任务队列大小"
+val IGNORE_PROJECT_PREFIX_LIST = listOf(CODE_PROJECT_PREFIX, CLOSED_SOURCE_PREFIX)
 
-const val JOB_BATCH_JOB_ACTIVE_COUNT = "job.batch-job.active.count"
-const val JOB_BATCH_JOB_ACTIVE_DESC = "运行中的跑批任务数量"
 
-const val JOB_TASK_COUNT = "job.task.count"
-const val JOB_TASK_COUNT_DESC = "任务执行统计"
-const val JOB_TIME_CONSUME = "job.task.time"
-const val JOB_TIME_CONSUME_DESC = "任务执行时长统计"
+/**
+ * 数据降冷
+ */
+const val RESTORE = "RESTORE"
+const val SEPARATE = "SEPARATE"
 
-const val JOB_TASK_RUNNING_STATUS = "job.running.status"
-const val JOB_TASK_RUNNING_STATUS_DESC = "任务执行状态"
+const val PACKAGE_COLLECTION_NAME = "package"
+const val PACKAGE_VERSION_COLLECTION_NAME = "package_version"
+const val PACKAGE_DOWNLOADS_COLLECTION_NAME = "package_downloads"
+const val SEPARATION_TASK_COLLECTION_NAME = "separation_task"
 
-val IGNORE_PROJECT_PREFIX_LIST = listOf("CODE_", "CLOSED_SOURCE_")
+const val PACKAGE_VERSION = "version"
+const val PACKAGE_DOWNLOAD_DATE = "date"
+
+/**
+ * 记录备份
+ */
+const val DATA_RECORDS_BACKUP = "DATA_BACKUP"
+const val DATA_RECORDS_RESTORE = "DATA_RESTORE"
+
+/**
+ * 归档
+ */
+const val ARCHIVE_FILE_COLLECTION = "archive_file"
+
+/**
+ * 表名
+ */
+const val COLLECTION_NAME_NODE = "node"
+const val COLLECTION_NAME_FILE_REFERENCE = "file_reference"
+const val COLLECTION_NAME_BLOCK_NODE = "block_node"
+const val COLLECTION_NAME_COMPRESS_FILE = "compress_file"

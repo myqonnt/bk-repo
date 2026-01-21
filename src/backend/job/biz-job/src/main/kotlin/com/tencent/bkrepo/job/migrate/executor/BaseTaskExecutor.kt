@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2024 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2024 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -28,13 +28,14 @@
 package com.tencent.bkrepo.job.migrate.executor
 
 import com.tencent.bkrepo.common.api.util.HumanReadable
+import com.tencent.bkrepo.common.metadata.constant.FAKE_SHA256
+import com.tencent.bkrepo.common.metadata.service.file.FileReferenceService
 import com.tencent.bkrepo.common.service.actuator.ActuatorConfiguration.Companion.SERVICE_INSTANCE_ID
 import com.tencent.bkrepo.common.storage.core.StorageService
 import com.tencent.bkrepo.common.storage.monitor.measureThroughput
 import com.tencent.bkrepo.job.migrate.config.MigrateRepoStorageProperties
 import com.tencent.bkrepo.job.migrate.dao.MigrateFailedNodeDao
 import com.tencent.bkrepo.job.migrate.dao.MigrateRepoStorageTaskDao
-import com.tencent.bkrepo.job.migrate.model.TMigrateFailedNode
 import com.tencent.bkrepo.job.migrate.pojo.MigrateRepoStorageTask
 import com.tencent.bkrepo.job.migrate.pojo.MigrateRepoStorageTask.Companion.toDto
 import com.tencent.bkrepo.job.migrate.pojo.MigrateRepoStorageTaskState.CORRECTING
@@ -46,11 +47,10 @@ import com.tencent.bkrepo.job.migrate.pojo.MigrateRepoStorageTaskState.PENDING
 import com.tencent.bkrepo.job.migrate.pojo.MigrationContext
 import com.tencent.bkrepo.job.migrate.pojo.Node
 import com.tencent.bkrepo.job.migrate.utils.ExecutingTaskRecorder
-import com.tencent.bkrepo.repository.api.FileReferenceClient
+import com.tencent.bkrepo.job.service.MigrateArchivedFileService
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
-import org.springframework.dao.DuplicateKeyException
-import java.time.LocalDateTime
+import java.io.FileNotFoundException
 import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.ThreadPoolExecutor
 import java.util.concurrent.TimeUnit
@@ -59,9 +59,10 @@ abstract class BaseTaskExecutor(
     protected val properties: MigrateRepoStorageProperties,
     protected val migrateRepoStorageTaskDao: MigrateRepoStorageTaskDao,
     protected val migrateFailedNodeDao: MigrateFailedNodeDao,
-    private val fileReferenceClient: FileReferenceClient,
+    private val fileReferenceService: FileReferenceService,
     private val storageService: StorageService,
     private val executingTaskRecorder: ExecutingTaskRecorder,
+    private val migrateArchivedFileService: MigrateArchivedFileService,
 ) : TaskExecutor {
 
     @Value(SERVICE_INSTANCE_ID)
@@ -137,7 +138,7 @@ abstract class BaseTaskExecutor(
                         command.run()
                         // 更新任务状态
                         if (state != dstState) {
-                            migrateRepoStorageTaskDao.updateState(id, state, dstState, lastModifiedDate)
+                            migrateRepoStorageTaskDao.updateState(id!!, state, dstState, lastModifiedDate)
                             val elapsed = HumanReadable.time(System.nanoTime() - startNanoTime)
                             logger.info("$state task[$projectId/$repoName] success, elapsed[$elapsed]")
                         }
@@ -145,7 +146,7 @@ abstract class BaseTaskExecutor(
                         val elapsed = HumanReadable.time(System.nanoTime() - startNanoTime)
                         logger.error("$state task[$projectId/$repoName] failed, elapsed[$elapsed]", exception)
                     } finally {
-                        executingTaskRecorder.remove(id)
+                        executingTaskRecorder.remove(id!!)
                     }
                 }
             } catch (e: RejectedExecutionException) {
@@ -158,17 +159,26 @@ abstract class BaseTaskExecutor(
     }
 
     protected fun correctNode(context: MigrationContext, node: Node) {
+        checkNode(node)
         val sha256 = node.sha256
         val task = context.task
         val projectId = node.projectId
         val repoName = node.repoName
         // 文件已存在于目标存储则不处理
-        if (storageService.exist(sha256, context.dstCredentials)) {
+        val dstFileReferenceExists = fileReferenceService.count(sha256, context.task.dstStorageKey) > 0
+        val fileExist = storageService.exist(sha256, context.dstCredentials)
+        val archivedFileExist = node.archived == true &&
+                migrateArchivedFileService.archivedFileCompleted(context.task.dstStorageKey, sha256)
+        if (fileExist || archivedFileExist) {
+            if (!dstFileReferenceExists) {
+                updateFileReference(context.task.srcStorageKey, context.task.dstStorageKey, sha256)
+                logger.info("correct reference[$sha256] success, task[$projectId/$repoName], state[${task.state}]")
+            }
             logger.info("file[$sha256] already exists in dst credentials[${context.task.dstStorageKey}]")
             return
         }
 
-        if (fileReferenceClient.count(sha256, context.task.dstStorageKey).data!! > 0) {
+        if (dstFileReferenceExists) {
             /*
               可能由于在上传制品时使用的旧存储，而创建Node时由于会重新查一遍仓库的存储凭据而使用新存储
               这种情况会导致目标存储引用大于0但是文件不再目标存储，此时仅迁移存储不修改引用数
@@ -183,6 +193,7 @@ abstract class BaseTaskExecutor(
     }
 
     protected fun migrateNode(context: MigrationContext, node: Node) {
+        checkNode(node)
         val srcStorageKey = context.task.srcStorageKey
         val dstStorageKey = context.task.dstStorageKey
         val sha256 = node.sha256
@@ -190,58 +201,59 @@ abstract class BaseTaskExecutor(
         // 跨存储迁移数据
         transferData(context, node)
 
-        // FileReferenceCleanupJob 会定期清理引用为0的文件数据，所以不需要删除文件数据
-        // old引用计数 -1
-        if (fileReferenceClient.decrement(sha256, srcStorageKey).data != true) {
-            logger.error("Failed to decrement file reference[$sha256] on storage[$srcStorageKey].")
-        }
-        // new引用计数 +1
-        if (fileReferenceClient.increment(sha256, dstStorageKey).data != true) {
-            logger.error("Failed to increment file reference[$sha256] on storage[$dstStorageKey].")
-        }
-    }
-
-    protected fun saveMigrateFailedNode(taskId: String, node: Node) {
-        if (migrateFailedNodeDao.existsFailedNode(node.projectId, node.repoName, node.fullPath)) {
-            return
-        }
-
-        val now = LocalDateTime.now()
-        with(node) {
-            try {
-                migrateFailedNodeDao.insert(
-                    TMigrateFailedNode(
-                        id = null,
-                        createdDate = now,
-                        lastModifiedDate = now,
-                        nodeId = node.id,
-                        taskId = taskId,
-                        projectId = projectId,
-                        repoName = repoName,
-                        fullPath = fullPath,
-                        sha256 = sha256,
-                        md5 = md5,
-                        size = size,
-                        retryTimes = 0
-                    )
-                )
-            } catch (ignore: DuplicateKeyException) {
-            }
-        }
+        // 更新引用
+        updateFileReference(srcStorageKey, dstStorageKey, sha256)
     }
 
     open fun close(timeout: Long, unit: TimeUnit) {}
+
+    private fun updateFileReference(srcStorageKey: String?, dstStorageKey: String?, sha256: String) {
+        // FileReferenceCleanupJob 会定期清理引用为0的文件数据，所以不需要删除文件数据
+        // 迁移前后使用的存储相同时，如果加引用失败减引用成功，可能导致文件误删，因此先增后减
+        // new引用计数 +1
+        if (!fileReferenceService.increment(sha256, dstStorageKey)) {
+            logger.error("Failed to increment file reference[$sha256] on storage[$dstStorageKey].")
+        }
+
+        // old引用计数 -1
+        if (!fileReferenceService.decrement(sha256, srcStorageKey)) {
+            logger.error("Failed to decrement file reference[$sha256] on storage[$srcStorageKey].")
+        }
+    }
 
     /**
      * 执行数据迁移
      */
     private fun transferData(context: MigrationContext, node: Node) {
-        val throughput = measureThroughput {
-            storageService.copy(node.sha256, context.srcCredentials, context.dstCredentials)
-            node.size
+        // 处于归档/恢复中状态时将抛出异常，待归档完成再继续迁移
+        val archivedFileMigrated = migrateArchivedFileService.migrateArchivedFile(context, node)
+
+        // 可能存在同sha256文件被归档后又重新上传的情况，所以被归档的文件也需要尝试迁移数据
+        try {
+            val throughput = measureThroughput {
+                storageService.copy(node.sha256, context.srcCredentials, context.dstCredentials)
+                node.size
+            }
+            // 输出迁移速率
+            val msg = "Success to transfer file[${node.sha256}], $throughput, task[${node.projectId}/${node.repoName}]"
+            logger.info(msg)
+        } catch (e: FileNotFoundException) {
+            if (node.archived != true || !archivedFileMigrated) {
+                throw e
+            }
+            logger.info("only migrate archive file[${node.sha256}], task[${node.projectId}/${node.repoName}]")
         }
-        // 输出迁移速率
-        logger.info("Success to transfer file[${node.sha256}], $throughput, task[${node.projectId}/${node.repoName}]")
+    }
+
+    private fun checkNode(node: Node) {
+        with(node) {
+            if (sha256 == FAKE_SHA256) {
+                throw IllegalArgumentException("can not migrate fake node[$fullPath], task[$projectId/$repoName]")
+            }
+            if (node.compressed == true) {
+                throw IllegalArgumentException("node[$fullPath] was compressed, task[$projectId/$repoName]")
+            }
+        }
     }
 
     companion object {

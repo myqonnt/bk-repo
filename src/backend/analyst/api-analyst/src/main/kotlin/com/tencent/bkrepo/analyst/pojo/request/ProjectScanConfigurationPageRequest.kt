@@ -1,7 +1,7 @@
 /*
  * Tencent is pleased to support the open source community by making BK-CI 蓝鲸持续集成平台 available.
  *
- * Copyright (C) 2022 THL A29 Limited, a Tencent company.  All rights reserved.
+ * Copyright (C) 2022 Tencent.  All rights reserved.
  *
  * BK-CI 蓝鲸持续集成平台 is licensed under the MIT license.
  *
@@ -29,15 +29,15 @@ package com.tencent.bkrepo.analyst.pojo.request
 
 import com.tencent.bkrepo.common.api.constant.DEFAULT_PAGE_NUMBER
 import com.tencent.bkrepo.common.api.constant.DEFAULT_PAGE_SIZE
-import io.swagger.annotations.ApiModel
-import io.swagger.annotations.ApiModelProperty
+import io.swagger.v3.oas.annotations.media.Schema
 
-@ApiModel("分页获取项目扫描配置请求")
+
+@Schema(title = "分页获取项目扫描配置请求")
 data class ProjectScanConfigurationPageRequest(
-    @ApiModelProperty("用于匹配的项目ID")
+    @get:Schema(title = "用于匹配的项目ID")
     val projectId: String? = null,
-    @ApiModelProperty("分页页码")
+    @get:Schema(title = "分页页码")
     val pageNumber: Int = DEFAULT_PAGE_NUMBER,
-    @ApiModelProperty("分页大小")
+    @get:Schema(title = "分页大小")
     val pageSize: Int = DEFAULT_PAGE_SIZE
 )
