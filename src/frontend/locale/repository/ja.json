@@ -718,7 +718,7 @@
     "NPM": "Npmアーティファクト分析"
   },
   "createPlan": "プラン作成",
-  "resetUserMsg": "アカウント「{0}」のパスワードをデフォルトパスワードにリセットしますか？",
+  "resetUserMsg": "アカウント {0} のパスワードをデフォルトパスワード「password」にリセットすることを確認します？",
   "editPlan": "プラン編集",
   "planDetail":"プラン詳細",
   "scanReport":"スキャン詳細",
@@ -969,5 +969,7 @@
   "guideWindowsTitle": "Windowsシステム設定ガイド",
   "guideWindowsDescription": "ターミナルで以下のコマンドを実行してください：",
   "targetPath": "ターゲットパス",
-  "targetPathPlaceholder": "ターゲットパスを入力してください"
+  "targetPathPlaceholder": "ターゲットパスを入力してください",
+  "model": "モデル",
+  "dataset": "データセット"
 }
