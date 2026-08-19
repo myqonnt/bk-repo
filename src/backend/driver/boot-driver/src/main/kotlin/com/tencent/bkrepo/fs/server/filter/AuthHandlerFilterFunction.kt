@@ -33,6 +33,7 @@ import com.tencent.bkrepo.common.api.constant.PLATFORM_KEY
 import com.tencent.bkrepo.common.api.constant.USER_KEY
 import com.tencent.bkrepo.common.security.exception.AuthenticationException
 import com.tencent.bkrepo.fs.server.service.PermissionService
+import com.tencent.bkrepo.fs.server.utils.ReactiveSecurityUtils.basicCredentials
 import com.tencent.bkrepo.fs.server.utils.ReactiveSecurityUtils.bearerToken
 import com.tencent.bkrepo.fs.server.utils.ReactiveSecurityUtils.platformCredentials
 import com.tencent.bkrepo.fs.server.utils.SecurityManager
@@ -61,6 +62,14 @@ class AuthHandlerFilterFunction(
         }
         var user = ANONYMOUS_USER
 
+        val basicCredentials = request.basicCredentials()
+        if (basicCredentials != null) {
+            val (username, password) = basicCredentials
+            val userId = permissionService.checkUserAccount(username, password)
+            request.exchange().attributes[USER_KEY] = userId
+            return next(request)
+        }
+
         val platformAuthCredentials = request.platformCredentials()
         if (platformAuthCredentials != null) {
             request.exchange().attributes[PLATFORM_KEY] = permissionService.checkPlatformAccount(
@@ -79,7 +88,13 @@ class AuthHandlerFilterFunction(
             request.headers().header("X-BKREPO-SECURITY-TOKEN").firstOrNull()
         } else {
             request.bearerToken()
-        } ?: throw AuthenticationException("missing token.")
+        }
+        if (token == null) {
+            if (optionalAuthUrlPrefixList.any { request.path().startsWith(it) }) {
+                return next(request)
+            }
+            throw AuthenticationException("missing token.")
+        }
 
         try {
             val jws = securityManager.validateToken(token)
@@ -98,7 +113,19 @@ class AuthHandlerFilterFunction(
     }
 
     companion object {
-        private val uncheckedUrlPrefixList = listOf("/login", "/devx/login", "/ioa", "/client/metrics/push")
+        private val uncheckedUrlPrefixList = listOf(
+            "/login",
+            "/devx/login",
+            "/ioa",
+            "/client/metrics/push",
+        )
+        /**
+         * 允许匿名访问，但仍解析已有 Basic / Platform / JWT 凭据
+         */
+        private val optionalAuthUrlPrefixList = listOf(
+            "/drive/temporary/upload/",
+            "/drive/temporary/download/",
+        )
         private val logger = LoggerFactory.getLogger(AuthHandlerFilterFunction::class.java)
     }
 }

@@ -48,13 +48,16 @@ import com.tencent.bkrepo.common.service.util.HttpContextHolder
 import com.tencent.bkrepo.preview.config.configuration.PreviewConfig
 import com.tencent.bkrepo.preview.constant.PREVIEW_ARTIFACT_TO_FILE
 import com.tencent.bkrepo.preview.constant.PREVIEW_NODE_DETAIL
+import com.tencent.bkrepo.preview.constant.PREVIEW_RESPONSE_CONTENT_TYPE
 import com.tencent.bkrepo.preview.constant.PREVIEW_TMP_FILE_SAVE_PATH
 import com.tencent.bkrepo.preview.constant.PreviewMessageCode
+import com.tencent.bkrepo.preview.exception.PreviewInvalidException
 import com.tencent.bkrepo.preview.exception.PreviewNotFoundException
 import com.tencent.bkrepo.preview.pojo.DownloadResult
 import com.tencent.bkrepo.preview.pojo.FileAttribute
 import com.tencent.bkrepo.preview.pojo.cache.PreviewFileCacheInfo
 import com.tencent.bkrepo.preview.utils.DownloadUtils
+import com.tencent.bkrepo.preview.utils.FileUtils
 import com.tencent.bkrepo.repository.pojo.node.NodeDetail
 import jakarta.servlet.http.HttpServletRequest
 import java.io.File
@@ -71,6 +74,39 @@ class FileTransferService(
     private val createIfAbsentService: CreateIfAbsentService,
     private val enableMultiTenant: EnableMultiTenantProperties
 ) : ArtifactService() {
+
+    /**
+     * 按 Range 把源制品流式写出，不落地临时文件、不写入 convert 仓库。
+     */
+    fun sendOriginalFileAsResponse(fileAttribute: FileAttribute) {
+        val projectId = fileAttribute.projectId
+        val repoName = fileAttribute.repoName
+        val artifactUri = fileAttribute.artifactUri
+        if (projectId.isNullOrBlank() || repoName.isNullOrBlank() || artifactUri.isNullOrBlank()) {
+            throw PreviewInvalidException(
+                PreviewMessageCode.PREVIEW_PARAMETER_INVALID,
+                "projectId/repoName/artifactUri"
+            )
+        }
+        val artifactInfo = ArtifactInfo(projectId, repoName, artifactUri)
+        setFileTransferAttribute(artifactInfo, fileAttribute, false)
+        val contentType = MediaPreviewContentType.fromSuffix(fileAttribute.suffix.orEmpty())
+        if (contentType != null) {
+            HttpContextHolder.getRequest().setAttribute(PREVIEW_RESPONSE_CONTENT_TYPE, contentType)
+        }
+        val context = ArtifactDownloadContext(useDisposition = false)
+        // Drive 节点不在通用 TNode 表，不能用 node 判空，否则媒体预览会误报 404
+        if (context.repositoryDetail.type != RepositoryType.DRIVE) {
+            val node = ArtifactContextHolder.getNodeDetail(artifactInfo)
+            if (node == null && context.repositoryDetail.category == RepositoryCategory.LOCAL) {
+                throw PreviewNotFoundException(
+                    PreviewMessageCode.PREVIEW_NODE_NOT_FOUND,
+                    "${artifactInfo.projectId}|${artifactInfo.repoName}|${artifactInfo.getArtifactFullPath()}"
+                )
+            }
+        }
+        repository.download(context)
+    }
 
     /**
      * 输出文件内容
@@ -110,29 +146,61 @@ class FileTransferService(
             fileAttribute.artifactUri!!
         )
         setFileTransferAttribute(artifactInfo, fileAttribute, true)
-        val node = ArtifactContextHolder.getNodeDetail(artifactInfo)
         val context = ArtifactDownloadContext()
+        return if (context.repositoryDetail.type == RepositoryType.DRIVE) {
+            downloadFromDriveRepo(context)
+        } else {
+            downloadFromNodeRepo(artifactInfo, context)
+        }
+    }
+
+    private fun downloadFromNodeRepo(
+        artifactInfo: ArtifactInfo,
+        context: ArtifactDownloadContext,
+    ): DownloadResult? {
+        val node = ArtifactContextHolder.getNodeDetail(artifactInfo)
         if (node == null && context.repositoryDetail.category == RepositoryCategory.LOCAL) {
             throw PreviewNotFoundException(
                 PreviewMessageCode.PREVIEW_NODE_NOT_FOUND,
                 "${artifactInfo.projectId}|${artifactInfo.repoName}|${artifactInfo.getArtifactFullPath()}"
             )
         }
+        val result = downloadArtifactToTempFile(context)
+        if (result.code != DownloadResult.CODE_FAIL) {
+            result.md5 = node!!.md5
+            result.size = node.size
+        }
+        return result
+    }
+
+    private fun downloadFromDriveRepo(context: ArtifactDownloadContext): DownloadResult {
+        val result = downloadArtifactToTempFile(context)
+        if (result.code != DownloadResult.CODE_FAIL) {
+            fillDriveDownloadMetadata(result)
+        }
+        return result
+    }
+
+    private fun downloadArtifactToTempFile(context: ArtifactDownloadContext): DownloadResult {
         val result = DownloadResult()
         try {
             repository.download(context)
             val request: HttpServletRequest = HttpContextHolder.getRequest()
             result.filePath = request.getAttribute(PREVIEW_TMP_FILE_SAVE_PATH)?.toString()
-            result.md5 = node!!.md5
-            result.size = node.size
         } catch (e: Exception) {
             result.apply {
                 code = DownloadResult.CODE_FAIL
                 msg = "Download Faile from bkrepo,$e"
             }
         }
-
         return result
+    }
+
+    private fun fillDriveDownloadMetadata(result: DownloadResult) {
+        val filePath = result.filePath ?: return
+        val md5AndSize = FileUtils.getFileMd5AndSize(filePath)
+        result.md5 = md5AndSize?.first
+        result.size = md5AndSize?.second ?: 0
     }
 
     fun upload(fileAttribute: FileAttribute, sourcePath: String): NodeDetail {
@@ -172,7 +240,6 @@ class FileTransferService(
         val repoDetail = repositoryService.getRepoDetail(
             artifactInfo.projectId,
             artifactInfo.repoName,
-            RepositoryType.GENERIC.name
         ) ?: throw PreviewNotFoundException(
             PreviewMessageCode.PREVIEW_REPO_NOT_FOUND,
             "${artifactInfo.projectId}|${artifactInfo.repoName}"

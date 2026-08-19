@@ -82,10 +82,6 @@ import org.springframework.stereotype.Component
 class GenericRemoteRepository(
     private val genericProperties: GenericProperties,
 ) : RemoteRepository() {
-    override fun onDownloadRedirect(context: ArtifactDownloadContext): Boolean {
-        return redirectManager.redirect(context)
-    }
-
     override fun onDownload(context: ArtifactDownloadContext): ArtifactResource? {
         return getCacheArtifactResource(context) ?: run {
             val remoteConfiguration = context.getRemoteConfiguration()
@@ -205,6 +201,7 @@ class GenericRemoteRepository(
     }
 
     private fun createGenericHttpClient(configuration: RemoteConfiguration): OkHttpClient {
+        checkRemoteHostAllowed(configuration.url, genericProperties.allowedRemoteHosts)
         val platforms = genericProperties.platforms
         val builder = buildOkHttpClient(configuration, false, registry = registry).dns(createPlatformDns(platforms))
         createAuthenticateInterceptor(configuration, platforms)?.let { builder.addInterceptor(it) }

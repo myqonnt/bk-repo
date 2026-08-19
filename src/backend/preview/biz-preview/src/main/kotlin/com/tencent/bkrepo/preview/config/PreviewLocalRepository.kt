@@ -31,13 +31,18 @@
 
 package com.tencent.bkrepo.preview.config
 
+import com.tencent.bkrepo.common.artifact.pojo.RepositoryType
 import com.tencent.bkrepo.common.artifact.repository.context.ArtifactDownloadContext
 import com.tencent.bkrepo.common.artifact.repository.context.ArtifactUploadContext
 import com.tencent.bkrepo.common.artifact.repository.local.LocalRepository
+import com.tencent.bkrepo.common.artifact.resolve.response.ArtifactChannel
 import com.tencent.bkrepo.common.artifact.resolve.response.ArtifactResource
+import com.tencent.bkrepo.common.service.util.HttpContextHolder
 import com.tencent.bkrepo.preview.constant.PREVIEW_NODE_DETAIL
+import com.tencent.bkrepo.preview.constant.PREVIEW_RESPONSE_CONTENT_TYPE
 import com.tencent.bkrepo.preview.constant.PreviewMessageCode
 import com.tencent.bkrepo.preview.exception.PreviewNotFoundException
+import com.tencent.bkrepo.preview.service.DrivePreviewDownloadService
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
 
@@ -45,7 +50,9 @@ import org.springframework.stereotype.Component
  * 公共local仓库
  */
 @Component
-class PreviewLocalRepository : LocalRepository() {
+class PreviewLocalRepository(
+    private val drivePreviewDownloadService: DrivePreviewDownloadService,
+) : LocalRepository() {
 
     companion object {
         private val logger = LoggerFactory.getLogger(PreviewLocalRepository::class.java)
@@ -61,13 +68,46 @@ class PreviewLocalRepository : LocalRepository() {
     }
 
     override fun onDownload(context: ArtifactDownloadContext): ArtifactResource? {
+        if (context.repositoryDetail.type == RepositoryType.DRIVE) {
+            return downloadFromDrive(context)
+        }
         val resource = super.onDownload(context)
             ?: throw PreviewNotFoundException(
                 code = PreviewMessageCode.PREVIEW_FILE_NOT_FOUND,
                 "${context.artifactInfo.projectId}|${context.artifactInfo.repoName}" +
                         "|${context.artifactInfo.getArtifactFullPath()}"
             )
+        return applyMediaPreviewHeaders(resource)
+    }
+
+    private fun applyMediaPreviewHeaders(resource: ArtifactResource): ArtifactResource {
+        val contentType = HttpContextHolder.getRequestOrNull()
+            ?.getAttribute(PREVIEW_RESPONSE_CONTENT_TYPE) as? String
+            ?: return resource
+        resource.contentType = contentType
+        resource.useDisposition = false
         return resource
+    }
+
+    private fun downloadFromDrive(context: ArtifactDownloadContext): ArtifactResource {
+        with(context) {
+            val fullPath = artifactInfo.getArtifactFullPath()
+            val inputStream = drivePreviewDownloadService.loadArtifactInputStream(
+                projectId = projectId,
+                repoName = repoName,
+                fullPath = fullPath,
+                storageCredentials = storageCredentials,
+            )
+            return applyMediaPreviewHeaders(
+                ArtifactResource(
+                    inputStream,
+                    artifactInfo.getResponseName(),
+                    null,
+                    ArtifactChannel.LOCAL,
+                    useDisposition,
+                )
+            )
+        }
     }
 
 }

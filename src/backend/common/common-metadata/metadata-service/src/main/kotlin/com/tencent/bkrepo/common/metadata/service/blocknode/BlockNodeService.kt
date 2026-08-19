@@ -50,7 +50,14 @@ interface BlockNodeService {
     /**
      * 获取指定路径所有分块
      */
-    fun listAllBlocks(projectId: String, repoName: String, fullPath: String, createdDate: String): List<TBlockNode>
+    fun listAllBlocks(
+        projectId: String,
+        repoName: String,
+        fullPath: String,
+        createdDate: String,
+        includeDeleted: Boolean = false,
+        createdBefore: LocalDateTime? = null
+    ): List<TBlockNode>
 
     /**
      * 查询出当前版本内的分块
@@ -78,6 +85,16 @@ interface BlockNodeService {
         repoName: String,
         fullPath: String,
         uploadId: String
+    )
+
+    /**
+     * 完成该路径上最新一次未过期会话（uploadId != null 且 expireDate == null）。
+     * 用于旧源端 finish-before-node：覆盖创建后再 finish，避免 listener 误删。
+     */
+    fun completeLatestUnexpiredSession(
+        projectId: String,
+        repoName: String,
+        fullPath: String
     )
 
     /**

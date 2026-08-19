@@ -1,5 +1,5 @@
 <template>
-    <div>
+    <div :class="{ 'preview-media-page': mediaShow }">
         <vue-office-excel
             v-if="previewExcel"
             :src="dataSource"
@@ -17,6 +17,22 @@
         <div v-if="imgShow" style="width: 100%; height: 100%">
             <img id="image" :src="imgUrl" alt="Picture" style="display: none">
         </div>
+        <div v-if="richTextShow" class="rich-text-preview-container">
+            <source-preview-tabs
+                :file-path="richTextFilePath"
+                :source-text="richTextSource"
+                :resolve-asset-url="resolveAssetUrl"
+                :view-mode="richTextViewMode"
+            />
+        </div>
+        <div v-if="xmindShow" ref="container" class="xmind-preview-container"></div>
+        <media-preview
+            v-if="mediaShow"
+            :src="mediaUrl"
+            :kind="mediaKind"
+            :seed="filePath"
+            @error="showMediaDecodeError"
+        />
         <div v-if="previewBasic" class="flex-column flex-center">
             <div class="preview-file-tips">{{ $t('previewFileTips') }}</div>
             <div style="height: 700px; width: 100%">
@@ -26,7 +42,7 @@
         <div v-if="hasError" class="empty-data-container flex-center" style="background-color: white; height: 100%">
             <div class="flex-column flex-center">
                 <img width="480" height="240" style="float: left;margin-right: 3px" :src="window.BK_SUBPATH + 'ui/440.svg'" />
-                <span class="mt5 error-data-title">{{ $t('previewErrorTip') }}</span>
+                <span class="mt5 error-data-title">{{ mediaDecodeError ? $t('previewMediaErrorTip') : $t('previewErrorTip') }}</span>
             </div>
         </div>
         <div v-if="loading" class="mainBody">
@@ -40,13 +56,19 @@
 <script>
     import VueOfficeExcel from '@vue-office/excel'
     import {
+        capturePreviewTokenFromUrl,
         customizePreviewLocalOfficeFile,
         customizePreviewRemoteOfficeFile,
-        getPreviewLocalOfficeFileInfo, getPreviewRemoteOfficeFileInfo
+        getPreviewLocalOfficeFileInfo, getPreviewRemoteOfficeFileInfo,
+        buildLocalOnlinePreviewUrl
     } from '@repository/utils/previewOfficeFile'
-    import { mapActions } from 'vuex'
     import { Base64 } from 'js-base64'
-    import { isExcel, isFormatType, isHtmlType, isPic, isText } from '@repository/utils/file'
+    import { isCode, isExcel, isFormatType, isHtmlFile, isHtmlType, isJsx, isMarkdown, isMedia, isMediaVideo, isPic, isText, isXmind } from '@repository/utils/file'
+    import { createAssetResolver, parsePreviewContext, resolvePreviewViewMode } from '@repository/utils/markdownJsxPreview'
+    import { buildImageViewerOptions, isPurePreviewEnabled } from '@repository/utils/imagePreview'
+    import { createOrUpdateXmindViewer, destroyXmindViewer } from '@repository/utils/xmindPreview'
+    import SourcePreviewTabs from '@repository/components/FilePreview/SourcePreviewTabs'
+    import MediaPreview from '@repository/components/FilePreview/MediaPreview'
     import Viewer from 'viewerjs'
 
     const PDFJS = require('pdfjs-dist')
@@ -76,7 +98,7 @@
 
     export default {
         name: 'FilePreview',
-        components: { VueOfficeExcel },
+        components: { VueOfficeExcel, SourcePreviewTabs, MediaPreview },
         props: {
             repoType: String,
             extraParam: String,
@@ -115,6 +137,14 @@
                 csvShow: false,
                 imgShow: false,
                 pdfShow: false,
+                richTextShow: false,
+                richTextSource: '',
+                richTextFilePath: '',
+                xmindShow: false,
+                mediaShow: false,
+                mediaUrl: '',
+                mediaKind: 'video',
+                mediaDecodeError: false,
                 imgUrl: '',
                 pdfPages: [], // 页数
                 pdfWidth: '', // 宽度
@@ -133,28 +163,38 @@
             },
             enableMultipleTypeFilePreview () {
                 return RELEASE_MODE === 'community' || RELEASE_MODE === 'tencent'
+            },
+            resolveAssetUrl () {
+                const context = parsePreviewContext({
+                    projectId: this.projectId,
+                    repoName: this.repoName,
+                    filePath: this.filePath,
+                    extraParam: this.extraParam !== '0' ? Base64.decode(decodeURIComponent(this.extraParam)) : ''
+                })
+                return createAssetResolver(context)
+            },
+            richTextViewMode () {
+                const extraParam = this.extraParam !== '0'
+                    ? Base64.decode(decodeURIComponent(this.extraParam))
+                    : ''
+                return resolvePreviewViewMode({
+                    query: this.$route.query,
+                    extraParam
+                })
             }
         },
         async created () {
+            // 需求 5.6：从 URL ?token=... 解析预览 token 并写入 sessionStorage（幂等）
+            capturePreviewTokenFromUrl()
             this.loading = true
             if (!this.checkRepoType()) {
                 this.showError()
                 return
             }
             if (!this.enableMultipleTypeFilePreview) {
-                if (isText(this.filePath)) {
-                    this.previewBasicFile({
-                        projectId: this.projectId,
-                        repoName: this.repoName,
-                        path: '/' + this.filePath
-                    }).then(res => {
-                        this.loading = false
-                        this.previewBasic = true
-                        this.$nextTick(() => {
-                            setTextareaHeight()
-                        })
-                        this.basicFileText = res
-                    }).catch(() => this.showError())
+                const codeSuffix = isCode(this.filePath)
+                if (isText(this.filePath) || codeSuffix === 'ini' || codeSuffix === 'toml') {
+                    this.previewViaOnlinePreview(res => this.dealDate(res))
                 } else {
                     this.showError()
                 }
@@ -162,19 +202,30 @@
             } else {
                 this.dealWaterMark()
             }
-            if (isText(this.filePath)) {
-                this.previewBasicFile({
-                    projectId: this.projectId,
-                    repoName: this.repoName,
-                    path: '/' + this.filePath
+            if (isMedia(this.filePath)) {
+                if (this.repoType !== 'local') {
+                    this.showError()
+                    return
+                }
+                const mediaUrl = buildLocalOnlinePreviewUrl(this.projectId, this.repoName, '/' + this.filePath)
+                fetch(mediaUrl, {
+                    method: 'GET',
+                    credentials: 'include',
+                    headers: { Range: 'bytes=0-0' }
                 }).then(res => {
+                    if (!res.ok && res.status !== 206) {
+                        this.showError()
+                        return
+                    }
                     this.loading = false
-                    this.previewBasic = true
-                    this.$nextTick(() => {
-                        setTextareaHeight()
-                    })
-                    this.basicFileText = typeof (res) === 'string' ? res : JSON.stringify(res)
+                    this.mediaShow = true
+                    this.mediaKind = isMediaVideo(this.filePath) ? 'video' : 'audio'
+                    this.mediaUrl = mediaUrl
                 }).catch(() => this.showError())
+                return
+            }
+            if (isCode(this.filePath) || isHtmlFile(this.filePath)) {
+                this.previewViaOnlinePreview(res => this.dealDate(res))
             } else if (isExcel(this.filePath)) {
                 if (this.repoType === 'local') {
                     customizePreviewLocalOfficeFile(this.projectId, this.repoName, '/' + this.filePath).then(res => {
@@ -191,7 +242,7 @@
                         this.dataSource = res.data
                     }).catch(() => this.showError())
                 }
-            } else if (isFormatType(this.filePath) || isPic(this.filePath)) {
+            } else if (isFormatType(this.filePath) || isPic(this.filePath) || isMarkdown(this.filePath) || isJsx(this.filePath) || isXmind(this.filePath)) {
                 if (this.repoType === 'local') {
                     customizePreviewLocalOfficeFile(this.projectId, this.repoName, '/' + this.filePath).then(res => {
                         this.dealDate(res)
@@ -209,14 +260,32 @@
             this.cancel()
         },
         methods: {
-            ...mapActions([
-                'previewBasicFile'
-            ]),
             checkRepoType () {
                 return this.repoTypeEnum.includes(this.repoType)
             },
+            previewViaOnlinePreview (onSuccess) {
+                if (this.repoType === 'local') {
+                    customizePreviewLocalOfficeFile(this.projectId, this.repoName, '/' + this.filePath)
+                        .then(onSuccess)
+                        .catch(() => this.showError())
+                } else {
+                    customizePreviewRemoteOfficeFile(Base64.encode(Base64.decode(this.extraParam)))
+                        .then(onSuccess)
+                        .catch(() => this.showError())
+                }
+            },
             showError () {
                 this.loading = false
+                this.previewBasic = false
+                this.mediaShow = false
+                this.mediaDecodeError = false
+                this.hasError = true
+            },
+            showMediaDecodeError () {
+                this.loading = false
+                this.previewBasic = false
+                this.mediaShow = false
+                this.mediaDecodeError = true
                 this.hasError = true
             },
             cancel () {
@@ -229,6 +298,17 @@
                 this.hasError = false
                 this.imgShow = false
                 this.imgUrl = ''
+                this.xmindShow = false
+                this.mediaShow = false
+                this.mediaUrl = ''
+                this.mediaKind = 'video'
+                this.mediaDecodeError = false
+                destroyXmindViewer(this.xmindViewer)
+                this.xmindViewer = null
+                this.pdfShow = false
+                this.richTextShow = false
+                this.richTextSource = ''
+                this.richTextFilePath = ''
                 this.excelOptions.xls = false
                 window.resetWaterMark()
             },
@@ -268,10 +348,10 @@
             initWaterMark (param) {
                 window.initWaterMark(param)
             },
-            dealDate (res) {
+            async dealDate (res) {
                 this.loading = false
                 let url
-                if (!isHtmlType(this.filePath) && !isPic(this.filePath)) {
+                if (!isHtmlType(this.filePath) && !isPic(this.filePath) && !isJsx(this.filePath) && !isMarkdown(this.filePath) && !isXmind(this.filePath) && !isCode(this.filePath) && !isHtmlFile(this.filePath)) {
                     this.loadFile(URL.createObjectURL(res.data))
                     this.pdfShow = true
                     this.pageUrl = url
@@ -279,12 +359,24 @@
                     this.imgShow = true
                     this.imgUrl = URL.createObjectURL(res.data)
                     this.$nextTick(() => {
-                        const viewer = new Viewer(document.getElementById('image'), {
-                            inline: true,
-                            viewed () {
-                                viewer.zoomTo(1)
-                            }
-                        })
+                        new Viewer(document.getElementById('image'), buildImageViewerOptions({
+                            purePreview: isPurePreviewEnabled(this.$route.query)
+                        }))
+                    })
+                } else if (isMarkdown(this.filePath) || isJsx(this.filePath) || isCode(this.filePath) || isHtmlFile(this.filePath)) {
+                    const text = await res.data.text()
+                    this.richTextFilePath = this.filePath
+                    this.richTextSource = text
+                    this.richTextShow = true
+                } else if (isXmind(this.filePath)) {
+                    this.xmindShow = true
+                    const target = await res.data.arrayBuffer()
+                    this.$nextTick(() => {
+                        this.xmindViewer = createOrUpdateXmindViewer(
+                            this.xmindViewer,
+                            this.$refs.container,
+                            target
+                        )
                     })
                 } else {
                     url = URL.createObjectURL(res.data)
@@ -324,7 +416,7 @@
                         this.renderPage(num + 1)
                     }
                 })
-            },
+            }
 
         }
     }
@@ -360,6 +452,35 @@ canvas {
     max-width: 100% !important;
     height: auto !important;
     background: white !important;
+}
+.rich-text-preview-container {
+    position: fixed;
+    inset: 0;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+    background: #fff;
+    padding: 0;
+    margin: 0;
+}
+.xmind-preview-container {
+    position: fixed;
+    inset: 0;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+    background: #fff;
+    /* above watermark overlay so pan/zoom gestures hit the embed iframe */
+    z-index: 10000000;
+}
+.preview-media-page {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
 }
 .preview-file-tips {
     margin-bottom: 10px;

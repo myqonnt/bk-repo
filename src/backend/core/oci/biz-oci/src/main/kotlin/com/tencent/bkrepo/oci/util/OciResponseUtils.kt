@@ -127,6 +127,20 @@ object OciResponseUtils {
         )
     }
 
+    /**
+     * COS 302 前写入 Docker/OCI 协议头（不设置 200，由 sendRedirect 决定状态码）。
+     */
+    fun buildRedirectResponse(
+        digest: OciDigest,
+        response: HttpServletResponse,
+        contentType: String = MediaTypes.APPLICATION_OCTET_STREAM
+    ) {
+        response.addHeader(DOCKER_HEADER_API_VERSION, DOCKER_API_VERSION)
+        response.addHeader(DOCKER_CONTENT_DIGEST, digest.toString())
+        response.addHeader(HttpHeaders.ETAG, digest.toString())
+        response.addHeader(CONTENT_TYPE, contentType)
+    }
+
     fun buildDeleteResponse(response: HttpServletResponse) {
         deleteResponse(response)
     }
@@ -137,7 +151,8 @@ object OciResponseUtils {
         responseProperty: ResponseProperty
     ) {
         with(responseProperty) {
-            val location = getResponseLocationURI(location!!, domain)
+            val resolvedLocation = resolveLocationByRequestAlias(location!!)
+            val location = getResponseLocationURI(resolvedLocation, domain)
             response.status = status!!.value
             response.addHeader(DOCKER_HEADER_API_VERSION, DOCKER_API_VERSION)
             digest?.let {
@@ -177,6 +192,22 @@ object OciResponseUtils {
         response: HttpServletResponse = HttpContextHolder.getResponse()
     ) {
         response.status = HttpStatus.ACCEPTED.value
+    }
+
+    private fun resolveLocationByRequestAlias(location: String): String {
+        val request = HttpContextHolder.getRequestOrNull() ?: return location
+        val projectEncoded = request.getAttribute(OciNameAliasCodec.REQUEST_ATTR_PROJECT_ID_ENCODED)
+            as? Boolean ?: false
+        val repoEncoded = request.getAttribute(OciNameAliasCodec.REQUEST_ATTR_REPO_NAME_ENCODED)
+            as? Boolean ?: false
+        if (!projectEncoded && !repoEncoded) {
+            return location
+        }
+        return OciNameAliasCodec.encodeOciPath(
+            path = location,
+            encodeProject = projectEncoded,
+            encodeRepo = repoEncoded
+        )
     }
 
     /**

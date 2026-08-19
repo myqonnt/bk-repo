@@ -48,14 +48,22 @@ object BlockNodeQueryHelper {
         repoName: String,
         fullPath: String,
         createdDate: String,
-        range: Range?
+        range: Range?,
+        includeDeleted: Boolean = false,
+        createdBefore: LocalDateTime? = null,
     ): Query {
         val criteria = where(TBlockNode::nodeFullPath).isEqualTo(fullPath)
             .and(TBlockNode::projectId).isEqualTo(projectId)
             .and(TBlockNode::repoName).isEqualTo(repoName)
-            .and(TBlockNode::deleted).isEqualTo(null)
-            .and(TBlockNode::createdDate).gt(LocalDateTime.parse(createdDate))
             .and(TBlockNode::uploadId).isEqualTo(null)
+        if (createdBefore == null) {
+            criteria.and(TBlockNode::createdDate.name).gt(LocalDateTime.parse(createdDate))
+        } else {
+            criteria.and(TBlockNode::createdDate.name).gt(LocalDateTime.parse(createdDate)).lte(createdBefore)
+        }
+        if (!includeDeleted) {
+            criteria.and(TBlockNode::deleted).isEqualTo(null)
+        }
         range?.let {
             criteria.norOperator(
                 TBlockNode::startPos.gt(it.end),
@@ -124,7 +132,8 @@ object BlockNodeQueryHelper {
         fullPath: String,
         sha256: String,
         startPos: Long,
-        deleted: LocalDateTime?
+        deleted: LocalDateTime?,
+        uploadId: String?,
     ): Criteria {
         return where(TBlockNode::nodeFullPath).isEqualTo(fullPath)
             .and(TBlockNode::projectId).isEqualTo(projectId)
@@ -132,5 +141,6 @@ object BlockNodeQueryHelper {
             .and(TBlockNode::sha256).isEqualTo(sha256)
             .and(TBlockNode::startPos).isEqualTo(startPos)
             .and(TBlockNode::deleted).isEqualTo(deleted)
+            .and(TBlockNode::uploadId).isEqualTo(uploadId)
     }
 }

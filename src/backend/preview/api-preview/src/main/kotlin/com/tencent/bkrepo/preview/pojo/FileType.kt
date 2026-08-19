@@ -56,7 +56,8 @@ enum class FileType(val instanceName: String) {
     EPUB("epubFilePreviewImpl"),
     BPMN("bpmnFilePreviewImpl"),
     DCM("dcmFilePreviewImpl"),
-    DRAWIO("drawioFilePreviewImpl");
+    DRAWIO("drawioFilePreviewImpl"),
+    JSX("jsxFilePreviewImpl");
 
     companion object {
         private val OFFICE_TYPES = arrayOf(
@@ -127,7 +128,7 @@ enum class FileType(val instanceName: String) {
             "brep"
         )
         private val EML_TYPES = arrayOf("eml")
-        private val MEDIA_TYPES = arrayOf("mp3", "wav", "mp4", "flv")
+        private val MEDIA_TYPES = arrayOf("mp3", "wav", "mp4", "webm", "ogg", "oga", "m4a")
         private val XMIND_TYPES = arrayOf("xmind")
         private val EPUB_TYPES = arrayOf("epub")
         private val DCM_TYPES = arrayOf("dcm")
@@ -160,7 +161,13 @@ enum class FileType(val instanceName: String) {
             "cs",
             "aspx",
             "jsp",
-            "sql"
+            "sql",
+            "ini",
+            "toml",
+            "txt",
+            "bat",
+            "log",
+            "properties"
         )
         private val SSIM_TEXT_TYPES = arrayOf(
             "txt",
@@ -188,6 +195,8 @@ enum class FileType(val instanceName: String) {
             "xbrl"
         )
 
+        private val JSX_TYPES = arrayOf("jsx")
+
         private val FILE_TYPE_MAPPER = mutableMapOf<String, FileType>()
 
         init {
@@ -208,6 +217,7 @@ enum class FileType(val instanceName: String) {
             SSIM_TEXT_TYPES.forEach { fileType -> FILE_TYPE_MAPPER[fileType] = SIMTEXT }
             CODES.forEach { fileType -> FILE_TYPE_MAPPER[fileType] = CODE }
             XML_TYPES.forEach { fileType -> FILE_TYPE_MAPPER[fileType] = XML }
+            JSX_TYPES.forEach { fileType -> FILE_TYPE_MAPPER[fileType] = JSX }
             FILE_TYPE_MAPPER["md"] = MARKDOWN
             FILE_TYPE_MAPPER["pdf"] = PDF
             FILE_TYPE_MAPPER["bpmn"] = BPMN

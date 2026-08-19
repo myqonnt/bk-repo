@@ -46,6 +46,11 @@ data class TemporaryTokenInfo(
     val token: String,
     @get:Schema(title = "授权用户")
     val authorizedUserList: Set<String>,
+    /**
+     * 授权组织 ID 集合，与用户组织 scopeValue 做交集匹配。
+     */
+    @get:Schema(title = "授权组织 ID")
+    val authorizedOrgList: Set<String> = emptySet(),
     @get:Schema(title = "授权IP")
     val authorizedIpList: Set<String>,
     @get:Schema(title = "过期时间")
@@ -55,5 +60,7 @@ data class TemporaryTokenInfo(
     @get:Schema(title = "token类型")
     val type: TokenType,
     @get:Schema(title = "创建者")
-    val createdBy: String
+    val createdBy: String,
+    @get:Schema(title = "快照序列号，为空表示只读最新数据")
+    val snapSeq: Long? = null,
 )
